@@ -74,6 +74,18 @@
 #include "cpa_sample_utils.h"
 #include "cpa_sample_cnv_utils.h"
 
+#include "cpa_sample_code_dc_utils.h"
+#include "cpa_dc.h"
+#include "qat_compression_main.h"
+#include "icp_sal_poll.h"
+#include "qat_perf_latency.h"
+#include "qat_perf_sleeptime.h"
+#include "qat_compression_e2e.h"
+#include "qat_perf_cycles.h"
+#include "busy_loop.h"
+#include "icp_sal_user.h"
+#include "qat_perf_utils.h"
+
 extern int gDebugParam;
 
 #define SAMPLE_MAX_BUFF 1024
@@ -130,6 +142,18 @@ static Cpa8U sampleData[] = {
  *****************************************************************************
  */
 CpaStatus dcDpSample(void);
+
+CpaStatus compLatencyTest(){
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U *testBufferSize = 4096;
+    Cpa32U numberOfBuffersPerList = DEFAULT_NUM_OF_BUFF_PER_LIST;
+    CpaBufferList *srcBufferListArray = NULL;
+    CpaBufferList *destBufferListArray = NULL;
+    CpaBufferList *cmpBufferListArray = NULL;
+    CpaDcRqResults *resultArray = NULL;
+    return status;
+
+}
 
 /*
  * Callback function
