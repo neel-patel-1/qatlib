@@ -810,12 +810,13 @@ CpaBufferList contextBuffer = {0};
 CpaDcCallbackFn dcCbFn = dcPerformCallback;
 Cpa32U numLoops = 0;
 i = 0;
+const corpus_file_t *const fileArray = getFilesInCorpus(setup->corpus);
 
 saveClearRestorePerfStats(setup->performanceStats);
 coo_init(setup->performanceStats,
              (Cpa64U)setup->numLists * (Cpa64U)setup->numLoops);
 
-
+coo_req_pause(setup->performanceStats, CPA_STATUS_SUCCESS);
 
 
 
