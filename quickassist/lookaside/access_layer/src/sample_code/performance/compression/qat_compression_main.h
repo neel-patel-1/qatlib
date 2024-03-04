@@ -1429,6 +1429,25 @@ void dcPerformance(single_thread_test_data_t *testSetup);
  * @ingroup sample_code
  *
  * @description
+ *  This is the performance thread created by the sample code framework
+ *  after registering the setupScDcTest and calling createPeformance threads
+ *  this function copies the setup into its own local copy and then calls
+ *  scDcPoc to measure compression performance
+ *
+ * @param[in]   setup                   pointer to the compression setup
+ *                                      structure
+ * @retval CPA_STATUS_SUCCESS           Function executed successfully
+ *
+ * @retval CPA_STATUS_FAIL              failed to complete successfully
+ *****************************************************************************/
+void dcLatencyPerformance(single_thread_test_data_t *testSetup);
+
+/*****************************************************************************
+ * @file qat_compression_main.h
+ *
+ * @ingroup sample_code
+ *
+ * @description
  * This function allocates buffers store a file for compression. The buffers are
  * sent to hardware, performance is recorded and stored in the setup parameter
  * the sample code framework prints out results after the thread completes

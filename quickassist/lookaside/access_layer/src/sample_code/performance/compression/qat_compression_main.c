@@ -278,6 +278,7 @@ CpaStatus setupDcLatencyTest(CpaDcCompType algorithm,
             PRINT_ERR("Error creating polling threads\n");
             return CPA_STATUS_FAIL;
         }
+        PRINT("Using Polling Threads\n");
     }
 
     INIT_OPDATA_DEFAULT(&dcSetup->requestOps);
@@ -299,7 +300,7 @@ CpaStatus setupDcLatencyTest(CpaDcCompType algorithm,
      * that actually does all the performance
      */
     testSetupData_g[testTypeCount_g].performance_function =
-        (performance_func_t)dcPerformance;
+        (performance_func_t)dcLatencyPerformance;
 
     /* register the test buffersize */
     testSetupData_g[testTypeCount_g].packetSize = testBufferSize;
