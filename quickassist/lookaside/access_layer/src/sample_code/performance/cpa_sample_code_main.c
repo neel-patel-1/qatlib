@@ -797,6 +797,8 @@ compression_test_params_t *setup = NULL;
 setup = (compression_test_params_t *)malloc(sizeof(compression_test_params_t));
 setup->performanceStats = (perf_data_t *)malloc(sizeof(perf_data_t));
 setup->corpus = CALGARY_CORPUS;
+setup->packetSizeInBytesArray = (Cpa32U *)malloc(sizeof(Cpa32U));
+setup->packetSizeInBytesArray[0] = 1024;
 
 Cpa32U *testBufferSize = setup->packetSizeInBytesArray;
 Cpa32U numberOfBuffersPerList = dc_bufferCount_g;
@@ -842,7 +844,7 @@ if (CPA_STATUS_SUCCESS == status)
         PRINT_ERR("could not allocate all flat buffers for compression\n");
     }
 }                                        
-
+printf("Cost\n");
 coo_req_stop(setup->performanceStats, CPA_STATUS_SUCCESS);
 printf("Allocation Cost: %llu\n", setup->performanceStats->req_cost_sum_cycles);
 

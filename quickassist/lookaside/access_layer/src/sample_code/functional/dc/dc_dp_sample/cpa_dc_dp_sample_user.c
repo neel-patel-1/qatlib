@@ -93,8 +93,7 @@ int main(int argc, const char **argv)
         return (int)stat;
     }
 
-    // stat = dcDpSample();
-    stat = compLatencyTest();
+    stat = dcDpSample();
     if (CPA_STATUS_SUCCESS != stat)
     {
         PRINT_ERR("\nData Plane Compression Sample Code App failed\n");
