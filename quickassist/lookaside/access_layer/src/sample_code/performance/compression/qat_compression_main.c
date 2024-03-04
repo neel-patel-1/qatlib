@@ -1234,6 +1234,10 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
                                             arrayOfCmpBufferLists,
                                             listNum,
                                             arrayOfResults);
+
+                printf("Request time: %lu\n", sampleCodeTimestamp() -
+                                                 setup->performanceStats
+                                                     ->startCyclesTimestamp);
                 /* Check submit status and update thread status*/
                 if (CPA_STATUS_SUCCESS != status)
                 {
@@ -1250,6 +1254,9 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
                                            setup->dcInstanceHandle,
                                            CPA_FALSE,
                                            CPA_FALSE);
+                printf("Poll time: %lu\n", sampleCodeTimestamp() -
+                                               setup->performanceStats
+                                                   ->startCyclesTimestamp);
                 if (poll_inline_g && instanceInfo2->isPolled)
                 {
                     /*poll every 'n' requests as set by
