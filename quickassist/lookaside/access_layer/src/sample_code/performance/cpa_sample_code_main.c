@@ -816,8 +816,35 @@ saveClearRestorePerfStats(setup->performanceStats);
 coo_init(setup->performanceStats,
              (Cpa64U)setup->numLists * (Cpa64U)setup->numLoops);
 
-coo_req_pause(setup->performanceStats, CPA_STATUS_SUCCESS);
+coo_req_start(setup->performanceStats);
+// allocate memory for source & destination bufferLists and results
+status = qatAllocateCompressionLists(setup,
+                                        &srcBufferListArray,
+                                        &destBufferListArray,
+                                        &cmpBufferListArray,
+                                        &resultArray);
 
+// Allocate the CpaFlatBuffers in each list
+if (CPA_STATUS_SUCCESS == status)
+{
+    status = qatAllocateCompressionFlatBuffers(setup,
+                                                srcBufferListArray,
+                                                numberOfBuffersPerList,
+                                                testBufferSize,
+                                                destBufferListArray,
+                                                numberOfBuffersPerList,
+                                                testBufferSize,
+                                                cmpBufferListArray,
+                                                numberOfBuffersPerList,
+                                                testBufferSize);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("could not allocate all flat buffers for compression\n");
+    }
+}                                        
+
+coo_req_stop(setup->performanceStats, CPA_STATUS_SUCCESS);
+printf("Allocation Cost: %llu\n", setup->performanceStats->req_cost_sum_cycles);
 
 
 
