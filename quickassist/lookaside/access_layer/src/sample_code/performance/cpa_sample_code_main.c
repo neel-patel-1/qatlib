@@ -85,6 +85,9 @@
 #include "qat_compression_main.h"
 #endif
 #include "cpa_sample_code_sym_perf_dp.h"
+#include "qat_perf_latency.h"
+#include "qat_perf_cycles.h"
+
 
 #ifndef INCLUDE_COMPRESSION
 /*define this just so that sample code will build without compression code*/
@@ -807,6 +810,13 @@ CpaBufferList contextBuffer = {0};
 CpaDcCallbackFn dcCbFn = dcPerformCallback;
 Cpa32U numLoops = 0;
 i = 0;
+
+saveClearRestorePerfStats(setup->performanceStats);
+coo_init(setup->performanceStats,
+             (Cpa64U)setup->numLists * (Cpa64U)setup->numLoops);
+
+
+
 
 
 
