@@ -645,6 +645,41 @@ CpaStatus setupDcStatefulTest(CpaDcCompType algorithm,
 /**
  * *****************************************************************************
  *  @ingroup compressionThreads
+ *  setupDcStatefulTest
+ *
+ *  @description
+ *      this API is the main API called by the framework, this is configures
+ *      data structure before starting the performance threads
+ *  @threadSafe
+ *      No
+ *
+ *  @param[out]   None
+ *
+ *  @param[in]  algorithm Algorithm used for compression/decompression
+ *  @param[in]  direction session direction
+ *  @param[in]  compLevel compression Level
+ *  @param[in]  HuffmanType HuffMantype Dynamic/static
+ *  @param[in]  state stateful operation or stateless operation
+ *  @param[in]  windowSize window size to be used for compression/decompression
+ *  @param[in]  testBuffersize size of the flat Buffer to use
+ *  @parma[in]  corpusType type of corpus calgary/cantrbury corpus
+ *  @param[in]  syncFlag synchronous/Asynchronous operation
+ *  @param[in]  numloops Number of loops to compress or decompress
+ ******************************************************************************/
+CpaStatus setupDcLatencyTest(CpaDcCompType algorithm,
+                      CpaDcSessionDir direction,
+                      CpaDcCompLvl compLevel,
+                      CpaDcHuffType huffmanType,
+                      CpaDcSessionState state,
+                      Cpa32U windowSize,
+                      Cpa32U testBufferSize,
+                      corpus_type_t corpusType,
+                      sync_mode_t syncFlag,
+                      Cpa32U numLoops);
+
+/**
+ * *****************************************************************************
+ *  @ingroup compressionThreads
  *  populateCantrBryCorpus
  *
  *  @description

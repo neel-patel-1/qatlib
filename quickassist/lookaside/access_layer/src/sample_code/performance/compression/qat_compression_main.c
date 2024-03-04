@@ -192,6 +192,149 @@ CpaStatus setupDcTest(CpaDcCompType algorithm,
 }
 EXPORT_SYMBOL(setupDcTest);
 
+/*register a test with the sample code framework*/
+CpaStatus setupDcLatencyTest(CpaDcCompType algorithm,
+                      CpaDcSessionDir direction,
+                      CpaDcCompLvl compLevel,
+                      CpaDcHuffType huffmanType,
+                      CpaDcSessionState state,
+                      Cpa32U windowSize,
+                      Cpa32U testBufferSize,
+                      corpus_type_t corpusType,
+                      sync_mode_t syncFlag,
+                      Cpa32U numLoops)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    /* get memory location from sample code framework to store setup details*/
+    compression_test_params_t *dcSetup = NULL;
+    dcSetup = (compression_test_params_t *)&thread_setup_g[testTypeCount_g][0];
+
+    /*Assign unique values used only by deflate */
+#ifdef SC_ENABLE_DYNAMIC_COMPRESSION
+    dcSetup->setupData.huffType = huffmanType;
+#else
+    dcSetup->setupData.huffType = CPA_DC_HT_STATIC;
+#endif
+#if DC_API_VERSION_LESS_THAN(1, 6)
+    /*windows size is depreciated in new versions of the QA-API*/
+    dcSetup->setupData.deflateWindowSize = windowsSize;
+#endif
+
+    Cpa32U corpusFileIndex = 0;
+
+    /* check that the sample code framework can register this test setup */
+    if (testTypeCount_g >= MAX_THREAD_VARIATION)
+    {
+        PRINT_ERR("Maximum Support Thread Variation has been exceeded\n");
+        PRINT_ERR("Number of Thread Variations created: %d", testTypeCount_g);
+        PRINT_ERR(" Max is %d\n", MAX_THREAD_VARIATION);
+        return CPA_STATUS_FAIL;
+    }
+
+    /* check that at least 1 loop of the data set is to be submitted*/
+    if (numLoops == 0)
+    {
+        PRINT_ERR("numLoops must be > 0\n");
+        return CPA_STATUS_FAIL;
+    }
+
+    /* Populate Corpus: copy from file on disk into memory*/
+    /* this method limits to compressing 1 corpus at any point in time */
+    if (corpusType == CORPUS_TYPE_EXTENDED)
+    {
+        corpusType = getCorpusType();
+        corpusFileIndex = getCorpusFileIndex();
+    }
+
+    status = populateCorpus(testBufferSize, corpusType);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Unable to load one or more corpus files, have they been "
+                  "extracted to %s?\n",
+                  SAMPLE_CODE_CORPUS_PATH);
+        return CPA_STATUS_FAIL;
+    }
+
+    /*Start DC Services */
+    status = startDcServices(testBufferSize, TEMP_NUM_BUFFS);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Error in Starting Dc Services\n");
+        return CPA_STATUS_FAIL;
+    }
+    if (iaCycleCount_g)
+    {
+#ifdef POLL_INLINE
+        enablePollInline();
+#endif
+    }
+    if (!poll_inline_g)
+    {
+        /* start polling threads if polling is enabled in the configuration
+         * file */
+        if (CPA_STATUS_SUCCESS != dcCreatePollingThreadsIfPollingIsEnabled())
+        {
+            PRINT_ERR("Error creating polling threads\n");
+            return CPA_STATUS_FAIL;
+        }
+    }
+
+    INIT_OPDATA_DEFAULT(&dcSetup->requestOps);
+    /* If the setup is requesting non-default CnV behaviour for special
+     * tests, set it accordingly.
+     */
+    dcSetup->setNsRequest = isNsRequest_g;
+    if (direction == CPA_DC_DIR_COMPRESS)
+    {
+        dcSetup->useE2E = dataIntegrity_g;
+        dcSetup->useE2EVerify = dataIntegrityVerify_g;
+    }
+    if (getSetupCnVRequestFlag() != CNV_FLAG_DEFAULT)
+    {
+        setCnVFlags(getSetupCnVRequestFlag(), &dcSetup->requestOps);
+    }
+
+    /* Set the performance function to the actual performance function
+     * that actually does all the performance
+     */
+    testSetupData_g[testTypeCount_g].performance_function =
+        (performance_func_t)dcPerformance;
+
+    /* register the test buffersize */
+    testSetupData_g[testTypeCount_g].packetSize = testBufferSize;
+    if (CPA_FALSE == gUseStatefulLite)
+    {
+        dcSetup->useStatefulLite = CPA_FALSE;
+    }
+    /* Data compression setup data */
+    dcSetup->setupData.compLevel = compLevel;
+    dcSetup->setupData.compType = algorithm;
+    dcSetup->setupData.sessDirection = direction;
+    if (dcSetup->setNsRequest == CPA_TRUE)
+    {
+        dcSetup->setupData.sessState = CPA_DC_STATELESS;
+    }
+    else
+    {
+        dcSetup->setupData.sessState = state;
+    }
+
+    dcSetup->corpus = corpusType;
+    dcSetup->corpusFileIndex = corpusFileIndex;
+    dcSetup->bufferSize = testBufferSize;
+    dcSetup->dcSessDir = direction;
+    dcSetup->syncFlag = syncFlag;
+    dcSetup->numLoops = numLoops;
+    dcSetup->isDpApi = CPA_FALSE;
+    dcSetup->disableAdditionalCmpbufferSize = disableAdditionalCmpbufferSize_g;
+    dcSetup->setupData.autoSelectBestHuffmanTree = gAutoSelectBestMode;
+    dcSetup->setupData.checksum = gChecksum;
+    dcSetup->passCriteria = getPassCriteria();
+    return status;
+}
+EXPORT_SYMBOL(setupDcLatencyTest);
+
 CpaStatus setupDcStatefulTest(CpaDcCompType algorithm,
                               CpaDcSessionDir direction,
                               CpaDcCompLvl compLevel,
@@ -348,6 +491,275 @@ static CpaStatus setupDcCommonTest(compression_test_params_t *dcSetup,
  * this function copies the setup into its own local copy and then calls scDcPoc
  * to measure compression performance*/
 void dcPerformance(single_thread_test_data_t *testSetup)
+{
+    compression_test_params_t dcSetup = {0};
+    compression_test_params_t *tmpSetup = NULL;
+    Cpa16U numInstances = 0;
+    CpaInstanceHandle *instances = NULL;
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaDcInstanceCapabilities capabilities = {0};
+
+    /* Get the setup pointer */
+    tmpSetup = (compression_test_params_t *)(testSetup->setupPtr);
+    testSetup->passCriteria = tmpSetup->passCriteria;
+    dcSetup.passCriteria = tmpSetup->passCriteria;
+    /* update the setup structure with setup parameters */
+    memcpy(&dcSetup.requestOps, &tmpSetup->requestOps, sizeof(CpaDcOpData));
+    dcSetup.useStatefulLite = tmpSetup->useStatefulLite;
+    dcSetup.bufferSize = tmpSetup->bufferSize;
+    dcSetup.corpus = tmpSetup->corpus;
+    dcSetup.corpusFileIndex = tmpSetup->corpusFileIndex;
+    dcSetup.setupData = tmpSetup->setupData;
+    dcSetup.dcSessDir = tmpSetup->dcSessDir;
+    dcSetup.syncFlag = tmpSetup->syncFlag;
+    dcSetup.numLoops = tmpSetup->numLoops;
+    dcSetup.setupData.checksum = tmpSetup->setupData.checksum;
+    dcSetup.setNsRequest = tmpSetup->setNsRequest;
+    dcSetup.useE2E = tmpSetup->useE2E;
+    dcSetup.useE2EVerify = tmpSetup->useE2EVerify;
+
+    /*give our thread a unique memory location to store performance stats*/
+    dcSetup.performanceStats = testSetup->performanceStats;
+    dcSetup.performanceStats->averagePacketSizeInBytes = testSetup->packetSize;
+    dcSetup.performanceStats->numLoops = tmpSetup->numLoops;
+    dcSetup.isDpApi = CPA_FALSE;
+    dcSetup.disableAdditionalCmpbufferSize =
+        tmpSetup->disableAdditionalCmpbufferSize;
+    testSetup->performanceStats->threadReturnStatus = CPA_STATUS_SUCCESS;
+    testSetup->performanceStats->additionalStatus = CPA_STATUS_SUCCESS;
+
+    status = calculateRequireBuffers(&dcSetup);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Error calculating required buffers\n");
+        testSetup->performanceStats->threadReturnStatus = status;
+        return;
+    }
+    dcSetup.numLists = dcSetup.numberOfBuffers[dcSetup.corpusFileIndex];
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*this barrier is to halt this thread when run in user space context,
+         * the startThreads function releases this barrier, in kernel space is
+         * does nothing, but kernel space threads do not start until we call
+         * startThreads anyway
+         */
+        startBarrier();
+
+        /*Initialize the statsPrintFunc to NULL, the dcPrintStats function will
+         * be assigned if compression completes successfully
+         */
+        testSetup->statsPrintFunc = NULL;
+
+        /* Get the number of instances */
+        status = cpaDcGetNumInstances(&numInstances);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR(" Unable to get number of DC instances\n");
+            QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+        }
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        if (0 == numInstances)
+        {
+            PRINT_ERR(" DC Instances are not present\n");
+            status = CPA_STATUS_FAIL;
+            QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+        }
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        instances = qaeMemAlloc(sizeof(CpaInstanceHandle) * numInstances);
+        if (NULL == instances)
+        {
+            PRINT_ERR("Unable to allocate Memory for Instances\n");
+            status = CPA_STATUS_FAIL;
+        }
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*get the instance handles so that we can start
+         * our thread on the selected instance
+         */
+        status = cpaDcGetInstances(numInstances, instances);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR(" Unable to get DC instances\n");
+            QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+        }
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* give our thread a logical quick assist instance to use
+         * use % to wrap around the max number of instances*/
+        dcSetup.dcInstanceHandle =
+            instances[(testSetup->logicalQaInstance) % numInstances];
+        // find node that thread is running on
+        status = sampleCodeDcGetNode(dcSetup.dcInstanceHandle, &dcSetup.node);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("sampleCodeDcGetNode error\n");
+            QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+        }
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status =
+            allocateAndSetArrayOfPacketSizes(&(dcSetup.packetSizeInBytesArray),
+                                             dcSetup.bufferSize,
+                                             dcSetup.numLists);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("%s::%d allocateAndSetArrayOfPacketSizes failed",
+                      __func__,
+                      __LINE__);
+            QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+        }
+    }
+    /*check if dynamic compression is supported*/
+    status = cpaDcQueryCapabilities(dcSetup.dcInstanceHandle, &capabilities);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("%s::%d cpaDcQueryCapabilities failed", __func__, __LINE__);
+        QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+    }
+    if (CPA_FALSE == capabilities.dynamicHuffman &&
+        tmpSetup->setupData.huffType == CPA_DC_HT_FULL_DYNAMIC)
+    {
+        PRINT("Dynamic is not supported on logical instance %d\n",
+              (testSetup->logicalQaInstance) % numInstances);
+        QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+    }
+
+
+
+#if DC_API_VERSION_AT_LEAST(3, 1)
+    if ((CPA_DC_STATELESS == tmpSetup->setupData.sessState) &&
+        (CPA_DC_LZ4 == tmpSetup->setupData.compType) &&
+        ((CPA_FALSE == capabilities.statelessLZ4Compression) ||
+         (CPA_FALSE == capabilities.statelessLZ4Decompression)))
+    {
+        PRINT("LZ4 is not supported on logical instance %d\n",
+              (testSetup->logicalQaInstance) % numInstances);
+
+        status = CPA_STATUS_UNSUPPORTED;
+        QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+    }
+    if ((CPA_DC_STATELESS == tmpSetup->setupData.sessState) &&
+        (CPA_DC_LZ4S == tmpSetup->setupData.compType) &&
+        ((CPA_FALSE == capabilities.statelessLZ4Compression) ||
+         (CPA_FALSE == capabilities.statelessLZ4Decompression)))
+    {
+        PRINT("LZ4s is not supported on logical instance %d\n",
+              (testSetup->logicalQaInstance) % numInstances);
+
+        status = CPA_STATUS_UNSUPPORTED;
+        QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+    }
+#endif
+
+    if (CPA_STATUS_SUCCESS !=
+        qatDcGetPreTestRecoveryCount(
+            &dcSetup, &capabilities, testSetup->performanceStats))
+    {
+        QAT_PERF_FAIL_WAIT_AND_GOTO_LABEL(testSetup, err);
+    }
+    if (CPA_TRUE == dcSetup.useE2E)
+    {
+        PRINT("Do CRC integrity capabilities check for this instance. %d\n",
+              testSetup->logicalQaInstance);
+        if (CPA_FALSE == capabilities.integrityCrcs64b)
+        {
+            if (CPA_FALSE == capabilities.integrityCrcs)
+            {
+
+                PRINT("CRC integrity check is unsupported for this instance. "
+                      "%d\n",
+                      testSetup->logicalQaInstance);
+                testSetup->performanceStats->threadReturnStatus =
+                    CPA_STATUS_SUCCESS;
+                qaeMemFree((void **)&instances);
+                qaeMemFree((void **)&dcSetup.numberOfBuffers);
+                qaeMemFree((void **)&dcSetup.packetSizeInBytesArray);
+                sampleCodeThreadExit();
+            }
+        }
+    }
+    if (CPA_TRUE == dcSetup.useXlt && ASYNC == dcSetup.syncFlag)
+    {
+        PRINT("Async mode not supported in Xlt[%d]\n", dcSetup.useXlt);
+        testSetup->performanceStats->threadReturnStatus = CPA_STATUS_FAIL;
+        qaeMemFree((void **)&instances);
+        qaeMemFree((void **)&dcSetup.numberOfBuffers);
+        qaeMemFree((void **)&dcSetup.packetSizeInBytesArray);
+        sampleCodeThreadExit();
+    }
+
+
+    dcSetup.induceOverflow = CPA_FALSE;
+    dcSetup.threadID = testSetup->threadID;
+
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*launch function that does all the work*/
+        status = qatDcPerform(&dcSetup);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            dcPrintTestData(&dcSetup);
+            PRINT_ERR("Compression Thread %u FAILED\n", testSetup->threadID);
+            testSetup->performanceStats->threadReturnStatus = CPA_STATUS_FAIL;
+        }
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*set the print function that can be used to print
+         * statistics at the end of the test
+         * */
+        // update values from the framework peak ptr to thread local ptr to be
+        // seen by print function
+        testSetup->performanceStats->numLoops = dcSetup.numLoops;
+        testSetup->statsPrintFunc = (stats_print_func_t)dcPrintStats;
+
+        qatDcGetPostTestRecoveryCount(&dcSetup, testSetup->performanceStats);
+    }
+    if ((CPA_STATUS_SUCCESS != status) ||
+        (testSetup->performanceStats->threadReturnStatus == CPA_STATUS_FAIL))
+    {
+        // In case of test failure stopDcServicesFromPrintStats function call
+        // from waitForThreadCompletion function stops the dc services and not
+        // print the performance stats.
+        testSetup->statsPrintFunc =
+            (stats_print_func_t)stopDcServicesFromPrintStats;
+    }
+
+err:
+    if (dcSetup.packetSizeInBytesArray != NULL)
+    {
+        qaeMemFree((void **)&(dcSetup.packetSizeInBytesArray));
+    }
+    if (instances != NULL)
+    {
+        qaeMemFree((void **)&instances);
+    }
+    if (dcSetup.numberOfBuffers != NULL)
+    {
+        qaeMemFree((void **)&dcSetup.numberOfBuffers);
+    }
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        testSetup->performanceStats->threadReturnStatus = status;
+    }
+    sampleCodeThreadComplete(testSetup->threadID);
+}
+EXPORT_SYMBOL(dcPerformance);
+
+
+/*this is the performance thread created by the sample code framework
+ * after registering the setupScDcTest and calling createPeformance threads
+ * this function copies the setup into its own local copy and then calls scDcPoc
+ * to measure compression performance*/
+void dcLatencyPerformance(single_thread_test_data_t *testSetup)
 {
     compression_test_params_t dcSetup = {0};
     compression_test_params_t *tmpSetup = NULL;
