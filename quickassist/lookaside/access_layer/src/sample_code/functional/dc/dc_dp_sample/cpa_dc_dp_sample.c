@@ -143,7 +143,7 @@ CpaStatus dcDpSample(void);
 
 CpaStatus compLatencyTest(){
     CpaStatus status = CPA_STATUS_SUCCESS;
-    Cpa32U *testBufferSize = 4096;
+    Cpa32U testBufferSize = 4096;
     Cpa32U numberOfBuffersPerList = DEFAULT_NUM_OF_BUFF_PER_LIST;
     CpaBufferList *srcBufferListArray = NULL;
     CpaBufferList *destBufferListArray = NULL;
@@ -155,10 +155,15 @@ CpaStatus compLatencyTest(){
     CpaDcCallbackFn dcCbFn = dcPerformCallback;
     Cpa32U numLoops = 0;
     Cpa32U i = 0;
-
     compression_test_params_t *setup = NULL;
     setup = (compression_test_params_t *)malloc(sizeof(compression_test_params_t));
     setup->performanceStats = (perf_data_t *)malloc(sizeof(perf_data_t));
+    setup->corpus = CALGARY_CORPUS;
+    // populateCorpus(testBufferSize,setup->corpus);
+    // const corpus_file_t *const fileArray = getFilesInCorpus(setup->corpus);
+
+
+    
 // saveClearRestkorePerfStats(setup->performanceStats);
     // coo_init(setup->performanceStats,
     //          (Cpa64U)setup->numLists * (Cpa64U)setup->numLoops);

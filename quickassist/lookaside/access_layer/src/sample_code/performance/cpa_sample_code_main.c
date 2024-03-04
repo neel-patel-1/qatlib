@@ -790,6 +790,28 @@ int main(int argc, char *argv[])
     }
 #endif /* USER_SPACE */
 
+compression_test_params_t *setup = NULL;
+setup = (compression_test_params_t *)malloc(sizeof(compression_test_params_t));
+setup->performanceStats = (perf_data_t *)malloc(sizeof(perf_data_t));
+setup->corpus = CALGARY_CORPUS;
+
+Cpa32U *testBufferSize = setup->packetSizeInBytesArray;
+Cpa32U numberOfBuffersPerList = dc_bufferCount_g;
+CpaBufferList *srcBufferListArray = NULL;
+CpaBufferList *destBufferListArray = NULL;
+CpaBufferList *cmpBufferListArray = NULL;
+CpaDcRqResults *resultArray = NULL;
+CpaDcSessionHandle pSessionHandle = NULL;
+CpaDcSessionHandle pDecompressSessionHandle = NULL;
+CpaBufferList contextBuffer = {0};
+CpaDcCallbackFn dcCbFn = dcPerformCallback;
+Cpa32U numLoops = 0;
+i = 0;
+
+
+
+return 0;
+
 #ifdef DO_CRYPTO
     /***************************************************************************
      * SYMMETRIC PERFORMANCE
