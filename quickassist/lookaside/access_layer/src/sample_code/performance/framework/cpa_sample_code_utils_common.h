@@ -195,6 +195,7 @@ typedef struct perf_data_s
     Cpa32U cpuOverallUtilPercentage;
 #endif
     perf_cycles_t req_temp;
+    perf_cycles_t buffer_temp;
     perf_cycles_t cost_temp;
     Cpa64U req_count;
     Cpa64U req_cost_count;

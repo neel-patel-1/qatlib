@@ -119,6 +119,7 @@ static inline void coo_init(perf_data_t *perf_data, Cpa64U size)
     }
 }
 
+
 /**
 *****************************************************************************
 * @file qat_perf_cycles.h
@@ -198,6 +199,57 @@ static inline void coo_req_start(perf_data_t *perf_data)
     if (CPA_CC_REQ_POLL_STAMP == iaCycleCount_g && coo_initialized)
         perf_data->req_temp = coo_timestamp();
 }
+
+/**
+*****************************************************************************
+* @file qat_perf_cycles.h
+*
+* @ingroup sample_code
+*
+* @description                     Function is used to init coo values
+*
+* @param[in]   perf_data           pointer to structure of performance data
+*                                  used to store cyclecount values
+*
+* @retval CPA_STATUS_SUCCESS       time stamp for buffer allocation is set
+*
+* @retval CPA_STATUS_FAIL          Coo is not initialized and memory is freed
+*                                  before return of function
+*
+****************************************************************************/
+static inline void coo_buffer_alloc_start(perf_data_t *perf_data)
+{
+    /* Start coo measure */
+    if (CPA_CC_REQ_POLL_STAMP == iaCycleCount_g && coo_initialized)
+        perf_data->buffer_temp = coo_timestamp();
+}
+
+/**
+*****************************************************************************
+* @file qat_perf_cycles.h
+*
+* @ingroup sample_code
+*
+* @description                     Function is used to init coo values
+*
+* @param[in]   perf_data           pointer to structure of performance data
+*                                  used to store cyclecount values
+*
+* @retval CPA_STATUS_SUCCESS       time stamp for buffer allocation is set
+*
+* @retval CPA_STATUS_FAIL          Coo is not initialized and memory is freed
+*                                  before return of function
+*
+****************************************************************************/
+static inline void coo_buffer_alloc_stop(perf_data_t *perf_data)
+{
+    /* Start coo measure */
+    if (CPA_CC_REQ_POLL_STAMP == iaCycleCount_g && coo_initialized)
+        perf_data->buffer_temp = coo_timestamp();
+}
+
+
+
 /**
 *****************************************************************************
 * @file qat_perf_cycles.h

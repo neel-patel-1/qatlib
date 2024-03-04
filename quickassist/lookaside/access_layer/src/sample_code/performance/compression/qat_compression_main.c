@@ -973,7 +973,7 @@ void dcLatencyPerformance(single_thread_test_data_t *testSetup)
     if (CPA_STATUS_SUCCESS == status)
     {
         /*launch function that does all the work*/
-        status = qatDcPerform(&dcSetup);
+        status = qatDcPerformLatency(&dcSetup);
         if (CPA_STATUS_SUCCESS != status)
         {
             dcPrintTestData(&dcSetup);
@@ -1022,7 +1022,7 @@ err:
     }
     sampleCodeThreadComplete(testSetup->threadID);
 }
-EXPORT_SYMBOL(dcPerformance);
+EXPORT_SYMBOL(dcLatencyPerformance);
 
 /*allocates buffers store a file for compression. The buffers are sent to
  * hardware, performance is recorded and stored in the setup parameter
@@ -1398,6 +1398,383 @@ CpaStatus qatDcPerform(compression_test_params_t *setup)
     return status;
 }
 EXPORT_SYMBOL(qatDcPerform);
+
+/*allocates buffers store a file for compression. The buffers are sent to
+ * hardware, performance is recorded and stored in the setup parameter
+ * the sample code framework prints out results after the thread completes*/
+CpaStatus qatDcPerformLatency(compression_test_params_t *setup)
+{
+    /***
+    store file in array of CpaBufferLists:
+        arrayOfSrcBufferLists[0].CpaFlatBuffer.pData         <-startOfFile
+        arrayOfSrcBufferLists[0].CpaFlatBuffer.bufferSizeInBytes
+        .
+        .
+        .
+        arrayOfSrcBufferLists[n].CpaFlatBuffer.pData        <-endOfFile
+        arrayOfSrcBufferLists[n].CpaFlatBuffer.bufferSizeInBytes
+
+    where bufferSizeInBytes = testBufferSize
+    n = numberOfLists required of the above mentioned size,
+    required to store the file
+    ***/
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U *testBufferSize = setup->packetSizeInBytesArray;
+    Cpa32U numberOfBuffersPerList = dc_bufferCount_g;
+    CpaBufferList *srcBufferListArray = NULL;
+    CpaBufferList *destBufferListArray = NULL;
+    CpaBufferList *cmpBufferListArray = NULL;
+    CpaDcRqResults *resultArray = NULL;
+    CpaDcSessionHandle pSessionHandle = NULL;
+    CpaDcSessionHandle pDecompressSessionHandle = NULL;
+    CpaBufferList contextBuffer = {0};
+    CpaDcCallbackFn dcCbFn = dcPerformCallback;
+    Cpa32U numLoops = 0;
+    Cpa32U i = 0;
+    int latency_enable_flag = latency_enable;
+    const corpus_file_t *const fileArray = getFilesInCorpus(setup->corpus);
+
+    saveClearRestorePerfStats(setup->performanceStats);
+    coo_init(setup->performanceStats,
+             (Cpa64U)setup->numLists * (Cpa64U)setup->numLoops);
+
+    coo_buffer_alloc_start(setup->performanceStats);
+
+    // allocate memory for source & destination bufferLists and results
+    status = qatAllocateCompressionLists(setup,
+                                         &srcBufferListArray,
+                                         &destBufferListArray,
+                                         &cmpBufferListArray,
+                                         &resultArray);
+
+    // Allocate the CpaFlatBuffers in each list
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = qatAllocateCompressionFlatBuffers(setup,
+                                                   srcBufferListArray,
+                                                   numberOfBuffersPerList,
+                                                   testBufferSize,
+                                                   destBufferListArray,
+                                                   numberOfBuffersPerList,
+                                                   testBufferSize,
+                                                   cmpBufferListArray,
+                                                   numberOfBuffersPerList,
+                                                   testBufferSize);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("could not allocate all flat buffers for compression\n");
+        }
+    }
+
+    // copy corpus data into allocated buffers
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = PopulateBuffers(
+            srcBufferListArray,
+            setup->numLists,
+            fileArray[setup->corpusFileIndex].corpusBinaryData,
+            fileArray[setup->corpusFileIndex].corpusBinaryDataLen,
+            testBufferSize);
+    }
+    if (CPA_FALSE == setup->setNsRequest)
+    {
+        // Initialize the compression session to use
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = qatCompressionSessionInit(setup,
+                                               &pSessionHandle,
+                                               &pDecompressSessionHandle,
+                                               &contextBuffer,
+                                               dcCbFn);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("compressionSessionInit returned status %d\n",
+                          status);
+            }
+        }
+    }
+/*CNV Error Injection*/
+    /* compress the data */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        if (setup->induceOverflow == CPA_TRUE)
+        {
+                status = qatInduceOverflow(setup,
+                                           pSessionHandle,
+                                           srcBufferListArray,
+                                           destBufferListArray,
+                                           cmpBufferListArray,
+                                           resultArray);
+        }
+        else if (setup->dcSessDir == CPA_DC_DIR_COMPRESS &&
+                 reliability_g == CPA_FALSE)
+        {
+            status = qatCompressData(setup,
+                                     pSessionHandle,
+                                     CPA_DC_DIR_COMPRESS,
+                                     srcBufferListArray,
+                                     destBufferListArray,
+                                     cmpBufferListArray,
+                                     resultArray);
+            qatDcUpdateProducedBufferLength(
+                setup, destBufferListArray, resultArray);
+            dcScSetBytesProducedAndConsumed(
+                resultArray, setup->performanceStats, setup, setup->dcSessDir);
+        }
+        else if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&
+                 reliability_g == CPA_FALSE)
+        {
+
+            /*copy numLoops, set setup->numLoops to 1 to compress data, then
+             * restore setup->numLoops to measure decompress performance*/
+            numLoops = setup->numLoops;
+            setup->numLoops = 1;
+
+            /* below qatCompressData() is invoked to generate compressed
+             * test data that would be used for actual DECOMPRESSION test.
+             * Hence disabling latency and COO measurement for below
+             * COMPRESSION operation.
+             */
+            latency_enable = 0;
+            coo_deinit(setup->performanceStats);
+
+            status = qatCompressData(setup,
+                                     pSessionHandle,
+                                     CPA_DC_DIR_COMPRESS,
+                                     srcBufferListArray,
+                                     destBufferListArray,
+                                     cmpBufferListArray,
+                                     resultArray);
+
+            /* Restore latency and COO measurement */
+            latency_enable = latency_enable_flag;
+            coo_init(setup->performanceStats,
+                     (Cpa64U)setup->numLists * (Cpa64U)setup->numLoops);
+
+            qatDcUpdateProducedBufferLength(
+                setup, destBufferListArray, resultArray);
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                /*restore setup->NumLoops*/
+                setup->numLoops = numLoops;
+                if (setup->e2e)
+                {
+                    setup->e2e->swInputChecksum = 0x0;
+                    setup->e2e->swOutputChecksum = 0x0;
+                }
+                RESET_PERF_STATS(
+                    setup->performanceStats, setup->numLists, setup->numLoops);
+                status = qatCompressData(setup,
+                                         pDecompressSessionHandle,
+                                         CPA_DC_DIR_DECOMPRESS,
+                                         srcBufferListArray,
+                                         destBufferListArray,
+                                         cmpBufferListArray,
+                                         resultArray);
+                dcScSetBytesProducedAndConsumed(resultArray,
+                                                setup->performanceStats,
+                                                setup,
+                                                setup->dcSessDir);
+                qatDcUpdateProducedBufferLength(
+                    setup, cmpBufferListArray, resultArray);
+            }
+        }
+        else if (setup->dcSessDir == CPA_DC_DIR_COMPRESS &&
+                 reliability_g == CPA_TRUE)
+        {
+            /*copy numLoops, set setup->numLoops to 1 to do repeated
+             * compress - sw-decompress for numLoops times*/
+            numLoops = setup->numLoops;
+            setup->numLoops = 1;
+            for (i = 0; i < numLoops; i++)
+            {
+                status = qatCompressData(setup,
+                                         pSessionHandle,
+                                         CPA_DC_DIR_COMPRESS,
+                                         srcBufferListArray,
+                                         destBufferListArray,
+                                         cmpBufferListArray,
+                                         resultArray);
+                qatDcUpdateProducedBufferLength(
+                    setup, destBufferListArray, resultArray);
+                dcScSetBytesProducedAndConsumed(resultArray,
+                                                setup->performanceStats,
+                                                setup,
+                                                setup->dcSessDir);
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    status = qatSwDecompress(setup,
+                                             destBufferListArray,
+                                             cmpBufferListArray,
+                                             resultArray);
+                    qatDcUpdateProducedBufferLength(
+                        setup, cmpBufferListArray, resultArray);
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        status = qatCmpBuffers(
+                            setup, srcBufferListArray, cmpBufferListArray);
+                        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS(
+                            "qatCmpBuffers", status);
+                    }
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        /*reset destination buffer*/
+                        status = qatCompressResetBufferList(setup,
+                                                            destBufferListArray,
+                                                            testBufferSize,
+                                                            CPA_FALSE);
+                        status = qatCompressResetBufferList(setup,
+                                                            cmpBufferListArray,
+                                                            testBufferSize,
+                                                            CPA_TRUE);
+                        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS(
+                            "qatCompressResetBufferList", status);
+                    }
+                }
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("qatCompressData returned status %d\n", status);
+                    break;
+                }
+
+                if (CPA_TRUE == stopTestsIsEnabled_g)
+                {
+                    /* Check if terminated by global flag.
+                     * stop issuing new requests
+                     */
+                    if (CPA_TRUE == exitLoopFlag_g)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        else if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&
+                 reliability_g == CPA_TRUE)
+        {
+            /*copy numLoops, set setup->numLoops to 1 to do repeated
+             * swcompress-decompress for numLoops times*/
+            numLoops = setup->numLoops;
+            setup->numLoops = 1;
+            for (i = 0; i < numLoops; i++)
+            {
+                status = qatSwCompress(setup,
+                                       srcBufferListArray,
+                                       destBufferListArray,
+                                       resultArray);
+                qatDcUpdateProducedBufferLength(
+                    setup, destBufferListArray, resultArray);
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    status = qatCompressData(setup,
+                                             pDecompressSessionHandle,
+                                             CPA_DC_DIR_DECOMPRESS,
+                                             srcBufferListArray,
+                                             destBufferListArray,
+                                             cmpBufferListArray,
+                                             resultArray);
+                    qatDcUpdateProducedBufferLength(
+                        setup, cmpBufferListArray, resultArray);
+                    dcScSetBytesProducedAndConsumed(resultArray,
+                                                    setup->performanceStats,
+                                                    setup,
+                                                    setup->dcSessDir);
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        status = qatCmpBuffers(
+                            setup, srcBufferListArray, cmpBufferListArray);
+                        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS(
+                            "qatCmpBuffers", status);
+                    }
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        /*reset destination buffer*/
+                        status = qatCompressResetBufferList(setup,
+                                                            destBufferListArray,
+                                                            testBufferSize,
+                                                            CPA_FALSE);
+                        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS(
+                            "qatCompressResetBufferList", status);
+                    }
+                }
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("qatCompressData returned status %d\n", status);
+                    break;
+                }
+                if (CPA_TRUE == stopTestsIsEnabled_g)
+                {
+                    /* Check if terminated by global flag.
+                     * stop issuing new requests
+                     */
+                    if (CPA_TRUE == exitLoopFlag_g)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            qatDumpBufferListInfo(setup,
+                                  srcBufferListArray,
+                                  destBufferListArray,
+                                  cmpBufferListArray,
+                                  0);
+        }
+        if (CPA_CC_BUSY_LOOPS == iaCycleCount_g)
+        {
+            if (CPA_STATUS_SUCCESS !=
+                performOffloadCalculationBusyLoop(setup,
+                                                  srcBufferListArray,
+                                                  destBufferListArray,
+                                                  cmpBufferListArray,
+                                                  resultArray,
+                                                  dcCbFn,
+                                                  setup->dcSessDir,
+                                                  pSessionHandle))
+            {
+                PRINT_ERR("performOffloadCalculationBusyLoop error\n");
+            }
+        }
+        coo_average(setup->performanceStats);
+        coo_deinit(setup->performanceStats);
+        // remove the session free the handle
+        if (CPA_FALSE == setup->setNsRequest)
+        {
+            if (CPA_STATUS_SUCCESS !=
+                qatCompressionSessionTeardown(
+                    setup, &pSessionHandle, &pDecompressSessionHandle))
+            {
+                PRINT_ERR("compressionSessionTeardown error\n");
+                status = CPA_STATUS_FAIL;
+            }
+        }
+    }
+    /*free CpaFlatBuffers and privateMetaData in CpaBufferLists*/
+    if ((CPA_STATUS_SUCCESS !=
+         qatFreeCompressionFlatBuffers(setup,
+                                       srcBufferListArray,
+                                       destBufferListArray,
+                                       cmpBufferListArray)) &&
+        (CPA_STATUS_SUCCESS != qatFreeFlatBuffersInList(&contextBuffer)))
+    {
+        PRINT_ERR("freeCompressionFlatBuffers error\n");
+        status = CPA_STATUS_FAIL;
+    }
+    // free CpaBufferLists
+    if (CPA_STATUS_SUCCESS != qatFreeCompressionLists(setup,
+                                                      &srcBufferListArray,
+                                                      &destBufferListArray,
+                                                      &cmpBufferListArray,
+                                                      &resultArray))
+    {
+        PRINT_ERR("freeCompressionLists error\n");
+        status = CPA_STATUS_FAIL;
+    }
+    return status;
+}
+EXPORT_SYMBOL(qatDcPerformLatency);
 
 CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
                              const CpaInstanceInfo2 *pInstanceInfo2,
