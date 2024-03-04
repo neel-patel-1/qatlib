@@ -164,6 +164,7 @@ static CpaStatus compPerformOp(CpaInstanceHandle dcInstHandle,
     Cpa8U *pDst2Buffer = NULL;
     CpaDcDpOpData *pOpData = NULL;
     Cpa32U checksum = 0;
+    struct timespec times[3];
 
     //<snippet name="memAlloc">
     numBuffers = 2;
@@ -278,6 +279,7 @@ static CpaStatus compPerformOp(CpaInstanceHandle dcInstHandle,
         pOpData->pCallbackTag = (void *)0;
         //</snippet>
 
+        clock_gettime(CLOCK_MONOTONIC, &times[0]);
         /** Enqueue and submit operation */
         //<snippet name="perform">
         status = cpaDcDpEnqueueOp(pOpData, CPA_TRUE);
@@ -286,6 +288,7 @@ static CpaStatus compPerformOp(CpaInstanceHandle dcInstHandle,
         {
             PRINT_ERR("cpaDcDpEnqueueOp failed. (status = %d)\n", status);
         }
+        clock_gettime(CLOCK_MONOTONIC, &times[1]);
     }
 
     if (CPA_STATUS_SUCCESS == status)
@@ -298,6 +301,13 @@ static CpaStatus compPerformOp(CpaInstanceHandle dcInstHandle,
         } while (
             ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
             (pOpData->pCallbackTag == (void *)0));
+        clock_gettime(CLOCK_MONOTONIC, &times[2]);
+        printf("Time to enqueue: %ld ns\n",
+               (times[1].tv_sec - times[0].tv_sec) * 1000000000 +
+                   (times[1].tv_nsec - times[0].tv_nsec));
+        printf("Time to poll: %ld ns\n",
+                (times[2].tv_sec - times[1].tv_sec) * 1000000000 +
+                     (times[2].tv_nsec - times[1].tv_nsec));
     }
     /*
      * We now check the results
