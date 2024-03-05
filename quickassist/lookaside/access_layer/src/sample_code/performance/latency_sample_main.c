@@ -789,6 +789,7 @@ int main(int argc, char *argv[])
               computeLatency != 0 ? "Latency" : "Offload Cost");
     }
 #endif /* USER_SPACE */
+setLatencyDebug(1);
 
 #ifdef INCLUDE_COMPRESSION
     

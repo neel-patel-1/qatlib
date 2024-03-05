@@ -1378,7 +1378,7 @@ CpaStatus dcPrintStats(thread_creation_data_t *data)
             if (latency_debug)
             {
                 /* NOTE: These numbers are in CPU cycles here */
-                PRINT(", minLatency: %llu, aveLatency: %llu, maxLatency: %llu",
+                PRINT(", minLatency(cpu_cycles): %llu, aveLatency(cpu_cycles): %llu, maxLatency(cpu_cycles): %llu",
                       data->performanceStats[i]->minLatency,
                       data->performanceStats[i]->aveLatency,
                       data->performanceStats[i]->maxLatency);

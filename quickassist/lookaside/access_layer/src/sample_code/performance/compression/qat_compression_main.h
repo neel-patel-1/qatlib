@@ -1459,6 +1459,8 @@ void dcLatencyPerformance(single_thread_test_data_t *testSetup);
  * @retval CPA_STATUS_FAIL              failed to complete successfully
  *****************************************************************************/
 CpaStatus qatDcPerform(compression_test_params_t *setup);
+CpaStatus qatDcPerformLatency(compression_test_params_t *setup);
+
 
 /*****************************************************************************
  * @file qat_compression_main.h
@@ -1484,6 +1486,13 @@ CpaStatus qatDcPerform(compression_test_params_t *setup);
  * @retval CPA_STATUS_FAIL              failed to complete successfully
  *****************************************************************************/
 CpaStatus qatCompressData(compression_test_params_t *setup,
+                          CpaDcSessionHandle pSessionHandle,
+                          CpaDcSessionDir compressDirection,
+                          CpaBufferList *arrayOfSrcBufferLists,
+                          CpaBufferList *arrayOfDestBufferLists,
+                          CpaBufferList *arrayOfCpmBufferLists,
+                          CpaDcRqResults *arrayOfResults);
+CpaStatus qatCompressDataCheckLatency(compression_test_params_t *setup,
                           CpaDcSessionHandle pSessionHandle,
                           CpaDcSessionDir compressDirection,
                           CpaBufferList *arrayOfSrcBufferLists,

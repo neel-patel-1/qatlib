@@ -969,7 +969,6 @@ void dcLatencyPerformance(single_thread_test_data_t *testSetup)
     dcSetup.induceOverflow = CPA_FALSE;
     dcSetup.threadID = testSetup->threadID;
 
-
     if (CPA_STATUS_SUCCESS == status)
     {
         /*launch function that does all the work*/
@@ -1799,6 +1798,7 @@ CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
          */
         qatStartLatencyMeasurement(setup->performanceStats,
                                    setup->performanceStats->submissions);
+
         if (compressDirection == CPA_DC_DIR_COMPRESS)
         {
             coo_req_start(setup->performanceStats);
@@ -2381,13 +2381,7 @@ CpaStatus qatCompressDataCheckLatency(compression_test_params_t *setup,
                     /*break out  of inner loop*/
                     break;
                 }
-
-                setup->performanceStats->submissions++;
-                qatLatencyPollForResponses(setup->performanceStats,
-                                           setup->performanceStats->submissions,
-                                           setup->dcInstanceHandle,
-                                           CPA_FALSE,
-                                           CPA_FALSE);
+                
                 if (poll_inline_g && instanceInfo2->isPolled)
                 {
                     /*poll every 'n' requests as set by
