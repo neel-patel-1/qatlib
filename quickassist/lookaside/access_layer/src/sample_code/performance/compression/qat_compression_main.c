@@ -2317,6 +2317,9 @@ CpaStatus qatCompressDataCheckLatency(compression_test_params_t *setup,
         status = cpaDcInstanceGetInfo2(setup->dcInstanceHandle, instanceInfo2);
         QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS("cpaDcInstanceGetInfo2",
                                                   status);
+        if( instanceInfo2->isPolled ){
+            PRINT("Instance is polled\n");
+        }
     }
     if (status == CPA_STATUS_SUCCESS)
     {

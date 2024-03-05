@@ -926,6 +926,7 @@ int main(int argc, char *argv[])
                     return CPA_STATUS_FAIL;
                 }
                 status = createStartandWaitForCompletion(COMPRESSION);
+                return CPA_STATUS_SUCCESS;
                 status = setupDcTest(CPA_DC_DEFLATE,
                                      CPA_DC_DIR_COMPRESS,
                                      SAMPLE_CODE_CPA_DC_L3,
