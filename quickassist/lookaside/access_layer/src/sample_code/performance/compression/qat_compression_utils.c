@@ -1046,6 +1046,81 @@ CpaStatus qatSwCompress(compression_test_params_t *setup,
     return status;
 }
 
+
+CpaStatus qatSwIsalCompress(compression_test_params_t *setup,
+                        CpaBufferList *srcBuffListArray,
+                        CpaBufferList *dstBuffListArray,
+                        CpaDcRqResults *cmpResults)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(srcBuffListArray, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(dstBuffListArray, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(cmpResults, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(setup, status);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+
+        if (setup->setupData.compType == CPA_DC_DEFLATE)
+        {
+            status = qatSwZlibCompress(
+                setup, srcBuffListArray, dstBuffListArray, cmpResults);
+        }
+        else
+        {
+            PRINT_ERR("Unsupported Compression type %d\n",
+                      setup->setupData.compType);
+            status = CPA_STATUS_FAIL;
+        }
+    }
+    return status;
+}
+
+static CpaStatus doQatSwIsalCompress(compression_test_params_t *setup,
+                                   CpaBufferList *srcBuffListArray,
+                                   CpaBufferList *dstBuffListArray,
+                                   CpaDcRqResults *cmpResults)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    struct z_stream_s stream = {0};
+    Cpa32U j = 0;
+    int zlibFlushflag;
+
+    /* call the compress api */
+    for (j = 0; j < setup->numLists; j++)
+    {
+        memset(&stream, 0, sizeof(struct z_stream_s));
+        deflate_init(&stream);
+        if ((CPA_DC_STATEFUL == setup->setupData.sessState) &&
+            (j < setup->numLists - 1))
+        {
+            zlibFlushflag = Z_SYNC_FLUSH;
+        }
+        else
+        {
+            zlibFlushflag = Z_FINISH;
+        }
+        status = deflate_compress(&stream,
+                                  srcBuffListArray[j].pBuffers->pData,
+                                  srcBuffListArray[j].pBuffers->dataLenInBytes,
+                                  dstBuffListArray[j].pBuffers->pData,
+                                  dstBuffListArray[j].pBuffers->dataLenInBytes,
+                                  zlibFlushflag);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT("srcLen: %d, destLen: %d \n",
+                  srcBuffListArray[j].pBuffers->dataLenInBytes,
+                  dstBuffListArray[j].pBuffers->dataLenInBytes);
+            break;
+        }
+        cmpResults[j].consumed = stream.total_in;
+        cmpResults[j].produced = stream.total_out;
+        deflate_destroy(&stream);
+    }
+    return status;
+}
+
 CpaStatus qatHandleUnconsumedData(compression_test_params_t *setup,
                                   CpaBufferList *bufferListArray,
                                   Cpa32U listNum,
