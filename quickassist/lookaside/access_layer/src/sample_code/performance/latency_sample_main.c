@@ -696,7 +696,7 @@ int main(int argc, char *argv[])
             if (dynamicEnabled)
             {
 
-                status = setupDcLatencyTest(CPA_DC_DEFLATE,
+                status = setupDcTest(CPA_DC_DEFLATE,
                                      CPA_DC_DIR_DECOMPRESS,
                                      SAMPLE_CODE_CPA_DC_L3,
                                      CPA_DC_HT_FULL_DYNAMIC,

@@ -1132,6 +1132,19 @@ CpaStatus qatDcPerform(compression_test_params_t *setup)
         else if (setup->dcSessDir == CPA_DC_DIR_COMPRESS &&
                  reliability_g == CPA_FALSE)
         {
+            status = qatSwIsalCompress(setup,
+                                        srcBufferListArray,
+                                        destBufferListArray,
+                                        resultArray);
+            status = qatSwDecompress(setup,
+                                        destBufferListArray,
+                                        cmpBufferListArray,
+                                        resultArray);
+            status = qatCmpBuffers(
+                            setup, srcBufferListArray, cmpBufferListArray);
+                        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS(
+                            "qatCmpBuffers", status);
+
             status = qatCompressData(setup,
                                      pSessionHandle,
                                      CPA_DC_DIR_COMPRESS,
@@ -1515,11 +1528,10 @@ CpaStatus qatDcPerformLatency(compression_test_params_t *setup)
         coo_average(setup->performanceStats);
         coo_deinit(setup->performanceStats);
 
-        status = qatSwIsalCompress(setup,
-                                    srcBufferListArray,
-                                    destBufferListArray,
-                                    resultArray
-                                    );
+        // status = qatSwIsalCompress(setup,
+        //                             srcBufferListArray,
+        //                             destBufferListArray,
+        //                             resultArray);
 
         return CPA_STATUS_SUCCESS;
         if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&
