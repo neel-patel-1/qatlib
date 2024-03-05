@@ -2320,6 +2320,9 @@ CpaStatus qatCompressDataCheckLatency(compression_test_params_t *setup,
         if( instanceInfo2->isPolled ){
             PRINT("Instance is polled\n");
         }
+        if( instanceInfo2->isOffloaded ){
+            PRINT("Instance is offloaded\n");
+        }
     }
     if (status == CPA_STATUS_SUCCESS)
     {

@@ -1088,35 +1088,38 @@ static CpaStatus doQatSwIsalCompress(compression_test_params_t *setup,
     int zlibFlushflag;
 
     /* call the compress api */
-    for (j = 0; j < setup->numLists; j++)
-    {
-        memset(&stream, 0, sizeof(struct z_stream_s));
-        deflate_init(&stream);
-        if ((CPA_DC_STATEFUL == setup->setupData.sessState) &&
-            (j < setup->numLists - 1))
+    setup->performanceStats->startCyclesTimestamp = sampleCodeTimestamp();
+    for (int numLoops = 0; numLoops < setup->numLoops; numLoops++){
+        for (j = 0; j < setup->numLists; j++)
         {
-            zlibFlushflag = Z_SYNC_FLUSH;
+            memset(&stream, 0, sizeof(struct z_stream_s));
+            deflate_init(&stream);
+            if ((CPA_DC_STATEFUL == setup->setupData.sessState) &&
+                (j < setup->numLists - 1))
+            {
+                zlibFlushflag = Z_SYNC_FLUSH;
+            }
+            else
+            {
+                zlibFlushflag = Z_FINISH;
+            }
+            status = deflate_compress(&stream,
+                                    srcBuffListArray[j].pBuffers->pData,
+                                    srcBuffListArray[j].pBuffers->dataLenInBytes,
+                                    dstBuffListArray[j].pBuffers->pData,
+                                    dstBuffListArray[j].pBuffers->dataLenInBytes,
+                                    zlibFlushflag);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT("srcLen: %d, destLen: %d \n",
+                    srcBuffListArray[j].pBuffers->dataLenInBytes,
+                    dstBuffListArray[j].pBuffers->dataLenInBytes);
+                break;
+            }
+            cmpResults[j].consumed = stream.total_in;
+            cmpResults[j].produced = stream.total_out;
+            deflate_destroy(&stream);
         }
-        else
-        {
-            zlibFlushflag = Z_FINISH;
-        }
-        status = deflate_compress(&stream,
-                                  srcBuffListArray[j].pBuffers->pData,
-                                  srcBuffListArray[j].pBuffers->dataLenInBytes,
-                                  dstBuffListArray[j].pBuffers->pData,
-                                  dstBuffListArray[j].pBuffers->dataLenInBytes,
-                                  zlibFlushflag);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT("srcLen: %d, destLen: %d \n",
-                  srcBuffListArray[j].pBuffers->dataLenInBytes,
-                  dstBuffListArray[j].pBuffers->dataLenInBytes);
-            break;
-        }
-        cmpResults[j].consumed = stream.total_in;
-        cmpResults[j].produced = stream.total_out;
-        deflate_destroy(&stream);
     }
     return status;
 }
