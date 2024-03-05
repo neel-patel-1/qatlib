@@ -1493,35 +1493,27 @@ CpaStatus qatDcPerformLatency(compression_test_params_t *setup)
             }
         }
     }
-/*CNV Error Injection*/
-    /* compress the data */
+
     if (CPA_STATUS_SUCCESS == status)
     {
-        if (setup->induceOverflow == CPA_TRUE)
-        {
-                status = qatInduceOverflow(setup,
-                                           pSessionHandle,
-                                           srcBufferListArray,
-                                           destBufferListArray,
-                                           cmpBufferListArray,
-                                           resultArray);
-        }
-        else if (setup->dcSessDir == CPA_DC_DIR_COMPRESS &&
-                 reliability_g == CPA_FALSE)
-        {
-            status = qatCompressData(setup,
-                                     pSessionHandle,
-                                     CPA_DC_DIR_COMPRESS,
-                                     srcBufferListArray,
-                                     destBufferListArray,
-                                     cmpBufferListArray,
-                                     resultArray);
-            qatDcUpdateProducedBufferLength(
-                setup, destBufferListArray, resultArray);
-            dcScSetBytesProducedAndConsumed(
-                resultArray, setup->performanceStats, setup, setup->dcSessDir);
-        }
-        else if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&
+                
+        /*CPA_DC_DIR_COMPRESS*/
+        status = qatCompressDataCheckLatency(setup,
+                                    pSessionHandle,
+                                    CPA_DC_DIR_COMPRESS,
+                                    srcBufferListArray,
+                                    destBufferListArray,
+                                    cmpBufferListArray,
+                                    resultArray);
+        qatDcUpdateProducedBufferLength(
+            setup, destBufferListArray, resultArray);
+        dcScSetBytesProducedAndConsumed(
+            resultArray, setup->performanceStats, setup, setup->dcSessDir);
+        coo_average(setup->performanceStats);
+        coo_deinit(setup->performanceStats);
+
+        return CPA_STATUS_SUCCESS;
+        if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&
                  reliability_g == CPA_FALSE)
         {
 
@@ -2253,6 +2245,356 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
     return status;
 }
 EXPORT_SYMBOL(qatCompressData);
+
+CpaStatus qatCompressDataCheckLatency(compression_test_params_t *setup,
+                          CpaDcSessionHandle pSessionHandle,
+                          CpaDcSessionDir compressDirection,
+                          CpaBufferList *arrayOfSrcBufferLists,
+                          CpaBufferList *arrayOfDestBufferLists,
+                          CpaBufferList *arrayOfCmpBufferLists,
+                          CpaDcRqResults *arrayOfResults)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaInstanceInfo2 *instanceInfo2 = NULL;
+    Cpa32U numLoops = 0;
+    Cpa32U listNum = 0;
+    Cpa32U previousChecksum = 0;
+    CpaDcChecksum checksum = CPA_DC_NONE;
+    CpaDcStats dcStats = {0};
+    CpaBoolean isCnVerrorRecovered = CPA_FALSE;
+
+    instanceInfo2 = qaeMemAlloc(sizeof(CpaInstanceInfo2));
+    if (instanceInfo2 == NULL)
+    {
+        PRINT_ERR("Failed to allocate memory for instanceInfo2");
+        return CPA_STATUS_FAIL;
+    }
+    memset(instanceInfo2, 0, sizeof(CpaInstanceInfo2));
+
+    checksum = setup->setupData.checksum;
+    /* init checksum */
+    if (CPA_DC_ADLER32 == checksum)
+    {
+        previousChecksum = 1;
+    }
+    else if (CPA_DC_CRC32 == checksum)
+    {
+        previousChecksum = 0;
+    }
+
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(setup, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(arrayOfSrcBufferLists,
+                                                  status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(arrayOfDestBufferLists,
+                                                  status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(arrayOfCmpBufferLists,
+                                                  status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(arrayOfResults, status);
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = qatCompressionE2EInit(setup);
+        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS("qatCompressionE2EInit",
+                                                  status);
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        setup->flushFlag = CPA_DC_FLUSH_FINAL;
+        qatPerfInitStats(setup->performanceStats,
+                         setup->numLists,
+                         setup->numLoops,
+                         (setup->useStatefulLite == CPA_TRUE ||
+                          setup->setupData.sessState == CPA_DC_STATEFUL)
+                             ? 1
+                             : dcPollingInterval_g);
+        status = qatInitLatency(
+            setup->performanceStats, setup->numLists, setup->numLoops);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*get the instance2 info, this is used to determine if the instance
+         * being used is polled*/
+        status = cpaDcInstanceGetInfo2(setup->dcInstanceHandle, instanceInfo2);
+        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS("cpaDcInstanceGetInfo2",
+                                                  status);
+    }
+    if (status == CPA_STATUS_SUCCESS)
+    {
+        /*Initialize the semaphore, the callback function is responsible for
+         * posting the semaphore once all responses are received*/
+
+        /* Completion used in callback */
+        status = sampleCodeSemaphoreInit(&setup->performanceStats->comp, 0);
+        QAT_PERF_PRINT_ERR_FOR_NON_SUCCESS_STATUS("sampleCodeSemaphoreInit",
+                                                  status);
+    }
+    if (status == CPA_STATUS_SUCCESS)
+    {
+        /* this Barrier will waits until all the threads get to this point
+         * this is to ensure that all threads that we measure performance on
+         * start submitting at the same time*/
+        sampleCodeBarrier();
+        /* generate the start time stamps */
+        setup->performanceStats->startCyclesTimestamp = sampleCodeTimestamp();
+        /*loop over compressing a file numLoop times*/
+        for (numLoops = 0; numLoops < setup->numLoops; numLoops++)
+        {
+            /*loop over lists that store the file*/
+            for (listNum = 0; listNum < setup->numLists; listNum++)
+            {
+                /*exit loop mechanism to leave early if numLoops is large
+                 * note that this might not work if the we get stuck in the
+                 * do-while loop below*/
+                checkStopTestExitFlag(setup->performanceStats,
+                                      &setup->numLoops,
+                                      &setup->numLists,
+                                      numLoops);
+                qatCompressionSetFlushFlag(setup, listNum);
+                /* Always set the checksum equal to the previous
+                 * checksum. For stateless the previous checksum
+                 * will still be the default value which is what
+                 * we want to set it to anyway in that case.
+                 */
+                arrayOfResults[listNum].checksum = previousChecksum;
+                /*submit request*/
+                status = qatDcSubmitRequest(setup,
+                                            instanceInfo2,
+                                            compressDirection,
+                                            pSessionHandle,
+                                            arrayOfSrcBufferLists,
+                                            arrayOfDestBufferLists,
+                                            arrayOfCmpBufferLists,
+                                            listNum,
+                                            arrayOfResults);
+                /* Check submit status and update thread status*/
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Data Compression Failed %d\n\n", status);
+                    setup->performanceStats->threadReturnStatus =
+                        CPA_STATUS_FAIL;
+                    /*break out  of inner loop*/
+                    break;
+                }
+
+                setup->performanceStats->submissions++;
+                qatLatencyPollForResponses(setup->performanceStats,
+                                           setup->performanceStats->submissions,
+                                           setup->dcInstanceHandle,
+                                           CPA_FALSE,
+                                           CPA_FALSE);
+                if (poll_inline_g && instanceInfo2->isPolled)
+                {
+                    /*poll every 'n' requests as set by
+                     * dcPollingInterval_g*/
+                    if (setup->performanceStats->submissions ==
+                        setup->performanceStats->nextPoll)
+                    {
+                        qatDcPollAndSetNextPollCounter(setup);
+                    }
+                }
+
+                /* check if synchronous flag is set,
+                 *  if set, invoke the callback API
+                 *  the driver does not use the callback in sync mode
+                 *  the sample code uses the callback function to count the
+                 *  responses and post the semaphore
+                 */
+                if (SYNC == setup->syncFlag)
+                {
+                    COUNT_RESPONSES;
+                } /* End of SYNC Flag Check */
+                else
+                {
+#if DC_API_VERSION_AT_LEAST(3, 2)
+                    if (reliability_g)
+#endif
+                    {
+                        if ((CPA_DC_STATELESS == setup->setupData.sessState) &&
+                            (CPA_TRUE == setup->useE2E ||
+                             CPA_TRUE == setup->useE2EVerify))
+                        {
+                            status = waitForSemaphore(setup->performanceStats);
+
+                            if (CPA_STATUS_SUCCESS != status)
+                            {
+                                PRINT_ERR("waitForSemaphore error\n");
+                                setup->performanceStats->threadReturnStatus =
+                                    CPA_STATUS_FAIL;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if ((CPA_TRUE == setup->useStatefulLite) ||
+                    (CPA_DC_STATEFUL == setup->setupData.sessState))
+                {
+                    status = waitForSemaphore(setup->performanceStats);
+                    if (CPA_STATUS_SUCCESS != status)
+                    {
+                        PRINT_ERR("waitForSemaphore error\n");
+                        setup->performanceStats->threadReturnStatus =
+                            CPA_STATUS_FAIL;
+                        break;
+                    }
+                    previousChecksum = arrayOfResults[listNum].checksum;
+                    /*check for unconsumed data*/
+                    if ((CPA_DC_DIR_DECOMPRESS == compressDirection) &&
+                        (arrayOfDestBufferLists[listNum]
+                             .pBuffers->dataLenInBytes !=
+                         arrayOfResults[listNum].consumed))
+                    {
+                        if (CPA_STATUS_SUCCESS !=
+                            qatCheckAndHandleUnconsumedData(
+                                setup,
+                                arrayOfDestBufferLists,
+                                arrayOfResults,
+                                listNum,
+                                (const char *)instanceInfo2->partName))
+                        {
+                            PRINT_ERR("Decomp did not consume all data\n");
+                            PRINT("Input Buffersize: %u\n",
+                                  arrayOfDestBufferLists[listNum]
+                                      .pBuffers[0]
+                                      .dataLenInBytes);
+                            PRINT("Amount Consumed:  %u\n",
+                                  arrayOfResults[listNum].consumed);
+                            PRINT("Amount Produced:  %u\n",
+                                  arrayOfResults[listNum].produced);
+                            setup->performanceStats->threadReturnStatus =
+                                CPA_STATUS_FAIL;
+                            setup->performanceStats->numOperations =
+                                setup->performanceStats->submissions;
+                            /*call the response thread so that the semaphore
+                             * gets posted*/
+                            dcPerformCallback(setup, status);
+                            break;
+                        }
+                    }
+                }
+                if (CPA_STATUS_SUCCESS == status)
+                {
+#if DC_API_VERSION_AT_LEAST(3, 2)
+                    if (reliability_g)
+#endif
+                    {
+                        status = qatCompressionE2EVerify(
+                            setup,
+                            &arrayOfSrcBufferLists[listNum],
+                            &arrayOfDestBufferLists[listNum],
+                            &arrayOfResults[listNum]);
+                    }
+                }
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("%s returned status: %d\n",
+                              "qatCompressionE2EVerify",
+                              status);
+                    break;
+                }
+            }
+            /* number of lists/requests in a file */
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                /*break out of outerloop(numLoops)*/
+                break;
+            }
+        } /* number of times we loop over same file */
+        if (poll_inline_g)
+        {
+            if ((CPA_STATUS_SUCCESS == status) && (instanceInfo2->isPolled))
+            {
+                /*
+                 ** Now need to wait for all the in-flight Requests.
+                 */
+                status =
+                    dcPollNumOperations(setup->performanceStats,
+                                        setup->dcInstanceHandle,
+                                        setup->performanceStats->numOperations);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("dcPollNumOperations returned an error\n");
+                }
+            }
+        }
+        /* Wait 30 seconds for the semaphore to be posted by the callback*/
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = waitForSemaphore(setup->performanceStats);
+
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("waitForSemaphore error\n");
+                setup->performanceStats->threadReturnStatus = CPA_STATUS_FAIL;
+            }
+        }
+        else
+        {
+            /* In case of failure during submissions, all in-flight requests
+             * should be collected before releasing memory that is used by
+             * the SAL/Driver. This is specially true for async response
+             * processing via callback function.
+             */
+            if (!(poll_inline_g || SYNC == setup->syncFlag ||
+                  CPA_TRUE == setup->useStatefulLite ||
+                  CPA_DC_STATEFUL == setup->setupData.sessState))
+            {
+                waitForInflightRequestAfterError(setup->performanceStats);
+            }
+        }
+
+        if (CNV_RECOVERY(&(setup->requestOps)) == CPA_TRUE)
+        {
+            status = cpaDcGetStats(setup->dcInstanceHandle, &dcStats);
+            if (status == CPA_STATUS_SUCCESS)
+            {
+                setup->performanceStats->postTestRecoveryCount =
+                    GET_CNV_RECOVERY_COUNTERS(&dcStats);
+            }
+            else
+            {
+                setup->performanceStats->postTestRecoveryCount = 0;
+            }
+
+            if (setup->performanceStats->postTestRecoveryCount >
+                setup->performanceStats->preTestRecoveryCount)
+            {
+                isCnVerrorRecovered = CPA_TRUE;
+            }
+        }
+        /* As the destination buffer size for the compression request is
+         * obtained using the Compress Bound APIs, There should not be any
+         * unconsumed data left in the src buffer except for the case when
+         * FW identifies CnV Error and recovers it. Any such case is treated as
+         * test failure*/
+
+        if (CPA_STATUS_SUCCESS == status &&
+            (CPA_DC_DIR_COMPRESS == compressDirection) &&
+            (setup->induceOverflow == CPA_FALSE) &&
+            (isCnVerrorRecovered == CPA_FALSE))
+        {
+
+            status = qatCompressionVerifyOverflow(
+                setup, arrayOfResults, arrayOfSrcBufferLists, listNum);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("qatCompressionVerifyOverflow Failed.\n");
+                setup->performanceStats->threadReturnStatus = CPA_STATUS_FAIL;
+            }
+        }
+        /*check the results structure for any failed responses
+         * caught by the callback function*/
+        qatCompressionResponseStatusCheck(
+            setup, arrayOfResults, listNum, &status);
+
+        qatSummariseLatencyMeasurements(setup->performanceStats);
+        sampleCodeSemaphoreDestroy(&setup->performanceStats->comp);
+    } /* if semaphoreInit was successful */
+
+    qaeMemFree((void **)&instanceInfo2);
+
+    return status;
+}
+EXPORT_SYMBOL(qatCompressDataCheckLatency);
 
 /*update in sample code framework how much data was consumed and produced by
  * thread*/
