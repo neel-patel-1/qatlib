@@ -1589,6 +1589,95 @@ CpaStatus qatSwDecompress(compression_test_params_t *setup,
     }
     return status;
 }
+
+CpaStatus qatSwIsalDecompress(compression_test_params_t *setup,
+                          CpaBufferList *destBuffListArray,
+                          CpaBufferList *cmpBuffListArray,
+                          CpaDcRqResults *cmpResults)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(destBuffListArray, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(cmpBuffListArray, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(cmpResults, status);
+    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(setup, status);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+
+        if (setup->setupData.compType == CPA_DC_DEFLATE)
+        {
+            status = qatSwZlibDecompress(
+                setup, destBuffListArray, cmpBuffListArray, cmpResults);
+        }
+        else
+        {
+            PRINT_ERR("Unsupported Compression type %d\n",
+                      setup->setupData.compType);
+            status = CPA_STATUS_FAIL;
+        }
+    }
+    return status;
+}
+
+static CpaStatus doQatSwIsalDecompress(compression_test_params_t *setup,
+                                     CpaBufferList *destBuffListArray,
+                                     CpaBufferList *cmpBuffListArray,
+                                     CpaDcRqResults *cmpResults)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U j = 0;
+    struct z_stream_s stream = {0};
+
+    for (j = 0; j < setup->numLists; j++)
+    {
+        /* For stateful session setup stream once for all the buffers
+         * For stateless session stream is initialized for every packet
+         */
+        if (setup->setupData.sessState != CPA_DC_STATEFUL || j == 0)
+        {
+            inflate_init(&stream, setup->setupData.sessState);
+        }
+        status =
+            inflate_decompress(&stream,
+                               destBuffListArray[j].pBuffers->pData,
+                               cmpResults[j].produced,
+                               cmpBuffListArray[j].pBuffers->pData,
+                               cmpBuffListArray[j].pBuffers->dataLenInBytes,
+                               setup->setupData.sessState);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT("%02x%02x%02x%02x\n",
+                  destBuffListArray[j].pBuffers->pData[0],
+                  destBuffListArray[j].pBuffers->pData[1],
+                  destBuffListArray[j].pBuffers->pData[2],
+                  destBuffListArray[j].pBuffers->pData[3]);
+            PRINT_ERR("j: %d, srcLen: %d, destLen: %d \n",
+                      j,
+                      destBuffListArray[j].pBuffers->dataLenInBytes,
+                      cmpBuffListArray[j].pBuffers->dataLenInBytes);
+            qatCompressDumpToFile(
+                setup, destBuffListArray, "destBuffer", "destBuffSize", 0);
+            break;
+        }
+        cmpBuffListArray[j].pBuffers[0].dataLenInBytes = stream.avail_out;
+        /*the results passed in contain the uncompressed consumed data
+         * and the compressed produced data, so now we swap them, so that
+         * consumed contains the compressed data consumed by zlib and the
+         * decompressed data produced by zlib*/
+        cmpResults[j].consumed = cmpResults[j].produced;
+        cmpResults[j].produced = cmpBuffListArray[j].pBuffers->dataLenInBytes;
+        /* Destroy the stream every time for stateless but only in the end
+         * for stateful.
+         */
+        if (setup->setupData.sessState != CPA_DC_STATEFUL ||
+            j == (setup->numLists - 1))
+        {
+            inflate_destroy(&stream);
+        }
+    }
+    return status;
+}
 #ifdef SC_CHAINING_ENABLED
 CpaStatus qatSwChainDecompress(compression_test_params_t *setup,
                                CpaBufferList *destBuffListArray,
