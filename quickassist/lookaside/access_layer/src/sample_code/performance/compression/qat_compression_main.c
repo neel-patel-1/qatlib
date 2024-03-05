@@ -1516,12 +1516,10 @@ CpaStatus qatDcPerformLatency(compression_test_params_t *setup)
         coo_deinit(setup->performanceStats);
 
         status = qatSwIsalCompress(setup,
-                                    pSessionHandle,
-                                    CPA_DC_DIR_COMPRESS,
                                     srcBufferListArray,
                                     destBufferListArray,
-                                    cmpBufferListArray,
-                                    resultArray);
+                                    resultArray
+                                    );
 
         return CPA_STATUS_SUCCESS;
         if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&

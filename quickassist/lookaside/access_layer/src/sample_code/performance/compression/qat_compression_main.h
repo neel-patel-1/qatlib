@@ -622,6 +622,10 @@ CpaStatus qatSwCompress(compression_test_params_t *setup,
                         CpaBufferList *srcBufferListArray,
                         CpaBufferList *dstBufferListArray,
                         CpaDcRqResults *cmpResults);
+CpaStatus qatSwIsalCompress(compression_test_params_t *setup,
+                        CpaBufferList *srcBufferListArray,
+                        CpaBufferList *dstBufferListArray,
+                        CpaDcRqResults *cmpResults);
 
 /**
  *****************************************************************************
