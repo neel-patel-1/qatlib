@@ -62,7 +62,7 @@ COMMON_SAMPLE_INCLUDES = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 			 -I$(srcdir)/quickassist/lookaside/access_layer/src/common/include \
 			 -I$(srcdir)/quickassist/lookaside/access_layer/src/common/compression/include
 
-COMMON_SAMPLE_LDFLAGS = -lpthread -lcrypto -lz -lc lib@LIBUSDMNAME@.la lib@LIBQATNAME@.la
+COMMON_SAMPLE_LDFLAGS = -lpthread -lcrypto -lz -lc -lisal lib@LIBUSDMNAME@.la lib@LIBQATNAME@.la
 
 noinst_PROGRAMS = cpa_sample_code
 cpa_sample_code_SOURCES = \

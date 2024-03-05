@@ -971,6 +971,7 @@ void dcLatencyPerformance(single_thread_test_data_t *testSetup)
 
     if (CPA_STATUS_SUCCESS == status)
     {
+        
         /*launch function that does all the work*/
         status = qatDcPerformLatency(&dcSetup);
         if (CPA_STATUS_SUCCESS != status)
@@ -1497,6 +1498,9 @@ CpaStatus qatDcPerformLatency(compression_test_params_t *setup)
     {
                 
         /*CPA_DC_DIR_COMPRESS*/
+        /*test isa-l performance*/
+        
+
         status = qatCompressDataCheckLatency(setup,
                                     pSessionHandle,
                                     CPA_DC_DIR_COMPRESS,
@@ -1510,6 +1514,14 @@ CpaStatus qatDcPerformLatency(compression_test_params_t *setup)
             resultArray, setup->performanceStats, setup, setup->dcSessDir);
         coo_average(setup->performanceStats);
         coo_deinit(setup->performanceStats);
+
+        status = qatSwIsalCompress(setup,
+                                    pSessionHandle,
+                                    CPA_DC_DIR_COMPRESS,
+                                    srcBufferListArray,
+                                    destBufferListArray,
+                                    cmpBufferListArray,
+                                    resultArray);
 
         return CPA_STATUS_SUCCESS;
         if (setup->dcSessDir == CPA_DC_DIR_DECOMPRESS &&

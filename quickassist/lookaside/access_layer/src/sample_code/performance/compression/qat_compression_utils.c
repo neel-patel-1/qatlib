@@ -68,6 +68,7 @@
 #include "busy_loop.h"
 #include "qat_perf_cycles.h"
 #include "qat_compression_zlib.h"
+#include <isa-l.h>
 
 CpaStatus qatGetCompressBoundDestinationBufferSize(
     compression_test_params_t *setup,
@@ -1047,6 +1048,125 @@ CpaStatus qatSwCompress(compression_test_params_t *setup,
 }
 
 
+static CpaStatus doQatSwIsalCompress(compression_test_params_t *setup,
+                                   CpaBufferList *srcBuffListArray,
+                                   CpaBufferList *dstBuffListArray,
+                                   CpaDcRqResults *cmpResults)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U j = 0, i=0, submissions=0;
+    Cpa16U zlibFlushflag;
+    Cpa8U level_buffer[ISAL_DEF_LVL3_EXTRA_LARGE]; // biggest buf size in igzip_lib.h
+
+    /* call the compress api */
+    if(latency_debug){
+        PRINT("Starting latency isal_deflate measurement %s\n", __func__ );
+    }
+    perf_data_t *performanceStats = setup->performanceStats;
+    perf_cycles_t start_time, end_time;
+    struct isal_zstream stream = {0};
+    
+
+    for (int numLoops = 0; numLoops < setup->numLoops; numLoops++){
+        for (j = 0; j < setup->numLists; j++)
+        {
+            memset(&stream, 0, sizeof(struct isal_zstream));
+            isal_deflate_init(&stream);
+            stream.next_in = srcBuffListArray[j].pBuffers->pData;
+            stream.avail_in = srcBuffListArray[j].pBuffers->dataLenInBytes;
+            stream.next_out = dstBuffListArray[j].pBuffers->pData;
+            stream.avail_out = dstBuffListArray[j].pBuffers->dataLenInBytes;
+            stream.level_buf_size=sizeof level_buffer;
+            stream.level_buf= level_buffer;
+            stream.level = ISAL_DEF_MIN_LEVEL;
+
+            
+
+            if ((CPA_DC_STATEFUL == setup->setupData.sessState) &&
+                (j < setup->numLists - 1))
+            {
+                zlibFlushflag = SYNC_FLUSH;
+            }
+            else
+            {
+                zlibFlushflag = FULL_FLUSH;
+            }
+
+            if (latency_enable)
+            {
+                QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(performanceStats, status);
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    i = performanceStats->latencyCount;
+                    if ((submissions + 1 == performanceStats->nextCount) &&
+                        (i < MAX_LATENCY_COUNT))
+                    {
+                        performanceStats->start_times[i] = sampleCodeTimestamp();
+                    }
+                }
+            }
+            status = isal_deflate(&stream);
+            performanceStats->responses++;
+            if (latency_enable)
+            {
+                /* Did the latency function setup the array pointer? */
+                if (NULL == performanceStats->response_times)
+                {
+                    if (latency_debug)
+                        PRINT("%s: Callback for non-latency code\n", __FUNCTION__);
+                }
+                else
+                {
+                    /* Have we sampled too many buffer operations? */
+                    if (performanceStats->latencyCount > MAX_LATENCY_COUNT)
+                    {
+                        PRINT_ERR("performanceStats latencyCount > MAX_LATENCY_COUNT\n");
+                        return;
+                    }
+
+                    /* Is this the buffer we calculate latency on?
+                    * And have we calculated too many for array? */
+                    if (performanceStats->responses == performanceStats->nextCount)
+                    {
+                        int i = performanceStats->latencyCount;
+
+                        /* Now get the end timestamp - before any print outs */
+                        performanceStats->response_times[i] = sampleCodeTimestamp();
+
+                        performanceStats->nextCount += performanceStats->countIncrement;
+
+                        if (latency_debug)
+                            PRINT("%s: responses=%u, latencyCount=%d, end[i]:%llu, "
+                                "start[i]:%llu, nextCount=%u\n",
+                                __FUNCTION__,
+                                (unsigned int)performanceStats->responses,
+                                i,
+                                performanceStats->response_times[i],
+                                performanceStats->start_times[i],
+                                performanceStats->nextCount);
+
+                        performanceStats->latencyCount++;
+                    }
+                }
+            }
+
+
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT("srcLen: %d, destLen: %d \n",
+                    srcBuffListArray[j].pBuffers->dataLenInBytes,
+                    dstBuffListArray[j].pBuffers->dataLenInBytes);
+                break;
+            }
+            cmpResults[j].consumed = stream.total_in;
+            cmpResults[j].produced = stream.total_out;
+        }
+    }
+    perf_cycles_t statsLatency = 0;
+    perf_cycles_t cpuFreqKHz = sampleCodeGetCpuFreq();
+    PRINT("Ave. Latency (uSecs):%lld\n", statsLatency);
+    return status;
+}
 CpaStatus qatSwIsalCompress(compression_test_params_t *setup,
                         CpaBufferList *srcBuffListArray,
                         CpaBufferList *dstBuffListArray,
@@ -1064,7 +1184,7 @@ CpaStatus qatSwIsalCompress(compression_test_params_t *setup,
 
         if (setup->setupData.compType == CPA_DC_DEFLATE)
         {
-            status = qatSwZlibCompress(
+            status = doQatSwIsalCompress(
                 setup, srcBuffListArray, dstBuffListArray, cmpResults);
         }
         else
@@ -1072,60 +1192,6 @@ CpaStatus qatSwIsalCompress(compression_test_params_t *setup,
             PRINT_ERR("Unsupported Compression type %d\n",
                       setup->setupData.compType);
             status = CPA_STATUS_FAIL;
-        }
-    }
-    return status;
-}
-
-static CpaStatus doQatSwIsalCompress(compression_test_params_t *setup,
-                                   CpaBufferList *srcBuffListArray,
-                                   CpaBufferList *dstBuffListArray,
-                                   CpaDcRqResults *cmpResults)
-{
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    struct z_stream_s stream = {0};
-    Cpa32U j = 0;
-    int zlibFlushflag;
-
-    /* call the compress api */
-    if(latency_debug){
-        PRINT("Starting latency isal_deflate measurement %s\n", __func__ );
-    }
-    perf_data_t *pPerfData = setup->performanceStats;
-    perf_cycles_t start_time, end_time;
-    
-    for (int numLoops = 0; numLoops < setup->numLoops; numLoops++){
-        for (j = 0; j < setup->numLists; j++)
-        {
-            memset(&stream, 0, sizeof(struct z_stream_s));
-            deflate_init(&stream);
-            if ((CPA_DC_STATEFUL == setup->setupData.sessState) &&
-                (j < setup->numLists - 1))
-            {
-                zlibFlushflag = Z_SYNC_FLUSH;
-            }
-            else
-            {
-                zlibFlushflag = Z_FINISH;
-            }
-            start_time = sampleCodeTimestamp();
-            status = deflate_compress(&stream,
-                                    srcBuffListArray[j].pBuffers->pData,
-                                    srcBuffListArray[j].pBuffers->dataLenInBytes,
-                                    dstBuffListArray[j].pBuffers->pData,
-                                    dstBuffListArray[j].pBuffers->dataLenInBytes,
-                                    zlibFlushflag);
-            end_time = sampleCodeTimestamp();
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT("srcLen: %d, destLen: %d \n",
-                    srcBuffListArray[j].pBuffers->dataLenInBytes,
-                    dstBuffListArray[j].pBuffers->dataLenInBytes);
-                break;
-            }
-            cmpResults[j].consumed = stream.total_in;
-            cmpResults[j].produced = stream.total_out;
-            deflate_destroy(&stream);
         }
     }
     return status;

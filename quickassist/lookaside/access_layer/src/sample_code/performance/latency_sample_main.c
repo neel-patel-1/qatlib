@@ -341,18 +341,9 @@ int main(int argc, char *argv[])
 #endif
 #endif
     CpaInstanceInfo2 *info = NULL;
-#ifdef DO_CRYPTO
-    CpaStatus status_asym = CPA_STATUS_FAIL;
-    CpaCySymCapabilitiesInfo symCapInfo = {{0}};
-    Cpa32U computeLatency = 0;
-    CpaCyCapabilitiesInfo symCap = {0};
-    CpaCyCapabilitiesInfo asymCap = {0};
-    Cpa16U includeKasumiAlg = 0;
-    Cpa16U includeSnow3GAlgChain = 0;
-#else
+
 #ifdef USER_SPACE
     Cpa32U computeLatency = 0;
-#endif
 #endif
 #ifdef USER_SPACE
     char *processName = NULL;
@@ -490,212 +481,6 @@ int main(int argc, char *argv[])
         dcLoops = MIN_DC_LOOPS;
     }
 
-#ifdef DO_CRYPTO
-    status = cpaCyGetNumInstances(&numInst_g);
-    if (CPA_STATUS_SUCCESS != status)
-    {
-        PRINT_ERR("cpaCyGetNumInstances failed with status: %d\n", status);
-        return status;
-    }
-    if (numInst_g > 0)
-    {
-        /* use single instance for latency and COO */
-        if (singleInstRequired_g)
-        {
-            numInst_g = 1;
-        }
-        /*allocate memory to store the instance handles*/
-        cyInst_g = qaeMemAlloc(sizeof(CpaInstanceHandle) * numInst_g);
-        if (cyInst_g == NULL)
-        {
-            PRINT_ERR("Failed to allocate memory for instances\n");
-            freeInstanceMapping();
-            return CPA_STATUS_FAIL;
-        }
-
-        /*get the instances handles and place in allocated memory*/
-        status = cpaCyGetInstances(numInst_g, cyInst_g);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("cpaCyGetInstances failed with status: %d\n", status);
-            freeInstanceMapping();
-            return status;
-        }
-
-        /*allocate memory for the instance core mapping*/
-        cyInstMap_g = qaeMemAlloc(sizeof(Cpa32U) * numInst_g);
-        if (cyInstMap_g == NULL)
-        {
-            PRINT_ERR("Failed to allocate memory for instance mapping\n");
-            freeInstanceMapping();
-            return CPA_STATUS_FAIL;
-        }
-
-        info = qaeMemAlloc(sizeof(CpaInstanceInfo2));
-        if (info == NULL)
-        {
-            PRINT_ERR("Failed to allocate memory for info");
-            freeInstanceMapping();
-            return CPA_STATUS_FAIL;
-        }
-        memset(info, 0, sizeof(CpaInstanceInfo2));
-
-        for (i = 0; i < numInst_g; i++)
-        {
-            status = cpaCyInstanceGetInfo2(cyInst_g[i], info);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("could not get instance info\n");
-                freeInstanceMapping();
-                qaeMemFree((void **)&info);
-                return status;
-            }
-            if (prevDevId == info->physInstId.acceleratorId)
-            {
-                continue;
-            }
-            prevDevId = info->physInstId.acceleratorId;
-            printDriverVersion(prevDevId);
-        }
-        qaeMemFree((void **)&info);
-
-        if (runTests & SYMMETRIC_CODE)
-        {
-            status = getCryptoInstanceCapabilities(&symCap, SYM);
-        }
-
-        if (runTests & ASYMETRIC_CODE)
-        {
-            status_asym = getCryptoInstanceCapabilities(&asymCap, ASYM);
-        }
-        if ((CPA_STATUS_SUCCESS != status) &&
-            (CPA_STATUS_SUCCESS != status_asym))
-        {
-            PRINT_ERR("getCryptoInstanceCapabilities failed to fetch CRYPTO "
-                      "Instance Capabilities.\n");
-            return CPA_STATUS_FAIL;
-        }
-
-        if (symCap.symSupported == CPA_FALSE && runTests & SYMMETRIC_CODE)
-        {
-            PRINT("Warning! Skipping SYMMETRIC tests as they are not supported "
-                  "on Instance\n");
-            runTests ^= 1 << 0;
-            PRINT("runTests=%d\n", runTests);
-        }
-
-        if (asymCap.rsaSupported == CPA_FALSE && runTests & RSA_CODE)
-        {
-            PRINT("Warning! Skipping RSA tests as they are not supported on "
-                  "Instance\n");
-            runTests ^= 1 << 1;
-            PRINT("runTests=%d\n", runTests);
-        }
-        if (asymCap.dsaSupported == CPA_FALSE && runTests & DSA_CODE)
-        {
-            PRINT("Warning! Skipping DSA tests as they are not supported on "
-                  "Instance\n");
-            runTests ^= 1 << 2;
-            PRINT("runTests=%d\n", runTests);
-        }
-        if (asymCap.ecdsaSupported == CPA_FALSE && runTests & ECDSA_CODE)
-        {
-            PRINT("Warning! Skipping ECDSA tests as they are not supported on "
-                  "Instance\n");
-            runTests ^= 1 << 3;
-            PRINT("runTests=%d\n", runTests);
-        }
-        if (asymCap.dhSupported == CPA_FALSE && runTests & DH_CODE)
-        {
-            PRINT("Warning! Skipping DH tests as they are not supported on "
-                  "Instance\n");
-            runTests ^= 1 << 4;
-            PRINT("runTests=%d\n", runTests);
-        }
-#if CY_API_VERSION_AT_LEAST(3, 0)
-#ifdef SC_KPT2_ENABLED
-        if (asymCap.kptSupported == CPA_FALSE && (runTests & KPT_RSA_CODE))
-        {
-            PRINT(
-                "Warning! Skipping KPT RSA tests as they are not supported on "
-                "Instance\n");
-            runTests ^= 1 << 8;
-            PRINT("runTests=%d\n", runTests);
-        }
-        if (asymCap.kptSupported == CPA_FALSE && (runTests & KPT_ECDSA_CODE))
-        {
-            PRINT("Warning! Skipping KPT ECDSA tests as they are not supported "
-                  "on Instance\n");
-            runTests ^= 1 << 9;
-            PRINT("runTests=%d\n", runTests);
-        }
-#endif
-#ifdef SC_SM2_ENABLED
-        if (asymCap.ecSm2Supported == CPA_FALSE && (runTests & SM2_CODE))
-        {
-            PRINT("Warning! Skipping SM2 tests as they are not supported "
-                  "on Instance\n");
-            runTests ^= 1 << 10;
-            PRINT("runTests=%d\n", runTests);
-        }
-#endif
-#endif
-
-        /* Check capabilities before running kasumi wireless alg tests*/
-        if (symCap.symSupported == CPA_TRUE && (runTests & SYMMETRIC_CODE))
-        {
-            status = getCySymQueryCapabilities(&symCapInfo);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("cpaCySymQueryCapabilities failed with status: %d\n",
-                          status);
-                return status;
-            }
-
-            if (1 == includeWirelessAlgs)
-            {
-                includeKasumiAlg = 1;
-                includeSnow3GAlgChain = 1;
-
-                if (!CPA_BITMAP_BIT_TEST(symCapInfo.ciphers,
-                                         CPA_CY_SYM_CIPHER_KASUMI_F8))
-                {
-                    PRINT(
-                        "Warning! Skipping Kasumi wireless algorithm tests as "
-                        "they are not supported on "
-                        "Instance\n");
-                    includeKasumiAlg = 0;
-                    PRINT("includeKasumiAlgs = %d\n", includeKasumiAlg);
-                }
-
-                if ((!CPA_BITMAP_BIT_TEST(symCapInfo.ciphers,
-                                          CPA_CY_SYM_CIPHER_SNOW3G_UEA2)) ||
-                    (!CPA_BITMAP_BIT_TEST(symCapInfo.hashes,
-                                          CPA_CY_SYM_HASH_SNOW3G_UIA2)))
-                {
-                    PRINT("Warning! Skipping Snow3G wireless algorithm chain "
-                          "tests as they are not supported on "
-                          "Instance\n");
-                    includeSnow3GAlgChain = 0;
-                    PRINT("includeSnow3GAlgChain = %d\n",
-                          includeSnow3GAlgChain);
-                }
-            }
-        }
-    }
-    else
-    {
-        PRINT("There are no crypto instances\n");
-        /* Check if compression service need to be tested
-         * and update the runTests accordingly.
-         * */
-        if (COMPRESSION_CODE & runTests)
-        {
-            runTests = COMPRESSION_CODE;
-        }
-    }
-#endif /* DO_CRYPTO */
-
 #ifdef INCLUDE_COMPRESSION
     status = cpaDcGetNumInstances(&numInst_g);
     if (CPA_STATUS_SUCCESS != status)
@@ -789,7 +574,7 @@ int main(int argc, char *argv[])
               computeLatency != 0 ? "Latency" : "Offload Cost");
     }
 #endif /* USER_SPACE */
-setLatencyDebug(1);
+// setLatencyDebug(1);
 
 #ifdef INCLUDE_COMPRESSION
     
