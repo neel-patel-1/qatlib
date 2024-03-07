@@ -1505,6 +1505,26 @@ int main(int argc, char *argv[])
                     }
                     status = createStartandWaitForCompletion(COMPRESSION);
                 }
+
+                for(int i=10; i<21; i++)
+                {
+                    status = setupDcTest(CPA_DC_DEFLATE,
+                                        CPA_DC_DIR_DECOMPRESS,
+                                        SAMPLE_CODE_CPA_DC_L3,
+                                        CPA_DC_HT_FULL_DYNAMIC,
+                                        CPA_DC_STATELESS,
+                                        DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                        (1 << i),
+                                        sampleCorpus,
+                                        ASYNC,
+                                        dcLoops);
+                    if (CPA_STATUS_SUCCESS != status)
+                    {
+                        PRINT_ERR("Error calling setupDcTest\n");
+                        return CPA_STATUS_FAIL;
+                    }
+                    status = createStartandWaitForCompletion(COMPRESSION);
+                }
                 return CPA_STATUS_SUCCESS;
 
                 status = setupDcTest(CPA_DC_DEFLATE,
@@ -1541,39 +1561,7 @@ int main(int argc, char *argv[])
                 }
                 status = createStartandWaitForCompletion(COMPRESSION);
 
-                status = setupDcTest(CPA_DC_DEFLATE,
-                                     CPA_DC_DIR_DECOMPRESS,
-                                     SAMPLE_CODE_CPA_DC_L3,
-                                     CPA_DC_HT_FULL_DYNAMIC,
-                                     CPA_DC_STATELESS,
-                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_256K,
-                                     sampleCorpus,
-                                     ASYNC,
-                                     dcLoops);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error calling setupDcTest\n");
-                    return CPA_STATUS_FAIL;
-                }
-                status = createStartandWaitForCompletion(COMPRESSION);
 
-                status = setupDcTest(CPA_DC_DEFLATE,
-                                     CPA_DC_DIR_COMPRESS,
-                                     SAMPLE_CODE_CPA_DC_L3,
-                                     CPA_DC_HT_FULL_DYNAMIC,
-                                     CPA_DC_STATELESS,
-                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_256K,
-                                     sampleCorpus,
-                                     ASYNC,
-                                     dcLoops);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error calling setupDcTest\n");
-                    return CPA_STATUS_FAIL;
-                }
-                
 
                 status = setupDcTest(CPA_DC_DEFLATE,
                                      CPA_DC_DIR_DECOMPRESS,

@@ -110,6 +110,52 @@ cpa_sample_code_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 	-DSAMPLE_CODE_CORPUS_PATH="\"$(datadir)/qat/\""
 cpa_sample_code_LDADD = $(COMMON_SAMPLE_LDFLAGS)
 
+noinst_PROGRAMS += throughput_sample
+throughput_sample_SOURCES = \
+	quickassist/lookaside/access_layer/src/sample_code/performance/framework/linux/user_space/cpa_sample_code_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/framework/cpa_sample_code_framework.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_sleeptime.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/throughput_sample_main.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_crypto_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sym_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sym_perf_dp.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_rsa_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_dsa_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_ecdsa_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_dh_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/qat_sym_main.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/qat_sym_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sym_update_common.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sym_update.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sym_update_dp.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_ike_rsa_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_kpt2_common.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_rsa_kpt2_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_ecdsa_kpt2_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sm2_perf.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sm2_sign_verify.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sm2_Keyex_P1_P2.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sm2_kdf_hash.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/crypto/cpa_sample_code_sm2_enc_dec.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_buffer_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_dp.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_e2e.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_zlib.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_chaining_main.c \
+	quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_latency.c \
+	quickassist/lookaside/access_layer/src/sample_code/busy_loop/busy_loop.c
+throughput_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance \
+	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance/crypto/ \
+	$(COMMON_SAMPLE_INCLUDES) \
+	$(COMMON_SAMPLE_CFLAGS) \
+	$(COMMON_FLAGS) \
+	-DSAMPLE_CODE_CORPUS_PATH="\"$(datadir)/qat/\""
+throughput_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS)
+
 
 
 noinst_LTLIBRARIES += libcpa_sample_code_s.la
@@ -371,7 +417,7 @@ zuc_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_co
 	$(COMMON_FLAGS)
 zuc_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) libcpa_sample_code_s.la
 
-samples: $(lib_LTLIBRARIES) cpa_sample_code  dc_dp_sample dc_stateless_sample \
+samples: $(lib_LTLIBRARIES) cpa_sample_code  dc_dp_sample dc_stateless_sample throughput_sample \
 	dc_stateless_multi_op_sample algchaining_sample ccm_sample \
 	cipher_sample gcm_sample hash_file_sample hash_sample ipsec_sample \
 	ssl_sample sym_dp_sample dh_sample prime_sample hkdf_sample \
