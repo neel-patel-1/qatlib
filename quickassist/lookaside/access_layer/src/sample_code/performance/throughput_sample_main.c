@@ -1394,217 +1394,239 @@ int main(int argc, char *argv[])
 
         if (numDcInst > 0)
         {
+            // useZlib();
+            // prevCnVRequestFlag = getSetupCnVRequestFlag();
+            // setSetupCnVRequestFlag(STRICT_CNV_WITH_RECOVERY |
+            //                        LOOSE_CNV_WITH_RECOVERY);
+
+            // /* sha256 + stateless static compress chaining */
+            // status = setupDcChainTest(CPA_DC_CHAIN_HASH_THEN_COMPRESS,
+            //                           2,
+            //                           CPA_DC_DEFLATE,
+            //                           CPA_DC_DIR_COMPRESS,
+            //                           SAMPLE_CODE_CPA_DC_L1,
+            //                           CPA_DC_HT_STATIC,
+            //                           CPA_DC_STATELESS,
+            //                           DEFAULT_COMPRESSION_WINDOW_SIZE,
+            //                           dcBufferSize,
+            //                           sampleCorpus,
+            //                           ASYNC,
+            //                           CPA_CY_SYM_OP_HASH,
+            //                           CPA_CY_SYM_CIPHER_NULL,
+            //                           0,
+            //                           CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT,
+            //                           CPA_CY_PRIORITY_NORMAL,
+            //                           CPA_CY_SYM_HASH_SHA256,
+            //                           CPA_CY_SYM_HASH_MODE_PLAIN,
+            //                           SHA256_DIGEST_LENGTH_IN_BYTES,
+            //                           dcLoops);
+            // if (CPA_STATUS_SUCCESS != status)
+            // {
+            //     PRINT_ERR("Error calling setupDcChainTest\n");
+            //     return CPA_STATUS_FAIL;
+            // }
+            // status = createStartandWaitForCompletion(COMPRESSION);
+            // if (CPA_STATUS_SUCCESS != status)
+            // {
+            //     retStatus = CPA_STATUS_FAIL;
+            // }
+
             disableAdditionalCmpbufferSize_g = 1;
             dynamicHuffmanEnabled(NULL, &dynamicEnabled);
+            // return 0;
 
 #if !defined(_KERNEL)
-            // /*STATIC L1 & L3 COMPRESSION*/
-            // status = setupDcTest(CPA_DC_DEFLATE,
-            //                      CPA_DC_DIR_COMPRESS,
-            //                      SAMPLE_CODE_CPA_DC_L1,
-            //                      CPA_DC_HT_STATIC,
-            //                      CPA_DC_STATELESS,
-            //                      DEFAULT_COMPRESSION_WINDOW_SIZE,
-            //                      BUFFER_SIZE_8192,
-            //                      sampleCorpus,
-            //                      ASYNC,
-            //                      dcLoops);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     PRINT_ERR("Error calling setupDcTest\n");
-            //     return CPA_STATUS_FAIL;
-            // }
-            // status = createStartandWaitForCompletion(COMPRESSION);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     retStatus = CPA_STATUS_FAIL;
-            // }
+            int min = 4; int max = 64;
+            for(int numDcInst=min; numDcInst<=max; numDcInst*=4){
+                /*STATIC L1 & L3 COMPRESSION*/
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_COMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    BUFFER_SIZE_65536,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                numInst_g = numDcInst;
+                status = createStartandWaitForCompletion(COMPRESSION);
+                // status = createStartandWaitForCompletion(COMPRESSION);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    retStatus = CPA_STATUS_FAIL;
+                }
+            }
+            
+            for(int numDcInst=min; numDcInst<=max; numDcInst*=4){
+                /*STATIC L1 & L3 COMPRESSION*/
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_DECOMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    BUFFER_SIZE_65536,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                numInst_g = numDcInst;
+                status = createStartandWaitForCompletion(COMPRESSION);
+                // status = createStartandWaitForCompletion(COMPRESSION);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    retStatus = CPA_STATUS_FAIL;
+                }
+            }
+            return 0;
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_COMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    BUFFER_SIZE_65536,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    retStatus = CPA_STATUS_FAIL;
+                }
 
-            // status = setupDcTest(CPA_DC_DEFLATE,
-            //                      CPA_DC_DIR_DECOMPRESS,
-            //                      SAMPLE_CODE_CPA_DC_L1,
-            //                      CPA_DC_HT_STATIC,
-            //                      CPA_DC_STATELESS,
-            //                      DEFAULT_COMPRESSION_WINDOW_SIZE,
-            //                      BUFFER_SIZE_8192,
-            //                      sampleCorpus,
-            //                      ASYNC,
-            //                      dcLoops);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     PRINT_ERR("Error calling setupDcTest\n");
-            //     return CPA_STATUS_FAIL;
-            // }
-            // status = createStartandWaitForCompletion(COMPRESSION);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     retStatus = CPA_STATUS_FAIL;
-            // }
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_DECOMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    BUFFER_SIZE_65536,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    retStatus = CPA_STATUS_FAIL;
+                }
 
-            // status = setupDcTest(CPA_DC_DEFLATE,
-            //                      CPA_DC_DIR_COMPRESS,
-            //                      SAMPLE_CODE_CPA_DC_L2,
-            //                      CPA_DC_HT_STATIC,
-            //                      CPA_DC_STATELESS,
-            //                      DEFAULT_COMPRESSION_WINDOW_SIZE,
-            //                      BUFFER_SIZE_8192,
-            //                      sampleCorpus,
-            //                      ASYNC,
-            //                      dcLoops);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     PRINT_ERR("Error calling setupDcTest\n");
-            //     return CPA_STATUS_FAIL;
+                /*STATIC L1 & L3 COMPRESSION*/
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_COMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    BUFFER_SIZE_65536,
+                                    sampleCorpus,
+                                    SYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    retStatus = CPA_STATUS_FAIL;
+                }
+
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_DECOMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    BUFFER_SIZE_65536,
+                                    sampleCorpus,
+                                    SYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    retStatus = CPA_STATUS_FAIL;
+                }
             // }
-            // status = createStartandWaitForCompletion(COMPRESSION);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     retStatus = CPA_STATUS_FAIL;
-            // }
-            // status = setupDcTest(CPA_DC_DEFLATE,
-            //                      CPA_DC_DIR_DECOMPRESS,
-            //                      SAMPLE_CODE_CPA_DC_L2,
-            //                      CPA_DC_HT_STATIC,
-            //                      CPA_DC_STATELESS,
-            //                      DEFAULT_COMPRESSION_WINDOW_SIZE,
-            //                      BUFFER_SIZE_8192,
-            //                      sampleCorpus,
-            //                      ASYNC,
-            //                      dcLoops);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     PRINT_ERR("Error calling setupDcTest\n");
-            //     return CPA_STATUS_FAIL;
-            // }
-            // status = createStartandWaitForCompletion(COMPRESSION);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     retStatus = CPA_STATUS_FAIL;
-            // }
+            // return 0;
+
+            status = setupDcTest(CPA_DC_DEFLATE,
+                                 CPA_DC_DIR_COMPRESS,
+                                 SAMPLE_CODE_CPA_DC_L2,
+                                 CPA_DC_HT_STATIC,
+                                 CPA_DC_STATELESS,
+                                 DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                 BUFFER_SIZE_8192,
+                                 sampleCorpus,
+                                 ASYNC,
+                                 dcLoops);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error calling setupDcTest\n");
+                return CPA_STATUS_FAIL;
+            }
+            status = createStartandWaitForCompletion(COMPRESSION);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
+            status = setupDcTest(CPA_DC_DEFLATE,
+                                 CPA_DC_DIR_DECOMPRESS,
+                                 SAMPLE_CODE_CPA_DC_L2,
+                                 CPA_DC_HT_STATIC,
+                                 CPA_DC_STATELESS,
+                                 DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                 BUFFER_SIZE_8192,
+                                 sampleCorpus,
+                                 ASYNC,
+                                 dcLoops);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error calling setupDcTest\n");
+                return CPA_STATUS_FAIL;
+            }
+            status = createStartandWaitForCompletion(COMPRESSION);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
 
             /*DYNAMIC L1 & L3 COMPRESSION*/
             if (dynamicEnabled)
             {
-                
-                for(int i=10; i<21; i++)
-                {
-                    status = setupDcTest(CPA_DC_DEFLATE,
-                                        CPA_DC_DIR_COMPRESS,
-                                        SAMPLE_CODE_CPA_DC_L3,
-                                        CPA_DC_HT_FULL_DYNAMIC,
-                                        CPA_DC_STATELESS,
-                                        DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                        (1 << i),
-                                        sampleCorpus,
-                                        ASYNC,
-                                        dcLoops);
-                    if (CPA_STATUS_SUCCESS != status)
-                    {
-                        PRINT_ERR("Error calling setupDcTest\n");
-                        return CPA_STATUS_FAIL;
-                    }
-                    status = createStartandWaitForCompletion(COMPRESSION);
-                }
-
-                for(int i=10; i<21; i++)
-                {
-                    status = setupDcTest(CPA_DC_DEFLATE,
-                                        CPA_DC_DIR_DECOMPRESS,
-                                        SAMPLE_CODE_CPA_DC_L3,
-                                        CPA_DC_HT_FULL_DYNAMIC,
-                                        CPA_DC_STATELESS,
-                                        DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                        (1 << i),
-                                        sampleCorpus,
-                                        ASYNC,
-                                        dcLoops);
-                    if (CPA_STATUS_SUCCESS != status)
-                    {
-                        PRINT_ERR("Error calling setupDcTest\n");
-                        return CPA_STATUS_FAIL;
-                    }
-                    status = createStartandWaitForCompletion(COMPRESSION);
-                }
-                return CPA_STATUS_SUCCESS;
-
-                status = setupDcTest(CPA_DC_DEFLATE,
-                                     CPA_DC_DIR_DECOMPRESS,
-                                     SAMPLE_CODE_CPA_DC_L3,
-                                     CPA_DC_HT_FULL_DYNAMIC,
-                                     CPA_DC_STATELESS,
-                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_4096,
-                                     sampleCorpus,
-                                     ASYNC,
-                                     dcLoops);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error calling setupDcTest\n");
-                    return CPA_STATUS_FAIL;
-                }
-                status = createStartandWaitForCompletion(COMPRESSION);
-
-                status = setupDcTest(CPA_DC_DEFLATE,
-                                     CPA_DC_DIR_COMPRESS,
-                                     SAMPLE_CODE_CPA_DC_L3,
-                                     CPA_DC_HT_FULL_DYNAMIC,
-                                     CPA_DC_STATELESS,
-                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_4096,
-                                     sampleCorpus,
-                                     ASYNC,
-                                     dcLoops);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error calling setupDcTest\n");
-                    return CPA_STATUS_FAIL;
-                }
-                status = createStartandWaitForCompletion(COMPRESSION);
-
-
-
-                status = setupDcTest(CPA_DC_DEFLATE,
-                                     CPA_DC_DIR_DECOMPRESS,
-                                     SAMPLE_CODE_CPA_DC_L3,
-                                     CPA_DC_HT_FULL_DYNAMIC,
-                                     CPA_DC_STATELESS,
-                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_10485760,
-                                     sampleCorpus,
-                                     ASYNC,
-                                     dcLoops);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error calling setupDcTest\n");
-                    return CPA_STATUS_FAIL;
-                }
-                status = createStartandWaitForCompletion(COMPRESSION);
-
-                status = setupDcTest(CPA_DC_DEFLATE,
-                                     CPA_DC_DIR_COMPRESS,
-                                     SAMPLE_CODE_CPA_DC_L3,
-                                     CPA_DC_HT_FULL_DYNAMIC,
-                                     CPA_DC_STATELESS,
-                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_10485760,
-                                     sampleCorpus,
-                                     ASYNC,
-                                     dcLoops);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error calling setupDcTest\n");
-                    return CPA_STATUS_FAIL;
-                }
-                status = createStartandWaitForCompletion(COMPRESSION);
-                return 0;
-
                 status = setupDcTest(CPA_DC_DEFLATE,
                                      CPA_DC_DIR_COMPRESS,
                                      SAMPLE_CODE_CPA_DC_L1,
                                      CPA_DC_HT_FULL_DYNAMIC,
                                      CPA_DC_STATELESS,
                                      DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                     BUFFER_SIZE_4096,
+                                     BUFFER_SIZE_8192,
                                      sampleCorpus,
                                      ASYNC,
                                      dcLoops);
@@ -1618,8 +1640,6 @@ int main(int argc, char *argv[])
                 {
                     retStatus = CPA_STATUS_FAIL;
                 }
-
-                return 0;
 
                 status = setupDcTest(CPA_DC_DEFLATE,
                                      CPA_DC_DIR_DECOMPRESS,
