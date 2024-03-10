@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "cpa_sample_utils.h"
 
-#define FAIL_ON(cond, MSG) if (cond) { PRINT_ERR(#MSG "\n"); return CPA_STATUS_FAIL; }
+#define FAIL_ON(cond, args...) if (cond) { PRINT(args); return CPA_STATUS_FAIL; }
 
 int main(){
     CpaStatus stat;
@@ -14,9 +14,15 @@ int main(){
     FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to open usdm driver")
 
     Cpa16U numInst = 0;
+    stat = cpaDcGetNumInstances(&numInst);
+    FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to get number of instances")
+    printf("Number of available dc instances: %d\n", numInst);
     CpaInstanceHandle *dcInstHandles 
-        = (CpaInstanceHandle *)malloc(sizeof(CpaInstanceHandle));
-    
+        = (CpaInstanceHandle *)qaeMemAlloc(sizeof(CpaInstanceHandle) * numInst);
+    FAIL_ON(dcInstHandles == NULL, "Failed to allocate memory for instance handles")
+    stat = cpaDcGetInstances(numInst, dcInstHandles);
+    FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to get instances: %d\n", stat);
+
     numInst = 16;
 
     Cpa32U buffMetaSize = 0;
