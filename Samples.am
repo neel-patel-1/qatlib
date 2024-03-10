@@ -46,6 +46,7 @@ COMMON_SAMPLE_CFLAGS = -D USER_SPACE \
 		       -DDO_CRYPTO \
 		       -DINCLUDE_COMPRESSION \
 		       -DSC_CHAINING_ENABLED \
+					 -g \
 		       -Wno-deprecated-declarations
 
 COMMON_SAMPLE_INCLUDES = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance/framework \
@@ -116,8 +117,9 @@ noinst_PROGRAMS += inst_vf_perf
 inst_vf_perf_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/performance/test_vf_perf.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
+
 inst_vf_perf_CFLAGS = \
-	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance \
+	-Iquickassist/lookaside/access_layer/src/sample_code/performance/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS) \

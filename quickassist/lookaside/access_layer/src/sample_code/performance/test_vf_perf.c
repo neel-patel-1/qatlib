@@ -7,7 +7,6 @@
 #include "test_vf_perf_utils.h"
 
 #define CALGARY "/lib/firmware/calgary"
-#define FAIL_ON(cond, args...) if (cond) { PRINT(args); return CPA_STATUS_FAIL; }
 
 CpaInstanceHandle *dcInstances_g = NULL;
 CpaInstanceInfo2 *instanceInfo2 = NULL;
@@ -36,6 +35,8 @@ int main(){
     instanceInfo2 = qaeMemAlloc(sizeof(CpaInstanceInfo2) * numDcInstances_g);
     FAIL_ON(instanceInfo2 == NULL, "Failed to allocate memory for instance info");
     memset(instanceInfo2, 0, sizeof(CpaInstanceInfo2));
+
+    numDcInstances_g = 1;
 
     for(int i = 0; i < numDcInstances_g; i++){
         CpaInstanceInfo2 *info = &instanceInfo2[i];
@@ -229,6 +230,8 @@ int main(){
             return CPA_STATUS_FAIL;
         }
     }
+
+    createBusyPollThreads();
 
 
     icp_sal_userStop();
