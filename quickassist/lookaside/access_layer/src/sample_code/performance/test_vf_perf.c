@@ -9,6 +9,10 @@
 #define CALGARY "/lib/firmware/calgary"
 #define FAIL_ON(cond, args...) if (cond) { PRINT(args); return CPA_STATUS_FAIL; }
 
+CpaInstanceHandle *dcInstances_g = NULL;
+CpaInstanceInfo2 *instanceInfo2 = NULL;
+Cpa16U numDcInstances_g = 0;
+
 int main(){
     /* Start process and name it for QAT Identification */
     CpaStatus stat;
@@ -17,11 +21,10 @@ int main(){
     stat = qaeMemInit();
     FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to open usdm driver")
 
-    Cpa16U numDcInstances_g = 0;
     stat = cpaDcGetNumInstances(&numDcInstances_g);
     FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to get number of instances")
     printf("Number of available dc instances: %d\n", numDcInstances_g);
-    CpaInstanceHandle *dcInstances_g 
+    dcInstances_g 
         = (CpaInstanceHandle *)qaeMemAlloc(sizeof(CpaInstanceHandle) * numDcInstances_g);
     FAIL_ON(dcInstances_g == NULL, "Failed to allocate memory for instance handles")
     stat = cpaDcGetInstances(numDcInstances_g, dcInstances_g);
@@ -30,13 +33,12 @@ int main(){
     Cpa32U *instMap = qaeMemAlloc(sizeof(Cpa32U) * numDcInstances_g);
     FAIL_ON(instMap == NULL, "Failed to allocate memory for instance map");
 
-    CpaInstanceInfo2 *infoList = NULL;
-    infoList = qaeMemAlloc(sizeof(CpaInstanceInfo2) * numDcInstances_g);
-    FAIL_ON(infoList == NULL, "Failed to allocate memory for instance info");
-    memset(infoList, 0, sizeof(CpaInstanceInfo2));
+    instanceInfo2 = qaeMemAlloc(sizeof(CpaInstanceInfo2) * numDcInstances_g);
+    FAIL_ON(instanceInfo2 == NULL, "Failed to allocate memory for instance info");
+    memset(instanceInfo2, 0, sizeof(CpaInstanceInfo2));
 
     for(int i = 0; i < numDcInstances_g; i++){
-        CpaInstanceInfo2 *info = &infoList[i];
+        CpaInstanceInfo2 *info = &instanceInfo2[i];
         stat = cpaDcInstanceGetInfo2(dcInstances_g[i], info);
         FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to get instance info: %d\n", stat);
         Cpa32U coreAffinity=0;
@@ -117,7 +119,7 @@ int main(){
                 * only applicable for CPM prior to gen4 as it is done in HW */
             pInterBuffList_g[i] =
                 qaeMemAllocNUMA(sizeof(CpaBufferList *) * numBuffers,
-                                infoList[i].nodeAffinity,
+                                instanceInfo2[i].nodeAffinity,
                                 BYTE_ALIGNMENT_64);
             if (NULL == pInterBuffList_g[i])
             {
@@ -142,7 +144,7 @@ int main(){
             }
         }
         CpaBufferList ** tempBufferList = pInterBuffList_g[i];
-        Cpa16U nodeId = infoList[i].nodeAffinity;
+        Cpa16U nodeId = instanceInfo2[i].nodeAffinity;
         Cpa32U buffSize = testBufferSize;
         for (int k = 0; k < numBuffers; k++)
         {
