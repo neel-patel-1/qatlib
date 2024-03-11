@@ -1986,6 +1986,154 @@ CpaStatus createStartandWaitForCompletion(Cpa32U instType)
     freeInstanceMapping();
     return status;
 }
+/*this function can only be called after the last setup function has been
+ * called, it creates the threads for the last setup function called, then
+ * starts all threads and waits for all threads to complete. */
+CpaStatus createStartandWaitForCompletionNumCores(Cpa32U instType, Cpa32U numCores)
+{
+    CpaStatus status = CPA_STATUS_FAIL;
+    Cpa32U *instMap = NULL;
+    Cpa16U numInst = 0;
+#if CY_API_VERSION_AT_LEAST(3, 0)
+    CpaBoolean isSymAsymConf = CPA_FALSE;
+    CpaInstanceHandle *sym_asymInst = NULL;
+    Cpa16U nSymInstances = 0;
+    Cpa16U nAsymInstances = 0;
+
+    if (instType != COMPRESSION)
+    {
+        cpaGetNumInstances(CPA_ACC_SVC_TYPE_CRYPTO_SYM, &nSymInstances);
+        cpaGetNumInstances(CPA_ACC_SVC_TYPE_CRYPTO_ASYM, &nAsymInstances);
+
+        if ((nSymInstances > 0) && (nAsymInstances > 0))
+        {
+            isSymAsymConf = CPA_TRUE;
+        }
+    }
+#endif
+
+    switch (instType)
+    {
+#ifdef DO_CRYPTO
+#if CY_API_VERSION_AT_LEAST(3, 0)
+        case SYM:
+            if (CPA_STATUS_SUCCESS != getCryptoInstanceMapping())
+            {
+                PRINT_ERR("Could not get Crypto Instance mapping\n");
+                return CPA_STATUS_FAIL;
+            }
+
+            instMap = cyInstMap_g;
+            numInst = numInst_g;
+
+            if (isSymAsymConf == CPA_TRUE)
+            {
+                if (CPA_STATUS_SUCCESS != getSymInstanceMapping(&nSymInstances))
+                {
+                    PRINT_ERR("Could not get Crypto Instance mapping\n");
+                    return CPA_STATUS_FAIL;
+                }
+
+                numInst = nSymInstances;
+                instMap = symCyInstMap_g;
+                sym_asymInst = symCyInst_g;
+            }
+            break;
+
+        case ASYM:
+            if (CPA_STATUS_SUCCESS != getCryptoInstanceMapping())
+            {
+                PRINT_ERR("Could not get Crypto Instance mapping\n");
+                return CPA_STATUS_FAIL;
+            }
+
+            instMap = cyInstMap_g;
+            numInst = numInst_g;
+
+            if (isSymAsymConf == CPA_TRUE)
+            {
+                if (CPA_STATUS_SUCCESS !=
+                    getAsymInstanceMapping(&nAsymInstances))
+                {
+                    PRINT_ERR("Could not get Crypto Instance mapping\n");
+                    return CPA_STATUS_FAIL;
+                }
+
+                numInst = nAsymInstances;
+                instMap = asymCyInstMap_g;
+                sym_asymInst = asymCyInst_g;
+            }
+            break;
+#endif
+        case CRYPTO:
+        {
+            if (CPA_STATUS_SUCCESS != getCryptoInstanceMapping())
+            {
+                PRINT_ERR("Could not get Crypto Instance mapping\n");
+                return CPA_STATUS_FAIL;
+            }
+            instMap = cyInstMap_g;
+            numInst = numInst_g;
+        }
+        break;
+#endif /* DO_CRYPTO */
+
+#ifdef INCLUDE_COMPRESSION
+        case COMPRESSION:
+        {
+            if (CPA_STATUS_SUCCESS != getCompressionInstanceMapping())
+            {
+                PRINT_ERR("Could not get Compression Instance mapping\n");
+                return CPA_STATUS_FAIL;
+            }
+            instMap = dcInstMap_g;
+            numInst = numInst_g;
+        }
+        break;
+#endif
+        default:
+        {
+            PRINT_ERR("Invalid instance type\n");
+            return CPA_STATUS_FAIL;
+        }
+        break;
+    } /* End Switch */
+
+#if CY_API_VERSION_AT_LEAST(3, 0)
+    if ((isSymAsymConf == CPA_TRUE) && (instType == SYM || instType == ASYM))
+    {
+        isChangingThreadQaInstanceRequired_g = CPA_TRUE;
+    }
+#endif
+    status = createPerfomanceThreads(numCores,
+                                     instMap,
+                                     USE_ALL_QA_LOGICAL_INSTANCES,
+                                     DEFAULT_LOGICAL_INST_INSTANCE_OFFSET);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Could not create threads, status: %d\n", status);
+        return status;
+    }
+#if CY_API_VERSION_AT_LEAST(3, 0)
+    if ((isSymAsymConf == CPA_TRUE) && (instType == SYM || instType == ASYM))
+    {
+
+        qatModifyCyThreadLogicalQaInstance(
+            0, cyInst_g, sym_asymInst, numInst_g);
+        isChangingThreadQaInstanceRequired_g = CPA_FALSE;
+    }
+#endif
+    status = startThreads();
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Could not start threads, status: %d\n", status);
+        return status;
+    }
+    /*wait for threads_g to finished and print out stats*/
+    status = waitForThreadCompletion();
+    freeInstanceMapping();
+    return status;
+}
 
 /*this function can only be called after the last setup function has been
  * called, it creates the threads for the last setup function called, then

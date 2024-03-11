@@ -1394,42 +1394,7 @@ int main(int argc, char *argv[])
 
         if (numDcInst > 0)
         {
-            // useZlib();
-            // prevCnVRequestFlag = getSetupCnVRequestFlag();
-            // setSetupCnVRequestFlag(STRICT_CNV_WITH_RECOVERY |
-            //                        LOOSE_CNV_WITH_RECOVERY);
-
-            // /* sha256 + stateless static compress chaining */
-            // status = setupDcChainTest(CPA_DC_CHAIN_HASH_THEN_COMPRESS,
-            //                           2,
-            //                           CPA_DC_DEFLATE,
-            //                           CPA_DC_DIR_COMPRESS,
-            //                           SAMPLE_CODE_CPA_DC_L1,
-            //                           CPA_DC_HT_STATIC,
-            //                           CPA_DC_STATELESS,
-            //                           DEFAULT_COMPRESSION_WINDOW_SIZE,
-            //                           dcBufferSize,
-            //                           sampleCorpus,
-            //                           ASYNC,
-            //                           CPA_CY_SYM_OP_HASH,
-            //                           CPA_CY_SYM_CIPHER_NULL,
-            //                           0,
-            //                           CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT,
-            //                           CPA_CY_PRIORITY_NORMAL,
-            //                           CPA_CY_SYM_HASH_SHA256,
-            //                           CPA_CY_SYM_HASH_MODE_PLAIN,
-            //                           SHA256_DIGEST_LENGTH_IN_BYTES,
-            //                           dcLoops);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     PRINT_ERR("Error calling setupDcChainTest\n");
-            //     return CPA_STATUS_FAIL;
-            // }
-            // status = createStartandWaitForCompletion(COMPRESSION);
-            // if (CPA_STATUS_SUCCESS != status)
-            // {
-            //     retStatus = CPA_STATUS_FAIL;
-            // }
+            
 
             disableAdditionalCmpbufferSize_g = 1;
             dynamicHuffmanEnabled(NULL, &dynamicEnabled);
@@ -1455,8 +1420,7 @@ int main(int argc, char *argv[])
                     return CPA_STATUS_FAIL;
                 }
                 numInst_g = numDcInst;
-                status = createStartandWaitForCompletion(COMPRESSION);
-                // status = createStartandWaitForCompletion(COMPRESSION);
+                status = createStartandWaitForCompletionNumCores(COMPRESSION, numDcInst);
                 if (CPA_STATUS_SUCCESS != status)
                 {
                     retStatus = CPA_STATUS_FAIL;
@@ -1481,8 +1445,7 @@ int main(int argc, char *argv[])
                     return CPA_STATUS_FAIL;
                 }
                 numInst_g = numDcInst;
-                status = createStartandWaitForCompletion(COMPRESSION);
-                // status = createStartandWaitForCompletion(COMPRESSION);
+                status = createStartandWaitForCompletionNumCores(COMPRESSION, numDcInst);
                 if (CPA_STATUS_SUCCESS != status)
                 {
                     retStatus = CPA_STATUS_FAIL;

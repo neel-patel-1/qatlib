@@ -735,6 +735,7 @@ extern Cpa16U numInst_g;
 extern Cpa8U singleInstRequired_g;
 
 CpaStatus createStartandWaitForCompletion(Cpa32U instType);
+CpaStatus createStartandWaitForCompletionNumCores(Cpa32U instType, Cpa32U numCores);
 CpaBoolean isSampleCodeBarrierLifted(void);
 
 void freeInstanceMapping(void);
