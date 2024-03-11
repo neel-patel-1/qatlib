@@ -17,6 +17,8 @@ CpaBufferList *** pInterBuffList_g = NULL;
 Cpa32U expansionFactor_g = 1;
 Cpa32U coreLimit_g = 0;
 
+
+
 int main(){
     /* Start process and name it for QAT Identification */
     CpaStatus stat;
@@ -42,11 +44,15 @@ int main(){
     memset(instanceInfo2, 0, sizeof(CpaInstanceInfo2));
 
     numDcInstances_g = 2;
-
+    
+    /* Generate SPR Core Affinities for Socket 1 QAT Device */
+    Cpa32U coreAffinities[numDcInstances_g];
+    genCoreAffinities(numDcInstances_g, coreAffinities);
     for(int i = 0; i < numDcInstances_g; i++){
         CpaInstanceInfo2 *info = &instanceInfo2[i];
         stat = cpaDcInstanceGetInfo2(dcInstances_g[i], info);
         FAIL_ON(stat != CPA_STATUS_SUCCESS, "Failed to get instance info: %d\n", stat);
+        CPA_BITMAP_BIT_SET(info->coreAffinity,coreAffinities[i]);
         Cpa32U coreAffinity=0;
         for (int j = 0; j < CPA_MAX_CORES; j++)
         {
@@ -102,11 +108,11 @@ int main(){
 
     /* Test whether epoll works or we need separate config */
     int fd = -1;
-    // CpaStatus status = icp_sal_DcGetFileDescriptorForce(dcInstances_g[0], &fd, CPA_TRUE);
-    // if (CPA_STATUS_SUCCESS != status)
-    // {
-    //     PRINT_ERR("Unable to get file descriptor: %d\n", status);
-    // }
+    CpaStatus status = icp_sal_DcGetFileDescriptorForce(dcInstances_g[0], &fd, CPA_TRUE);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Unable to get file descriptor: %d\n", status);
+    }
 
     createBusyPollThreads();
 

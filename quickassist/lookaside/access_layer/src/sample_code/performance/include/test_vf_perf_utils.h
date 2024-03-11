@@ -20,6 +20,15 @@ struct pollParams_t
 
 };
 
+CpaStatus genCoreAffinities(Cpa32U numDcInstances, Cpa32U *coreAffinities){
+  Cpa32U coreAffinity = 20;
+  for(int i = 0; i < numDcInstances; i++){
+    /* No HT */
+    coreAffinity = 20 + (i % 20);
+    coreAffinities[i] = coreAffinity;
+  }
+}
+
 CpaStatus threadBind(sample_code_thread_t *thread, Cpa32U logicalCore)
 {
     int status = 1;
