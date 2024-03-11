@@ -444,6 +444,8 @@ CpaStatus icp_sal_pollAllBanks(Cpa32U accelId, Cpa32U response_quota);
  *****************************************************************************/
 CpaStatus icp_sal_DcGetFileDescriptor(CpaInstanceHandle instanceHandle,
                                       int *fd);
+CpaStatus icp_sal_DcGetFileDescriptorForce(CpaInstanceHandle instanceHandle,
+                                      int *fd, CpaBoolean force);
 
 /**
  *****************************************************************************

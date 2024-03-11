@@ -2459,6 +2459,43 @@ CpaStatus icp_sal_DcGetFileDescriptor(CpaInstanceHandle instanceHandle, int *fd)
     }
 }
 
+CpaStatus icp_sal_DcGetFileDescriptorForce(CpaInstanceHandle instanceHandle, int *fd, CpaBoolean force)
+{
+    sal_compression_service_t *dc_handle = NULL;
+    sal_service_t *gen_handle = NULL;
+    int dc_fd = -1;
+    int ret = 0;
+
+    dc_handle = (sal_compression_service_t *)instanceHandle;
+
+    LAC_CHECK_NULL_PARAM(dc_handle);
+    SAL_RUNNING_CHECK(dc_handle);
+
+    gen_handle = &(dc_handle->generic_service_info);
+    if (SAL_SERVICE_TYPE_COMPRESSION != gen_handle->type && force != CPA_TRUE)
+    {
+        LAC_LOG_ERROR("The instance handle is the wrong type");
+        return CPA_STATUS_FAIL;
+    }
+
+    if (SAL_RESP_EPOLL_CFG_FILE != dc_handle->isPolled && force != CPA_TRUE)
+    {
+        return CPA_STATUS_UNSUPPORTED;
+    }
+
+    ret = icp_adf_transGetFdForHandle(dc_handle->trans_handle_compression_rx,
+                                      &dc_fd);
+    if (ret != CPA_STATUS_SUCCESS)
+    {
+        return CPA_STATUS_FAIL;
+    }
+    else
+    {
+        *fd = dc_fd;
+        return CPA_STATUS_SUCCESS;
+    }
+}
+
 CpaStatus icp_sal_DcPutFileDescriptor(CpaInstanceHandle instanceHandle, int fd)
 {
     sal_compression_service_t *dc_handle = NULL;
