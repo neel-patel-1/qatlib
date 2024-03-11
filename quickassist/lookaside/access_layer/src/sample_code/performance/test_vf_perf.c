@@ -11,6 +11,8 @@
 CpaInstanceHandle *dcInstances_g = NULL;
 CpaInstanceInfo2 *instanceInfo2 = NULL;
 Cpa16U numDcInstances_g = 0;
+pthread_t *dcPollingThread_g = NULL;
+volatile CpaBoolean dc_service_started_g = CPA_FALSE;
 
 int main(){
     /* Start process and name it for QAT Identification */
@@ -36,7 +38,7 @@ int main(){
     FAIL_ON(instanceInfo2 == NULL, "Failed to allocate memory for instance info");
     memset(instanceInfo2, 0, sizeof(CpaInstanceInfo2));
 
-    numDcInstances_g = 1;
+    numDcInstances_g = 2;
 
     for(int i = 0; i < numDcInstances_g; i++){
         CpaInstanceInfo2 *info = &instanceInfo2[i];
@@ -229,6 +231,14 @@ int main(){
             qaeMemFree((void **)&pInterBuffList_g);
             return CPA_STATUS_FAIL;
         }
+    }
+    dc_service_started_g = CPA_TRUE;
+
+    int fd = -1;
+    status = icp_sal_DcGetFileDescriptor(dcInstances_g[0], &fd);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Unable to get file descriptor: %d\n", status);
     }
 
     createBusyPollThreads();

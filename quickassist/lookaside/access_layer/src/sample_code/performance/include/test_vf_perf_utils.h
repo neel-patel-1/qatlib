@@ -3,11 +3,19 @@
 #include "icp_sal_poll.h"
 
 #define FAIL_ON(cond, args...) if (cond) { PRINT(args); return CPA_STATUS_FAIL; }
+#define DEFAULT_POLL_INTERVAL_NSEC (2100)
 
 extern CpaInstanceHandle *dcInstances_g;
+extern pthread_t *dcPollingThread_g;
 extern Cpa16U numDcInstances_g;
 extern CpaInstanceInfo2 *instanceInfo2;
+extern volatile CpaBoolean dc_service_started_g;
 
+struct pollParams_t
+{
+    CpaInstanceHandle instanceHandle;
+
+};
 
 CpaStatus threadBind(sample_code_thread_t *thread, Cpa32U logicalCore)
 {
@@ -59,17 +67,35 @@ static void freeDcBufferList(CpaBufferList **buffListArray,
 }
 
 
-void busyPollFn(){
+void busyPollFn(CpaInstanceHandle instanceHandle_in){
+  CpaStatus status = CPA_STATUS_FAIL;
+  struct timespec reqTime, remTime;
+  reqTime.tv_sec = 0;
+  reqTime.tv_nsec = DEFAULT_POLL_INTERVAL_NSEC;
+  while(dc_service_started_g == CPA_TRUE){
+    status = icp_sal_DcPollInstance(instanceHandle_in, 0);
+    if (CPA_STATUS_SUCCESS == status || CPA_STATUS_RETRY == status)
+    {
+    }
+    else {
+        PRINT_ERR("ERROR icp_sal_DcPollInstance returned status %d\n",
+                  status);
+        break;
+    }
+    nanosleep(&reqTime, &remTime);
+  }
 }
 
 void epollFn(){
     
 }
 
-CpaStatus createThreadCommon(int core, performance_func_t * pollFunc){
-  printf("Creating thread on core %d\n", core);
+CpaStatus sampleCodeThreadCreate(sample_code_thread_t *thread,
+                                 sample_code_thread_attr_t *threadAttr,
+                                 performance_func_t function,
+                                 void *params)
+{
   pthread_attr_t attr;
-  pthread_t thread = core;
   struct sched_param param;
   int status = pthread_attr_init(&attr);
 
@@ -101,7 +127,7 @@ CpaStatus createThreadCommon(int core, performance_func_t * pollFunc){
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
   }
-  status = pthread_create(&thread, &attr, (void *(*)(void *))pollFunc, NULL);
+  status = pthread_create(&thread, &attr, (void *(*)(void *))function, params);
   if (status != 0)
   {
       PRINT_ERR("%d\n", errno);
@@ -109,7 +135,6 @@ CpaStatus createThreadCommon(int core, performance_func_t * pollFunc){
       return CPA_STATUS_FAIL;
   }
 
-  threadBind(&thread, core);
   /*destroy the thread attributes as they are no longer required, this does
      * not affect the created thread*/
   pthread_attr_destroy(&attr);
@@ -156,7 +181,12 @@ CpaStatus createEpollThreads(){
   /* Create the polling threads */
   for(i = 0; i < numDcInstances_g; i++){
     coreAffinity = getCoreAffinityFromInstanceIndex(i);
-    createThreadCommon(coreAffinity, pollFnArr[i]);
+    sampleCodeThreadCreate(
+        &dcPollingThread_g[numCreatedPollingThreads],
+        NULL,
+        pollFnArr[i],
+        dcInstances_g[i]
+    );
   }
   return CPA_STATUS_SUCCESS;
 }
@@ -176,10 +206,16 @@ CpaStatus createBusyPollThreads(){
       return CPA_STATUS_FAIL;
     }
   }
+  dcPollingThread_g =
+            qaeMemAlloc(numDcInstances_g * sizeof(sample_code_thread_t));
   /* Create the polling threads */
   for(i = 0; i < numDcInstances_g; i++){
     coreAffinity = getCoreAffinityFromInstanceIndex(i);
-    createThreadCommon(coreAffinity, pollFnArr[i]);
+    status = sampleCodeThreadCreate(
+                    &dcPollingThread_g[numCreatedPollingThreads],
+                    NULL,
+                    pollFnArr[i],
+                    dcInstances_g[i]);
   }
   return CPA_STATUS_SUCCESS;
 }
