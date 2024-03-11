@@ -10,6 +10,9 @@ extern pthread_t *dcPollingThread_g;
 extern Cpa16U numDcInstances_g;
 extern CpaInstanceInfo2 *instanceInfo2;
 extern volatile CpaBoolean dc_service_started_g;
+extern CpaBufferList *** pInterBuffList_g;
+extern Cpa32U expansionFactor_g;
+extern Cpa32U coreLimit_g;
 
 struct pollParams_t
 {
@@ -180,14 +183,17 @@ CpaStatus createEpollThreads(){
   }
   /* Create the polling threads */
   for(i = 0; i < numDcInstances_g; i++){
-    coreAffinity = getCoreAffinityFromInstanceIndex(i);
     sampleCodeThreadCreate(
         &dcPollingThread_g[numCreatedPollingThreads],
         NULL,
         pollFnArr[i],
         dcInstances_g[i]
     );
+    coreAffinity = getCoreAffinityFromInstanceIndex(i);
+    threadBind(&dcPollingThread_g[i], coreAffinity);
+    numCreatedPollingThreads++;
   }
+
   return CPA_STATUS_SUCCESS;
 }
 
@@ -216,8 +222,258 @@ CpaStatus createBusyPollThreads(){
                     NULL,
                     pollFnArr[i],
                     dcInstances_g[i]);
+    CHECK_POINTER_AND_RETURN_FAIL_IF_NULL(&dcPollingThread_g[numCreatedPollingThreads]);   
+    numCreatedPollingThreads++;             
   }
   return CPA_STATUS_SUCCESS;
+}
+CpaStatus setCoreLimit(Cpa32U limit)
+{
+    Cpa32U nProcessorsOnline = sampleCodeGetNumberOfCpus();
+    if (limit > nProcessorsOnline)
+    {
+        PRINT_ERR("exceeds number of cores (%u) on system\n",
+                  nProcessorsOnline);
+        return CPA_STATUS_FAIL;
+    }
+    coreLimit_g = limit;
+    return CPA_STATUS_SUCCESS;
+}
+CpaStatus sampleCodeDcGetNode(CpaInstanceHandle instanceHandle, Cpa32U *node)
+{
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaInstanceInfo2 pInstanceInfo2;
+    status = cpaDcInstanceGetInfo2(instanceHandle, &pInstanceInfo2);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Unable to get Node affinity\n");
+        return status;
+    }
+    *node = pInstanceInfo2.nodeAffinity;
+    return status;
+}
+Cpa32U sampleCodeGetNumberOfCpus(void)
+{
+    int numCpus = 0;
+    numCpus = sysconf(_SC_NPROCESSORS_ONLN);
+    if (numCpus < 0)
+    {
+        PRINT_ERR("Failed to get online processors count %d\n", errno);
+        numCpus = 0;
+    }
+    return numCpus;
+}
+
+CpaStatus startDcServices(Cpa32U buffSize, Cpa32U numBuffs){
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U size = 0;
+    Cpa32U i = 0, k = 0;
+    Cpa32U nodeId = 0;
+    Cpa32U nProcessorsOnline = 0;
+    Cpa16U numBuffers = 0;
+    CpaBufferList **tempBufferList = NULL;
+
+    /*if the service started flag is false*/
+    if (dc_service_started_g == CPA_FALSE)
+    {
+        /* Get the number of DC Instances */
+        status = cpaDcGetNumInstances(&numDcInstances_g);
+        /* Check the status */
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("Unable to Get Number of DC instances\n");
+            return CPA_STATUS_FAIL;
+        }
+        /* Check if at least one DC instance are present */
+        if (0 == numDcInstances_g)
+        {
+            PRINT_ERR(" DC Instances are not present\n");
+            return CPA_STATUS_FAIL;
+        }
+        /* Allocate memory for all the instances */
+        dcInstances_g =
+            qaeMemAlloc(sizeof(CpaInstanceHandle) * numDcInstances_g);
+        /* Check For NULL */
+        if (NULL == dcInstances_g)
+        {
+            PRINT_ERR(" Unable to allocate memory for Instances \n");
+            return CPA_STATUS_FAIL;
+        }
+
+        /* Get DC Instances */
+        status = cpaDcGetInstances(numDcInstances_g, dcInstances_g);
+        /* Check Status */
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("Unable to Get DC instances\n");
+            qaeMemFree((void **)&dcInstances_g);
+            return CPA_STATUS_FAIL;
+        }
+
+        /* Allocate the buffer list pointers to the number of Instances
+         * this buffer list list is used only in case of dynamic
+         * compression
+         */
+        pInterBuffList_g = (CpaBufferList ***)qaeMemAlloc(
+            numDcInstances_g * sizeof(CpaBufferList **));
+        /* Check For NULL */
+        if (NULL == pInterBuffList_g)
+        {
+            PRINT_ERR("Unable to allocate dynamic buffer List\n");
+            qaeMemFree((void **)&dcInstances_g);
+            return CPA_STATUS_FAIL;
+        }
+
+        /* Initialize memory for buffer lists */
+        memset(
+            pInterBuffList_g, 0, numDcInstances_g * sizeof(CpaBufferList **));
+
+        /* Start the Loop to create Buffer List for each instance*/
+        for (i = 0; i < numDcInstances_g; i++)
+        {
+            /* get the Node ID for each instance Handle */
+            status = sampleCodeDcGetNode(dcInstances_g[i], &nodeId);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Unable to get NodeId\n");
+                qaeMemFree((void **)&dcInstances_g);
+                qaeMemFree((void **)&pInterBuffList_g);
+                return CPA_STATUS_FAIL;
+            }
+            status =
+                cpaDcGetNumIntermediateBuffers(dcInstances_g[i], &numBuffers);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Unable to allocate Memory for Dynamic Buffer\n");
+                qaeMemFree((void **)&dcInstances_g);
+                qaeMemFree((void **)&pInterBuffList_g);
+                return CPA_STATUS_FAIL;
+            }
+            if (numBuffers > 0)
+            {
+                /* allocate the buffer list memory for the dynamic Buffers
+                 * only applicable for CPM prior to gen4 as it is done in HW */
+                pInterBuffList_g[i] =
+                    qaeMemAllocNUMA(sizeof(CpaBufferList *) * numBuffers,
+                                    nodeId,
+                                    BYTE_ALIGNMENT_64);
+                if (NULL == pInterBuffList_g[i])
+                {
+                    PRINT_ERR("Unable to allocate Memory for Dynamic Buffer\n");
+                    qaeMemFree((void **)&dcInstances_g);
+                    qaeMemFree((void **)&pInterBuffList_g);
+                    return CPA_STATUS_FAIL;
+                }
+
+                /* get the size of the Private meta data
+                 * needed to create Buffer List
+                 */
+                status = cpaDcBufferListGetMetaSize(
+                    dcInstances_g[i], numBuffers, &size);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Get Meta Size Data Failed\n");
+                    qaeMemFree((void **)&dcInstances_g);
+                    qaeMemFree((void **)&pInterBuffList_g);
+                    return CPA_STATUS_FAIL;
+                }
+            }
+            tempBufferList = pInterBuffList_g[i];
+            for (k = 0; k < numBuffers; k++)
+            {
+                tempBufferList[k] = (CpaBufferList *)qaeMemAllocNUMA(
+                    sizeof(CpaBufferList), nodeId, BYTE_ALIGNMENT_64);
+                if (NULL == tempBufferList[k])
+                {
+                    PRINT(" %s:: Unable to allocate memory for "
+                          "tempBufferList\n",
+                          __FUNCTION__);
+                    qaeMemFree((void **)&dcInstances_g);
+                    freeDcBufferList(tempBufferList, k + 1);
+                    qaeMemFree((void **)&pInterBuffList_g);
+                    return CPA_STATUS_FAIL;
+                }
+                tempBufferList[k]->pPrivateMetaData =
+                    qaeMemAllocNUMA(size, nodeId, BYTE_ALIGNMENT_64);
+                if (NULL == tempBufferList[k]->pPrivateMetaData)
+                {
+                    PRINT(" %s:: Unable to allocate memory for "
+                          "pPrivateMetaData\n",
+                          __FUNCTION__);
+                    qaeMemFree((void **)&dcInstances_g);
+                    freeDcBufferList(tempBufferList, k + 1);
+                    qaeMemFree((void **)&pInterBuffList_g);
+                    return CPA_STATUS_FAIL;
+                }
+                tempBufferList[k]->numBuffers = ONE_BUFFER_DC;
+                /* allocate flat buffers */
+                tempBufferList[k]->pBuffers = qaeMemAllocNUMA(
+                    (sizeof(CpaFlatBuffer)), nodeId, BYTE_ALIGNMENT_64);
+                if (NULL == tempBufferList[k]->pBuffers)
+                {
+                    PRINT_ERR("Unable to allocate memory for pBuffers\n");
+                    qaeMemFree((void **)&dcInstances_g);
+                    freeDcBufferList(tempBufferList, k + 1);
+                    qaeMemFree((void **)&pInterBuffList_g);
+                    return CPA_STATUS_FAIL;
+                }
+
+                tempBufferList[k]->pBuffers[0].pData = qaeMemAllocNUMA(
+                    (size_t)expansionFactor_g * EXTRA_BUFFER * buffSize,
+                    nodeId,
+                    BYTE_ALIGNMENT_64);
+                if (NULL == tempBufferList[k]->pBuffers[0].pData)
+                {
+                    PRINT_ERR("Unable to allocate Memory for pBuffers\n");
+                    qaeMemFree((void **)&dcInstances_g);
+                    freeDcBufferList(tempBufferList, k + 1);
+                    qaeMemFree((void **)&pInterBuffList_g);
+                    return CPA_STATUS_FAIL;
+                }
+                tempBufferList[k]->pBuffers[0].dataLenInBytes =
+                    expansionFactor_g * EXTRA_BUFFER * buffSize;
+            }
+
+            /* When starting the DC Instance, the API expects that the
+             * private meta data should be greater than the dataLength
+             */
+            /* Configure memory Configuration Function */
+            status = cpaDcSetAddressTranslation(
+                dcInstances_g[i], (CpaVirtualToPhysical)qaeVirtToPhysNUMA);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error setting memory config for instance\n");
+                qaeMemFree((void **)&dcInstances_g);
+                freeDcBufferList(pInterBuffList_g[i], numBuffers);
+                qaeMemFreeNUMA((void **)&pInterBuffList_g[i]);
+                qaeMemFree((void **)&pInterBuffList_g);
+                return CPA_STATUS_FAIL;
+            }
+            /* Start DC Instance */
+            status = cpaDcStartInstance(
+                dcInstances_g[i], numBuffers, pInterBuffList_g[i]);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Unable to start DC Instance\n");
+                qaeMemFree((void **)&dcInstances_g);
+                freeDcBufferList(pInterBuffList_g[i], numBuffers);
+                qaeMemFreeNUMA((void **)&pInterBuffList_g[i]);
+                qaeMemFree((void **)&pInterBuffList_g);
+                return CPA_STATUS_FAIL;
+            }
+        }
+        /*set the started flag to true*/
+        dc_service_started_g = CPA_TRUE;
+    }
+
+    /*determine number of cores on system and limit the number of cores to be
+     * used to be the smaller of the numberOf Instances or the number of cores*/
+    nProcessorsOnline = sampleCodeGetNumberOfCpus();
+    if (nProcessorsOnline > numDcInstances_g)
+    {
+        setCoreLimit(numDcInstances_g);
+    }
+    return status;
 }
 
 #endif

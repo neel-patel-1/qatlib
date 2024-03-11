@@ -13,6 +13,9 @@ CpaInstanceInfo2 *instanceInfo2 = NULL;
 Cpa16U numDcInstances_g = 0;
 pthread_t *dcPollingThread_g = NULL;
 volatile CpaBoolean dc_service_started_g = CPA_FALSE;
+CpaBufferList *** pInterBuffList_g = NULL;
+Cpa32U expansionFactor_g = 1;
+Cpa32U coreLimit_g = 0;
 
 int main(){
     /* Start process and name it for QAT Identification */
@@ -95,151 +98,15 @@ int main(){
     int rdLen = fread(fileBuf->pData, 1, testBufferSize, file);
 
 
-    /* Dynamic Compression Buffer Lists */
-    CpaBufferList ***pInterBuffList_g = 
-        (CpaBufferList ***)qaeMemAlloc(sizeof(CpaBufferList **) * numDcInstances_g);
-    
-    memset(
-        pInterBuffList_g, 0, numDcInstances_g * sizeof(CpaBufferList **));
-    CpaStatus status;
-    Cpa32U expansionFactor_g = 1;
-    /* Start the Loop to create Buffer List for each instance*/
-    for (int i = 0; i < numDcInstances_g; i++)
-    {
-        Cpa16U numBuffers;
-        status =
-            cpaDcGetNumIntermediateBuffers(dcInstances_g[i], &numBuffers);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("Unable to allocate Memory for Dynamic Buffer\n");
-            qaeMemFree((void **)&dcInstances_g);
-            qaeMemFree((void **)&pInterBuffList_g);
-            return CPA_STATUS_FAIL;
-        }
-        if (numBuffers > 0)
-        {
-            /* allocate the buffer list memory for the dynamic Buffers
-                * only applicable for CPM prior to gen4 as it is done in HW */
-            pInterBuffList_g[i] =
-                qaeMemAllocNUMA(sizeof(CpaBufferList *) * numBuffers,
-                                instanceInfo2[i].nodeAffinity,
-                                BYTE_ALIGNMENT_64);
-            if (NULL == pInterBuffList_g[i])
-            {
-                PRINT_ERR("Unable to allocate Memory for Dynamic Buffer\n");
-                qaeMemFree((void **)&dcInstances_g);
-                qaeMemFree((void **)&pInterBuffList_g);
-                return CPA_STATUS_FAIL;
-            }
+    startDcServices(testBufferSize, TEMP_NUM_BUFFS);
 
-            /* get the size of the Private meta data
-                * needed to create Buffer List
-                */
-            Cpa32U size;
-            status = cpaDcBufferListGetMetaSize(
-                dcInstances_g[i], numBuffers, &size);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("Get Meta Size Data Failed\n");
-                qaeMemFree((void **)&dcInstances_g);
-                qaeMemFree((void **)&pInterBuffList_g);
-                return CPA_STATUS_FAIL;
-            }
-        }
-        CpaBufferList ** tempBufferList = pInterBuffList_g[i];
-        Cpa16U nodeId = instanceInfo2[i].nodeAffinity;
-        Cpa32U buffSize = testBufferSize;
-        for (int k = 0; k < numBuffers; k++)
-        {
-            tempBufferList[k] = (CpaBufferList *)qaeMemAllocNUMA(
-                sizeof(CpaBufferList), nodeId, BYTE_ALIGNMENT_64);
-            if (NULL == tempBufferList[k])
-            {
-                PRINT(" %s:: Unable to allocate memory for "
-                        "tempBufferList\n",
-                        __FUNCTION__);
-                qaeMemFree((void **)&dcInstances_g);
-                freeDcBufferList(tempBufferList, k + 1);
-                qaeMemFree((void **)&pInterBuffList_g);
-                return CPA_STATUS_FAIL;
-            }
-            tempBufferList[k]->pPrivateMetaData =
-                qaeMemAllocNUMA(size, nodeId, BYTE_ALIGNMENT_64);
-            
-            if (NULL == tempBufferList[k]->pPrivateMetaData)
-            {
-                PRINT(" %s:: Unable to allocate memory for "
-                        "pPrivateMetaData\n",
-                        __FUNCTION__);
-                qaeMemFree((void **)&dcInstances_g);
-                freeDcBufferList(tempBufferList, k + 1);
-                qaeMemFree((void **)&pInterBuffList_g);
-                return CPA_STATUS_FAIL;
-            }
-            tempBufferList[k]->numBuffers = ONE_BUFFER_DC;
-            /* allocate flat buffers */
-            tempBufferList[k]->pBuffers = qaeMemAllocNUMA(
-                (sizeof(CpaFlatBuffer)), nodeId, BYTE_ALIGNMENT_64);
-            if (NULL == tempBufferList[k]->pBuffers)
-            {
-                PRINT_ERR("Unable to allocate memory for pBuffers\n");
-                qaeMemFree((void **)&dcInstances_g);
-                freeDcBufferList(tempBufferList, k + 1);
-                qaeMemFree((void **)&pInterBuffList_g);
-                return CPA_STATUS_FAIL;
-            }
-
-            tempBufferList[k]->pBuffers[0].pData = qaeMemAllocNUMA(
-                (size_t)expansionFactor_g * EXTRA_BUFFER * buffSize,
-                nodeId,
-                BYTE_ALIGNMENT_64);
-            if (NULL == tempBufferList[k]->pBuffers[0].pData)
-            {
-                PRINT_ERR("Unable to allocate Memory for pBuffers\n");
-                qaeMemFree((void **)&dcInstances_g);
-                freeDcBufferList(tempBufferList, k + 1);
-                qaeMemFree((void **)&pInterBuffList_g);
-                return CPA_STATUS_FAIL;
-            }
-            tempBufferList[k]->pBuffers[0].dataLenInBytes =
-                expansionFactor_g * EXTRA_BUFFER * buffSize;
-        }
-        /* When starting the DC Instance, the API expects that the
-            * private meta data should be greater than the dataLength
-            */
-        /* Configure memory Configuration Function */
-        status = cpaDcSetAddressTranslation(
-            dcInstances_g[i], (CpaVirtualToPhysical)qaeVirtToPhysNUMA);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("Error setting memory config for instance\n");
-            qaeMemFree((void **)&dcInstances_g);
-            freeDcBufferList(pInterBuffList_g[i], numBuffers);
-            qaeMemFreeNUMA((void **)&pInterBuffList_g[i]);
-            qaeMemFree((void **)&pInterBuffList_g);
-            return CPA_STATUS_FAIL;
-        }
-        /* Start DC Instance */
-        status = cpaDcStartInstance(
-            dcInstances_g[i], numBuffers, pInterBuffList_g[i]);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("Unable to start DC Instance\n");
-            qaeMemFree((void **)&dcInstances_g);
-            freeDcBufferList(pInterBuffList_g[i], numBuffers);
-            qaeMemFreeNUMA((void **)&pInterBuffList_g[i]);
-            qaeMemFree((void **)&pInterBuffList_g);
-            return CPA_STATUS_FAIL;
-        }
-    }
-    dc_service_started_g = CPA_TRUE;
-
+    /* Test whether epoll works or we need separate config */
     int fd = -1;
-    status = icp_sal_DcGetFileDescriptor(dcInstances_g[0], &fd);
-    if (CPA_STATUS_SUCCESS != status)
-    {
-        PRINT_ERR("Unable to get file descriptor: %d\n", status);
-    }
+    // CpaStatus status = icp_sal_DcGetFileDescriptorForce(dcInstances_g[0], &fd, CPA_TRUE);
+    // if (CPA_STATUS_SUCCESS != status)
+    // {
+    //     PRINT_ERR("Unable to get file descriptor: %d\n", status);
+    // }
 
     createBusyPollThreads();
 
