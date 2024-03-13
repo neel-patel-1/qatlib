@@ -1,3 +1,77 @@
+Latency ( Linux sapphire.ittc.ku.edu 6.5.7-dirty #8 SMP PREEMPT_DYNAMIC Thu Feb 15 10:14:11 CST 2024 x86_64 x86_64 x86_64 GNU/Linux ) (RequestPopulation+Submission && Wait)
+- to get RequestPopulation && Submission Separately, checkout [TODO]
+=====
+
+Run
+=====
+(base) n869p538@sapphire:qatlib$ ./latency_sample runTests=32 getLatency=1
+
+start cycles: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1206
+
+mark start time of a single request:
+https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_latency.c#L242
+<- https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1018
+<-- https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1228
+
+create the request: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/common/compression/dc_ns_datapath.c#L1606
+
+submit to QAT: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/common/compression/dc_ns_datapath.c#L1622
+
+get response time of single request: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L218
+
+end cycles: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L247
+- after all responses are gathered in the callback function
+
+latencyMode polls for one buffer's completion before starting next submission:
+https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_latency.c#L73
+
+whole file, one buff, how much?: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1208
+-> https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1033
+
+setupDcCommonTest {testSetupData_g[testTypeCount_g].performance_function = (performance_func_t)dcPerformance;}:https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L221
+<-dcPerformance:https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L350 ->
+<-qatDcPerform:https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L617
+<-qatCompressData:https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1119
+->qatSummariseLatencyMeasurements:
+https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1459
+
+
+
+createStartandWaitForCompletion:https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/framework/cpa_sample_code_framework.c#L1864
+<-
+----
+createPerfomanceThreads{status = sampleCodeThreadCreate(
+                &threads_g[numCreatedThreads_g - 1],
+                threadAttr,
+                functionPtr,
+                &singleThreadData_g[numCreatedThreads_g - 1]);}https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/test/cpa_sample_code_framework.c#L1113
+waitForThreadCompletion:https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/framework/cpa_sample_code_framework.c#L2009
+----
+->printDCStats: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L1331
+
+
+
+
+post the semaphore purppose?: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1268
+
+QAT nanosleeps between polling intervals: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L1308
+- does removing nanosleep reduce avg latency?
+- does replacing with monitor/mwait reduce avg cpu? -- will perf_data_t -> pollingcycles reveal cycles spent polling?
+coo_poll function takes cycle counter using rdtscp every time poll function is called: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_cycles.h#L384
+https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_cycles.h#L168
+```
+__asm__ volatile(
+        "rdtscp\n\t"
+        "mov %%edx, %0\n\t"
+        "mov %%eax, %1\n\t"
+        : "=r"(cycles_high), "=r"(cycles_low)::"%rax", "%rbx", "%rcx", "%rdx");
+```
+
+TODO
+====
+Use Monitor/MWAIT in poll function and compare the cost-of-offload to poll
+
+
 ![Linux build with gcc](https://github.com/intel/qatlib/actions/workflows/linux_build_gcc.yml/badge.svg)
 ![CodeQL scan](https://github.com/intel/qatlib/actions/workflows/codeql.yml/badge.svg)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/intel/qatlib/badge)](https://api.securityscorecards.dev/projects/github.com/intel/qatlib)
