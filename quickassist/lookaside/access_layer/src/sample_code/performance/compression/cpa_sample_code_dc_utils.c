@@ -1305,7 +1305,7 @@ void sampleCodeDcPoll(CpaInstanceHandle instanceHandle_in)
             break;
         }
 #ifdef USER_SPACE
-        nanosleep(&reqTime, &remTime);
+        // nanosleep(&reqTime, &remTime);
 #else
         sampleCodeSleepMilliSec(DEFAULT_POLL_INTERVAL_KERNEL);
 #endif

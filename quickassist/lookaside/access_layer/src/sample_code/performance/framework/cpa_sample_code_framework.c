@@ -852,11 +852,11 @@ CpaStatus waitForThreadCompletion(void)
         }
         perf_data_t * perfStats = stats[0];
         perf_cycles_t cpuFreqKHz = sampleCodeGetCpuFreq();
-        perf_cycles_t statsLatency = 10000 * perfStats->aveLatency;
+        perf_cycles_t statsLatency = 1000000 * perfStats->aveLatency;
         do_div(statsLatency, cpuFreqKHz);
-        perf_cycles_t subLatency = 10000 * perfStats->aveSubmissionLatency;
+        perf_cycles_t subLatency = 1000000 * perfStats->aveSubmissionLatency;
         do_div(subLatency, cpuFreqKHz);
-        perf_cycles_t pollingLatency = 10000 * perfStats->avePollingLatency;
+        perf_cycles_t pollingLatency = 1000000 * perfStats->avePollingLatency;
         do_div(pollingLatency, cpuFreqKHz);
 
         PRINT(
@@ -873,7 +873,7 @@ CpaStatus waitForThreadCompletion(void)
         );
 
         PRINT(
-            "%lf,",
+            "%lf\n",
             perfStats->bytesConsumedPerLoop/(1.0 * perfStats->bytesProducedPerLoop)
         );
         qaeMemFree((void **)&perfStats_g[0]);
@@ -899,9 +899,7 @@ CpaStatus waitForThreadCompletion(void)
         //         PRINT("---------------------------------------\n\n");
         //     }
         // }
-#ifndef NEWDISLAY
-        PRINT("---------------------------------------\n\n");
-#endif
+
         /* Clean up and exit */
         error_flag_g = CPA_FALSE;
         threadControlInitilised_g = CPA_FALSE;

@@ -1399,7 +1399,7 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
-            PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),ratio(percent_orig),AveLatencyTotal(us)\n");
+            PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),AveLatencyTotal(us),ratio(percent_orig)\n");
             for(int payloadSize=1024; payloadSize<=16*1024; payloadSize*=4){
                 printf("%d,", payloadSize);
                 status = setupDcTest(CPA_DC_DEFLATE,
@@ -1408,7 +1408,7 @@ int main(int argc, char *argv[])
                                     CPA_DC_HT_STATIC,
                                     CPA_DC_STATELESS,
                                     DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                    4096,
+                                    payloadSize,
                                     sampleCorpus,
                                     ASYNC,
                                     dcLoops);
@@ -1418,6 +1418,7 @@ int main(int argc, char *argv[])
                     return CPA_STATUS_FAIL;
                 }
                 status = createStartandWaitForCompletion(COMPRESSION);
+
             }
             if (CPA_STATUS_SUCCESS != status)
             {
