@@ -1,9 +1,14 @@
-Latency ( Linux sapphire.ittc.ku.edu 6.5.7-dirty #8 SMP PREEMPT_DYNAMIC Thu Feb 15 10:14:11 CST 2024 x86_64 x86_64 x86_64 GNU/Linux ) (RequestPopulation+Submission && Wait)
-- to get RequestPopulation && Submission Separately, checkout [TODO]
+
+
+
+# Synchronous Decompression Latency ( Linux sapphire.ittc.ku.edu 6.5.7-dirty #8 SMP PREEMPT_DYNAMIC Thu Feb 15 10:14:11 CST 2024 x86_64 x86_64 x86_64 GNU/Linux ) (RequestPopulation+Submission && Wait)
 =====
+- to get RequestPopulation && Submission Separately, checkout [TODO]
 
 Run
 =====
+git checkout sync_decomp_latency
+sudo make samples -j
 (base) n869p538@sapphire:qatlib$ ./latency_sample runTests=32 getLatency=1
 
 start cycles: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1206
