@@ -17,6 +17,8 @@ create the request: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_la
 
 submit to QAT: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/common/compression/dc_ns_datapath.c#L1622
 
+poll: https://vscode.dev/github/neel-patel-1/qatlib/blob/main/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1251
+
 get response time of single request: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L218
 
 end cycles: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L247
@@ -55,7 +57,7 @@ waitForThreadCompletion:https://vscode.dev/github/neel-patel-1/qatlib/blob/decom
 post the semaphore purppose?: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1268
 
 QAT nanosleeps between polling intervals: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/cpa_sample_code_dc_utils.c#L1308
-- does removing nanosleep reduce avg latency?
+- does removing nanosleep reduce avg latency? No
 - does replacing with monitor/mwait reduce avg cpu? -- will perf_data_t -> pollingcycles reveal cycles spent polling?
 coo_poll function takes cycle counter using rdtscp every time poll function is called: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_cycles.h#L384
 https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_cycles.h#L168
