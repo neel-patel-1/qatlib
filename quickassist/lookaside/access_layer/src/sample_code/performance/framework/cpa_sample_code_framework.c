@@ -852,11 +852,11 @@ CpaStatus waitForThreadCompletion(void)
         }
         perf_data_t * perfStats = stats[0];
         perf_cycles_t cpuFreqKHz = sampleCodeGetCpuFreq();
-        perf_cycles_t statsLatency = 1000 * perfStats->aveLatency;
+        perf_cycles_t statsLatency = 10000 * perfStats->aveLatency;
         do_div(statsLatency, cpuFreqKHz);
-        perf_cycles_t subLatency = 1000 * perfStats->aveSubmissionLatency;
+        perf_cycles_t subLatency = 10000 * perfStats->aveSubmissionLatency;
         do_div(subLatency, cpuFreqKHz);
-        perf_cycles_t pollingLatency = 1000 * perfStats->avePollingLatency;
+        perf_cycles_t pollingLatency = 10000 * perfStats->avePollingLatency;
         do_div(pollingLatency, cpuFreqKHz);
 
         PRINT(
@@ -876,8 +876,7 @@ CpaStatus waitForThreadCompletion(void)
             "%lf,",
             perfStats->bytesConsumedPerLoop/(1.0 * perfStats->bytesProducedPerLoop)
         );
-
-        PRINT("---------------------------------------\n");
+        qaeMemFree((void **)&perfStats_g[0]);
 
         // for (i = 0; i < testTypeCount_g; i++)
         // {
@@ -1825,18 +1824,11 @@ CpaStatus getCompressionInstanceMapping(void)
                 {
                     packageIdCount_g = info.physInstId.packageId;
                 }
-                if (verboseOutput)
+                if (i > 0)
                 {
-                    PRINT("Inst %u, Affin: %u, Dev: %u, Accel %u, "
-                          "EE %u, BDF %02X:%02X:%02X\n",
-                          i,
-                          coreAffinity,
-                          info.physInstId.packageId,
-                          info.physInstId.acceleratorId,
-                          info.physInstId.executionEngineId,
-                          (Cpa8U)((info.physInstId.busAddress) >> 8),
-                          (Cpa8U)((info.physInstId.busAddress) & 0xFF) >> 3,
-                          (Cpa8U)((info.physInstId.busAddress) & 7));
+                    PRINT_ERR("Multiple compression instances not supported\n");
+                    freeInstanceMapping();
+                    return CPA_STATUS_FAIL;
                 }
                 if (info.isPolled)
                     dcInstMap_g[i] = coreAffinity;

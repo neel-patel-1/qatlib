@@ -160,6 +160,12 @@ CpaStatus qatFreeLatency(perf_data_t *performanceStats)
     QAT_PERF_FREE_MEM_AND_UPDATE_STATUS(performanceStats->response_times,
                                         status);
     QAT_PERF_FREE_MEM_AND_UPDATE_STATUS(performanceStats->start_times, status);
+    QAT_PERF_FREE_MEM_AND_UPDATE_STATUS(performanceStats->req_sub_start_times, status);
+    QAT_PERF_FREE_MEM_AND_UPDATE_STATUS(performanceStats->req_sub_end_times, status);
+    QAT_PERF_FREE_MEM_AND_UPDATE_STATUS(performanceStats->poll_start_times, status);
+    QAT_PERF_FREE_MEM_AND_UPDATE_STATUS(performanceStats->poll_end_times, status);
+
+
     return status;
 }
 
@@ -271,11 +277,6 @@ CpaStatus requestSubmitStart(perf_data_t *perf_data)
         if(perf_data->submissionLatencyCount <= MAX_LATENCY_COUNT){
             perf_data->req_sub_start_times[perf_data->submissionLatencyCount]
                 = sampleCodeTimestamp();
-            printf("SubCount:%d Time:%llu\n",
-                perf_data->submissionLatencyCount,
-                perf_data->req_sub_start_times[perf_data->submissionLatencyCount]
-                );
-
         }
         else
             status = CPA_STATUS_FAIL;
@@ -291,11 +292,6 @@ CpaStatus requestSubmitStop(perf_data_t *perf_data)
     if(latency_enable){
         if(perf_data->submissionLatencyCount <= MAX_LATENCY_COUNT){
             perf_data->req_sub_end_times[perf_data->submissionLatencyCount] = sampleCodeTimestamp();
-            printf("Count:%d, Time:%llu, Submission Latency: %llu\n",
-                perf_data->submissionLatencyCount,
-                perf_data->req_sub_end_times[perf_data->submissionLatencyCount],
-                perf_data->req_sub_end_times[perf_data->submissionLatencyCount] -
-                perf_data->req_sub_start_times[perf_data->submissionLatencyCount]);
             perf_data->submissionLatencyCount++;
         }
         else

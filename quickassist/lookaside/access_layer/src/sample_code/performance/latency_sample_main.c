@@ -1399,23 +1399,26 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
-            status = setupDcTest(CPA_DC_DEFLATE,
-                                 CPA_DC_DIR_COMPRESS,
-                                 SAMPLE_CODE_CPA_DC_L1,
-                                 CPA_DC_HT_STATIC,
-                                 CPA_DC_STATELESS,
-                                 DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                 4096,
-                                 sampleCorpus,
-                                 ASYNC,
-                                 dcLoops);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("Error calling setupDcTest\n");
-                return CPA_STATUS_FAIL;
+            PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),ratio(percent_orig),AveLatencyTotal(us)\n");
+            for(int payloadSize=1024; payloadSize<=16*1024; payloadSize*=4){
+                printf("%d,", payloadSize);
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_COMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    4096,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
             }
-            PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),ratio(percent_orig),AveLatencyTotal(us)");
-            status = createStartandWaitForCompletion(COMPRESSION);
             if (CPA_STATUS_SUCCESS != status)
             {
                 retStatus = CPA_STATUS_FAIL;
