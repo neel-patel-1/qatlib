@@ -1020,6 +1020,7 @@ CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
         if (compressDirection == CPA_DC_DIR_COMPRESS)
         {
             coo_req_start(setup->performanceStats);
+            requestSubmitStart(setup->performanceStats);
             {
                 if (CPA_TRUE == setup->setNsRequest)
                 {
@@ -1050,6 +1051,7 @@ CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
                                            &arrayOfResults[listNum],
                                            (void *)setup);
                 }
+                requestSubmitStop(setup->performanceStats);
                 coo_req_stop(setup->performanceStats, status);
             }
         }

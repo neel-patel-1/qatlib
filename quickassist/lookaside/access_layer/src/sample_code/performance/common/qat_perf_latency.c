@@ -213,16 +213,24 @@ CpaStatus qatInitLatency(perf_data_t *performanceStats,
                 {
                     performanceStats->start_times = qaeMemAlloc(
                         sizeof(perf_cycles_t) * MAX_LATENCY_COUNT + 1);
+                    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
+                        performanceStats->start_times, status);
                     performanceStats->req_sub_start_times = qaeMemAlloc(
                         sizeof(perf_cycles_t) * MAX_LATENCY_COUNT + 1);
+                    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
+                        performanceStats->req_sub_start_times, status);
                     performanceStats->req_sub_end_times = qaeMemAlloc(
                         sizeof(perf_cycles_t) * MAX_LATENCY_COUNT + 1);
                     QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
-                        performanceStats->start_times, status);
+                        performanceStats->req_sub_end_times, status);
                     performanceStats->poll_start_times = qaeMemAlloc(
                         sizeof(perf_cycles_t) * MAX_LATENCY_COUNT + 1);
+                    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
+                        performanceStats->poll_start_times, status);
                     performanceStats->poll_end_times = qaeMemAlloc(
                         sizeof(perf_cycles_t) * MAX_LATENCY_COUNT + 1);
+                    QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
+                        performanceStats->poll_end_times, status);
                 }
             }
         }
@@ -260,9 +268,15 @@ CpaStatus requestSubmitStart(perf_data_t *perf_data)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
     if(latency_enable){
-        if(perf_data->submissionLatencyCount <= MAX_LATENCY_COUNT)
+        if(perf_data->submissionLatencyCount <= MAX_LATENCY_COUNT){
             perf_data->req_sub_start_times[perf_data->submissionLatencyCount]
                 = sampleCodeTimestamp();
+            printf("SubCount:%d Time:%llu\n",
+                perf_data->submissionLatencyCount,
+                perf_data->req_sub_start_times[perf_data->submissionLatencyCount]
+                );
+
+        }
         else
             status = CPA_STATUS_FAIL;
     }
@@ -275,8 +289,15 @@ CpaStatus requestSubmitStop(perf_data_t *perf_data)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
     if(latency_enable){
-        if(perf_data->submissionLatencyCount <= MAX_LATENCY_COUNT)
+        if(perf_data->submissionLatencyCount <= MAX_LATENCY_COUNT){
             perf_data->req_sub_end_times[perf_data->submissionLatencyCount] = sampleCodeTimestamp();
+            printf("Count:%d, Time:%llu, Submission Latency: %llu\n",
+                perf_data->submissionLatencyCount,
+                perf_data->req_sub_end_times[perf_data->submissionLatencyCount],
+                perf_data->req_sub_end_times[perf_data->submissionLatencyCount] -
+                perf_data->req_sub_start_times[perf_data->submissionLatencyCount]);
+            perf_data->submissionLatencyCount++;
+        }
         else
             status = CPA_STATUS_FAIL;
     }
@@ -304,7 +325,7 @@ CpaStatus stopPollLatency(perf_data_t *perf_data){
     CpaStatus status = CPA_STATUS_SUCCESS;
     if(latency_enable){
         if(perf_data->pollLatencyCount <= MAX_LATENCY_COUNT)
-            perf_data->poll_end_times[perf_data->pollLatencyCount]
+            perf_data->poll_end_times[perf_data->pollLatencyCount++]
                 = sampleCodeTimestamp();
         else
             status = CPA_STATUS_FAIL;
@@ -405,6 +426,7 @@ CpaStatus qatSummariseLatencyMeasurements(perf_data_t *performanceStats)
                 perf_cycles_t latency = performanceStats->response_times[i] -
                                         performanceStats->start_times[i];
                 performanceStats->aveLatency += latency;
+                // printf("Submission Latency: %llu\n", performanceStats->req_sub_end_times[i] - performanceStats->req_sub_start_times[i]);
                 performanceStats->aveSubmissionLatency +=
                     performanceStats->req_sub_end_times[i] - performanceStats->req_sub_start_times[i];
                 performanceStats->avePollingLatency +=
