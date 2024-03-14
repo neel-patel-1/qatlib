@@ -1399,11 +1399,12 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
+            int payloadMin = 4 * 1024 * 1024, payloadMax = 64 * 1024 * 1024;
             PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),AveLatencyTotal(us),ratio(percent_orig)\n");
             for(int payloadSize=256; payloadSize<=2*1024*1024; payloadSize*=2){
                 printf("%d,", payloadSize);
                 status = setupDcTest(CPA_DC_DEFLATE,
-                                    CPA_DC_DIR_COMPRESS,
+                                    CPA_DC_DIR_DECOMPRESS,
                                     SAMPLE_CODE_CPA_DC_L1,
                                     CPA_DC_HT_STATIC,
                                     CPA_DC_STATELESS,
