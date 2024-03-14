@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  **************************************************************************/
 
@@ -1399,26 +1399,32 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
-            status = setupDcTest(CPA_DC_DEFLATE,
-                                 CPA_DC_DIR_COMPRESS,
-                                 SAMPLE_CODE_CPA_DC_L1,
-                                 CPA_DC_HT_STATIC,
-                                 CPA_DC_STATELESS,
-                                 DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                 BUFFER_SIZE_8192,
-                                 sampleCorpus,
-                                 ASYNC,
-                                 dcLoops);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("Error calling setupDcTest\n");
-                return CPA_STATUS_FAIL;
+            PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),AveLatencyTotal(us),ratio(percent_orig)\n");
+            for(int payloadSize=1024; payloadSize<=16*1024; payloadSize*=4){
+                printf("%d,", payloadSize);
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_COMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    payloadSize,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
+
             }
-            status = createStartandWaitForCompletion(COMPRESSION);
             if (CPA_STATUS_SUCCESS != status)
             {
                 retStatus = CPA_STATUS_FAIL;
             }
+            return 0;
 
             status = setupDcTest(CPA_DC_DEFLATE,
                                  CPA_DC_DIR_DECOMPRESS,
