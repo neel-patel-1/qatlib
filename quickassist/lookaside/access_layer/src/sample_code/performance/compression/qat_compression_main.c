@@ -1065,7 +1065,7 @@ CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
             if (CPA_TRUE == setup->setNsRequest)
             {
                 setup->setupData.sessDirection = CPA_DC_DIR_DECOMPRESS;
-
+                PRINT("NS Decompress\n");
                 if (ASYNC == setup->syncFlag)
                 {
                     dcCbFn = dcPerformCallback;
@@ -1082,6 +1082,7 @@ CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
             }
             else
             {
+                PRINT("Data2 Decompress\n");
                 status = cpaDcDecompressData2(setup->dcInstanceHandle,
                                               pSessionHandle,
                                               &arrayOfDestBufferLists[listNum],

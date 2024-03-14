@@ -18,7 +18,10 @@ https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lo
 <- https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1018
 <-- https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1228
 
-create the request: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/common/compression/dc_ns_datapath.c#L1606
+create the request (when called from cpaDcCompressData) : 
+https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/common/compression/dc_datapath.c#L1871
+
+send the request: https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/common/compression/dc_datapath.c#L1915
 
 submit to QAT: https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/common/compression/dc_ns_datapath.c#L1622
 
