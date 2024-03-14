@@ -1,0 +1,19 @@
+
+icp_adf_pollInstance is an alternative to ISR method -- user supplies trans_handle containing a ring number 
+a transhandle has bank, accel, and ring: https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/qat_direct/common/adf_user_transport_ctrl.c#L529
+callbacks registered for each trans_handle:https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/qat_direct/common/include/adf_dev_ring_ctl.h#L86
+
+hu-qtls: The QAT hardware load-balances requests from all rings across all available computation engines.
+iaa: enqueue request to dwq -> dq wd -> process
+- effect of load-balancing requests across multiple processing engines
+
+
+arch:
+banks: https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/qat_direct/common/include/adf_dev_ring_ctl.h#L50
+rings: https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/qat_direct/common/include/adf_dev_ring_ctl.h#L69
+accel-dev: https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/include/icp_accel_devices.h#L258
+
+how many banks? 4 banks per VF
+do banks map to PEs?
+how many rings per bank?
+how many rings per VF?

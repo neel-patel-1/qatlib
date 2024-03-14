@@ -68,7 +68,8 @@
 #include "qat_perf_utils.h"
 #include "Osal.h"
 
-#define NUM_POLL_TIMES 1000
+#define NUM_POLL_TIMES 10000
+#define SAMPLING_INTERVAL 100
 OsalTimeval pollTimesStart[NUM_POLL_TIMES];
 OsalTimeval pollTimesEnd[NUM_POLL_TIMES];
 int ts=0;
@@ -311,17 +312,23 @@ CpaStatus qatLatencyPollForResponses(perf_data_t *performanceStats,
                 }
                 osalTimeGet(&pollTimesEnd[ts]);
                 ts++;
-                if(ts > NUM_POLL_TIMES)
+                if(ts == NUM_POLL_TIMES)
                 {
-                    uint64_t sum = 0;
                     ts = 0;
-                    for(int i = 0; i < NUM_POLL_TIMES; i++)
+                }
+                else if (! (ts % SAMPLING_INTERVAL) && ts > 0)
+                {
+                    int i;
+                    uint64_t sum = 0;
+
+                    for(int i = 0; i < ts; i++)
                     {
                         sum += (pollTimesEnd[i].nsecs - pollTimesStart[i].nsecs);
 
                     }
-                    printf("Average polling time: %ld\n", sum/NUM_POLL_TIMES);
+                    printf("Average polling time across(%d-%d): %f\n", ts-SAMPLING_INTERVAL,ts, (double)sum/ts);
                 }
+
 
             }
         }
