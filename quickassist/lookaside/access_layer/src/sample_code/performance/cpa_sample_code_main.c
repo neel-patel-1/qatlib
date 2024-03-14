@@ -1400,7 +1400,7 @@ int main(int argc, char *argv[])
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
             PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),AveLatencyTotal(us),ratio(percent_orig)\n");
-            for(int payloadSize=1024; payloadSize<=16*1024; payloadSize*=4){
+            for(int payloadSize=256; payloadSize<=2*1024*1024; payloadSize*=2){
                 printf("%d,", payloadSize);
                 status = setupDcTest(CPA_DC_DEFLATE,
                                     CPA_DC_DIR_COMPRESS,
