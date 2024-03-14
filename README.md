@@ -1,4 +1,5 @@
 # Polling Breakdown
+git checkout polling_breakdown
 sudo ./cpa_sample_code runTests=32 getLatency=1 >& log
 awk 'BEGIN{printf("size(B),poll-time(ns)\n");sum=0;count=0;} /.* Size.*/{printf("%s,",$3); if(sum > 0){print sum/count;} sum=0;count=0;} /Average.*/{ if ($5 < 1000000) {sum+=$5;count+=1;}} ' log
 
