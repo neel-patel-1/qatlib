@@ -1,4 +1,8 @@
-
+# RequestPopulation && Submission Breakdown
+Setup: call requests/submissions created/submitted from cpaDcCompressData API
+sudo ./latency_sample runTests=32 getLatency=1 >&
+echo -n "ReqPrep time:"; awk '/16384.\*/ {do_print=1;} {if(do_print==1)print;}' avg_req_sub_times.log | awk -F: '{if(NR%2==0){sum+= $2}} END{print sum/(NR/2)}' avg_req_sub_times.log
+echo -n "Sub time:"; awk '/16384.\*/ {do_print=1;} {if(do_print==1)print;}' avg_req_sub_times.log | awk -F: '{if(NR%2==1){sum+= $2}} END{print sum/(NR/2)}' avg_req_sub_times.log
 
 
 # Synchronous Decompression Latency ( Linux sapphire.ittc.ku.edu 6.5.7-dirty #8 SMP PREEMPT_DYNAMIC Thu Feb 15 10:14:11 CST 2024 x86_64 x86_64 x86_64 GNU/Linux ) (RequestPopulation+Submission && Wait)

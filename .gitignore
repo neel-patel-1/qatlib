@@ -96,3 +96,8 @@ throughput_out.log
 throughput_sample
 zuc_sample
 
+.README.md.swp
+.avg_req_sub_times.log.swp
+api_log.txt
+avg_req_sub_times.log
+
