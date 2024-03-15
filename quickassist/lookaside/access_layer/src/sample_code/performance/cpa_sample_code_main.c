@@ -1399,12 +1399,41 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
-            int payloadMin = 4 * 1024 * 1024, payloadMax = 64 * 1024 * 1024;
+            // int payloadMin = 4 * 1024 * 1024, payloadMax = 64 * 1024 * 1024;
+            int payloadMin = 256, payloadMax = (1 << 21);
+            PRINT("DECOMPRESS\n");
             PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),AveLatencyTotal(us),ratio(percent_orig)\n");
-            for(int payloadSize=256; payloadSize<=2*1024*1024; payloadSize*=2){
+            for(int payloadSize=payloadMin; payloadSize<=payloadMax; payloadSize*=2){
                 printf("%d,", payloadSize);
                 status = setupDcTest(CPA_DC_DEFLATE,
                                     CPA_DC_DIR_DECOMPRESS,
+                                    SAMPLE_CODE_CPA_DC_L1,
+                                    CPA_DC_HT_STATIC,
+                                    CPA_DC_STATELESS,
+                                    DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                    payloadSize,
+                                    sampleCorpus,
+                                    ASYNC,
+                                    dcLoops);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error calling setupDcTest\n");
+                    return CPA_STATUS_FAIL;
+                }
+                status = createStartandWaitForCompletion(COMPRESSION);
+
+            }
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
+
+            PRINT("COMPRESS\n");
+            PRINT("PayloadSize(B),AveRequestPrep&&SubmissionLatency(us),AvePollingLatency(ns),AveLatencyTotal(us),ratio(percent_orig)\n");
+            for(int payloadSize=payloadMin; payloadSize<=payloadMax; payloadSize*=2){
+                printf("%d,", payloadSize);
+                status = setupDcTest(CPA_DC_DEFLATE,
+                                    CPA_DC_DIR_COMPRESS,
                                     SAMPLE_CODE_CPA_DC_L1,
                                     CPA_DC_HT_STATIC,
                                     CPA_DC_STATELESS,
