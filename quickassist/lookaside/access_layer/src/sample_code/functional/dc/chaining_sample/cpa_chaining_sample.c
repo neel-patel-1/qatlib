@@ -75,8 +75,14 @@
 #include "zlib.h"
 #include "cpa_chaining_sample_input.h"
 #include "timer.h"
+#include "icp_sal_poll.h"
+#include <time.h>
 
 extern int gDebugParam;
+#define SAMPLES 1
+struct timespec startPollTimes[SAMPLES];
+struct timespec endPollTimes[SAMPLES];
+int numPolls = 0;
 
 #define NUM_SESSIONS_TWO (2)
 
@@ -213,12 +219,13 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     PRINT_DBG("Callback called with status = %d.\n", status);
-
+    clock_gettime( CLOCK_MONOTONIC, &endPollTimes[numPolls]);
     if (NULL != pCallbackTag)
     {
         /* indicate that the function has been called */
         COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
     }
+    numPolls++;
 }
 //</snippet>
 
@@ -428,7 +435,6 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
          */
         //<snippet name="perfOp">
         COMPLETION_INIT(&complete);
-        clock_gettime(CLOCK_MONOTONIC, &bufferAllocSt);
         status = cpaDcChainPerformOp(dcInstHandle,
                                      sessionHdl,
                                      pBufferListSrc,
@@ -438,8 +444,10 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
                                      chainOpData,
                                      &chainResult,
                                      (void *)&complete);
+        clock_gettime(CLOCK_MONOTONIC, &bufferAllocSt);
+        while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ } // busy_poll
         clock_gettime(CLOCK_MONOTONIC, &bufferAllocEnd);
-        PRINT_DBG("Buffer allocation time: %ld ns\n",
+        PRINT_DBG("Polling time: %ld ns\n",
                   (bufferAllocEnd.tv_sec - bufferAllocSt.tv_sec) * 1000000000 +
                       (bufferAllocEnd.tv_nsec - bufferAllocSt.tv_nsec));
         //</snippet>
@@ -682,7 +690,7 @@ CpaStatus dcChainSample(void)
          * If the instance is polled start the polling thread. Note that
          * how the polling is done is implementation-dependent.
          */
-        sampleDcStartPolling(dcInstHandle);
+        // sampleDcStartPolling(dcInstHandle);
         /*
          * We now populate the fields of the session operational data and create
          * the session.  Note that the size required to store a session is
