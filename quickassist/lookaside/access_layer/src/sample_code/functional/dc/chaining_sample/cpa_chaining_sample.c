@@ -79,9 +79,9 @@
 #include <time.h>
 
 extern int gDebugParam;
-#define SAMPLES 1
-struct timespec startPollTimes[SAMPLES];
-struct timespec endPollTimes[SAMPLES];
+
+struct timespec *startPollTimes;
+struct timespec *endPollTimes;
 int numPolls = 0;
 int requestCtr = 0;
 
@@ -769,16 +769,17 @@ CpaStatus dcChainSample(void)
         char *inputBuf = (char *)malloc(inputSize);
         FILE * file = fopen(CALGARY, "r");
         assert(file > 0);
-        uint64_t nbytes = fread(inputBuf, 1, inputSize, file);
-        if (nbytes < inputSize){
-            printf("Warning: corpus file is smaller than payload size -- results may be skewed\n");
-        }
-
-        /* Perform chaining operation */
-        status = dcChainingPerformOp(dcInstHandle, sessionHdl, inputBuf, inputSize);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("dcChainingPerformOp failed\n");
+        uint64_t fileSize = fseek(file, 0, SEEK_END);
+        int32_t num_bufs = fileSize / inputSize;
+        startPollTimes = (struct timespec *)malloc(num_bufs * sizeof(struct timespec));
+        endPollTimes = (struct timespec *)malloc(num_bufs * sizeof(struct timespec));
+        fseek(file, 0, SEEK_SET);
+        while(fread(inputBuf, 1, inputSize, file) == inputSize){
+            status = dcChainingPerformOp(dcInstHandle, sessionHdl, inputBuf, inputSize);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("dcChainingPerformOp failed\n");
+            }
         }
         /*
          * In a typical usage, the session might be used to compression
