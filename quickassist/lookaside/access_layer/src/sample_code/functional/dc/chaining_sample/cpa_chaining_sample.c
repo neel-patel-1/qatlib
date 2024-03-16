@@ -83,6 +83,7 @@ extern int gDebugParam;
 struct timespec startPollTimes[SAMPLES];
 struct timespec endPollTimes[SAMPLES];
 int numPolls = 0;
+int requestCtr = 0;
 
 #define NUM_SESSIONS_TWO (2)
 
@@ -364,7 +365,7 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
     struct COMPLETION_STRUCT complete;
     Cpa8U *pSWDigestBuffer = NULL;
     struct timespec bufferAllocSt, bufferAllocEnd;
-
+    PRINT_DBG("Request: %d\n", requestCtr++);
     PRINT_DBG("cpaDcBufferListGetMetaSize\n");
 
     /*
