@@ -428,6 +428,7 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
          */
         //<snippet name="perfOp">
         COMPLETION_INIT(&complete);
+        clock_gettime(CLOCK_MONOTONIC, &bufferAllocSt);
         status = cpaDcChainPerformOp(dcInstHandle,
                                      sessionHdl,
                                      pBufferListSrc,
@@ -437,6 +438,10 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
                                      chainOpData,
                                      &chainResult,
                                      (void *)&complete);
+        clock_gettime(CLOCK_MONOTONIC, &bufferAllocEnd);
+        PRINT_DBG("Buffer allocation time: %ld ns\n",
+                  (bufferAllocEnd.tv_sec - bufferAllocSt.tv_sec) * 1000000000 +
+                      (bufferAllocEnd.tv_nsec - bufferAllocSt.tv_nsec));
         //</snippet>
 
         if (CPA_STATUS_SUCCESS != status)
