@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  ***************************************************************************/
 
@@ -74,6 +74,7 @@
 #include "openssl/sha.h"
 #include "zlib.h"
 #include "cpa_chaining_sample_input.h"
+#include "timer.h"
 
 extern int gDebugParam;
 
@@ -334,7 +335,9 @@ static void dcChainFreeBufferList(CpaBufferList **testBufferList)
  * This function performs a dc chain operation.
  */
 static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
-                                     CpaDcSessionHandle sessionHdl)
+                                     CpaDcSessionHandle sessionHdl,
+                                     Cpa8U *sampleData,
+                                     Cpa32U sampleDataSize)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
     Cpa32U bufferMetaSize = 0;
@@ -353,6 +356,7 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
     Cpa8U numSessions = NUM_SESSIONS_TWO;
     struct COMPLETION_STRUCT complete;
     Cpa8U *pSWDigestBuffer = NULL;
+    struct timespec bufferAllocSt, bufferAllocEnd;
 
     PRINT_DBG("cpaDcBufferListGetMetaSize\n");
 
@@ -742,9 +746,22 @@ CpaStatus dcChainSample(void)
     if (CPA_STATUS_SUCCESS == status)
     {
         CpaStatus sessionStatus = CPA_STATUS_SUCCESS;
+        #define CALGARY "/lib/firmware/calgary"
+        char ** testBufs = NULL;
+        int inputSize = 4096;
+
+        // int num_bufs = corpus_to_input_buffer(&testBufs, inputSize, CALGARY);
+        // char * inputBuf = testBufs[0];
+        char *inputBuf = (char *)malloc(inputSize);
+        FILE * file = fopen(CALGARY, "r");
+        assert(file > 0);
+        uint64_t nbytes = fread(inputBuf, 1, inputSize, file);
+        if (nbytes < inputSize){
+            printf("Warning: corpus file is smaller than payload size -- results may be skewed\n");
+        }
 
         /* Perform chaining operation */
-        status = dcChainingPerformOp(dcInstHandle, sessionHdl);
+        status = dcChainingPerformOp(dcInstHandle, sessionHdl, inputBuf, inputSize);
         if (CPA_STATUS_SUCCESS != status)
         {
             PRINT_ERR("dcChainingPerformOp failed\n");

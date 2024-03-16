@@ -1,9 +1,20 @@
+Why does hash+comp take ~45us vs. comp's ~9us
+- printfs?
+- hash individual
+- example: /home/n869p538/spr-accel-profiling/interrupt_qat_dc/qatlib/quickassist/lookaside/access_layer/src/sample_code/functional/sym/hash_sample/cpa_hash_sample.c
+- hash + comp individual
+- not using hw for both?
+
+https://vscode.dev/github/neel-patel-1/qatlib/blob/user_dcc_sample/quickassist/lookaside/access_layer/src/sample_code/functional/sym/hash_sample/cpa_hash_sample.c#L223
+- insert compression offload here, but perform comp on the dst of the hash
+- what operations does hash + comp perform
 
 # SYNC Chained Operation Latency
-Supported operations: https://vscode.dev/github/neel-patel-1/qatlib/blob/chained_dcc/quickassist/include/dc/cpa_dc_chain.h#L106
+/home/n869p538/spr-accel-profiling/interrupt_qat_dc/qatlib/quickassist/include/dc/cpa_dc_chain.h -- are all of these operations supported?
+Which ones are sw/hw?
 
 Compress then Encrypt
-```
+```p
 #qat config
 # Comment or remove next line to disable sriov
 #SRIOV_ENABLE=1
@@ -42,7 +53,7 @@ https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lo
 <- https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1018
 <-- https://vscode.dev/github/neel-patel-1/qatlib/blob/decomp_latency/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c#L1228
 
-create the request (when called from cpaDcCompressData) : 
+create the request (when called from cpaDcCompressData) :
 https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/common/compression/dc_datapath.c#L1871
 
 send the request: https://vscode.dev/github/neel-patel-1/qatlib/blob/qat_mwait/quickassist/lookaside/access_layer/src/common/compression/dc_datapath.c#L1915

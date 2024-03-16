@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  ***************************************************************************/
 
@@ -253,6 +253,318 @@ static CpaStatus compPerformOp(CpaInstanceHandle dcInstHandle,
     {
         /* copy source into buffer */
         memcpy(pSrcBuffer, sampleData, sizeof(sampleData));
+
+        /* Build source bufferList */
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+
+        pBufferListSrc->pBuffers = pFlatBuffer;
+        pBufferListSrc->numBuffers = 1;
+        pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+
+        pFlatBuffer->dataLenInBytes = bufferSize;
+        pFlatBuffer->pData = pSrcBuffer;
+
+        /* Build destination bufferList */
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
+
+        pBufferListDst->pBuffers = pFlatBuffer;
+        pBufferListDst->numBuffers = 1;
+        pBufferListDst->pPrivateMetaData = pBufferMetaDst;
+
+        pFlatBuffer->dataLenInBytes = dstBufferSize;
+        pFlatBuffer->pData = pDstBuffer;
+
+        /*
+         * Now, we initialize the completion variable which is used by the
+         * callback
+         * function to indicate that the operation is complete.  We then perform
+         * the
+         * operation.
+         */
+        PRINT_DBG("cpaDcCompressData2\n");
+
+        //<snippet name="perfOp">
+        COMPLETION_INIT(&complete);
+
+        status = cpaDcCompressData2(
+            dcInstHandle,
+            sessionHdl,
+            pBufferListSrc,     /* source buffer list */
+            pBufferListDst,     /* destination buffer list */
+            &opData,            /* Operational data */
+            &dcResults,         /* results structure */
+            (void *)&complete); /* data sent as is to the callback function*/
+                                //</snippet>
+
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("cpaDcCompressData2 failed. (status = %d)\n", status);
+        }
+
+        /*
+         * We now wait until the completion of the operation.  This uses a macro
+         * which can be defined differently for different OSes.
+         */
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            if (!COMPLETION_WAIT(&complete, TIMEOUT_MS))
+            {
+                PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
+                status = CPA_STATUS_FAIL;
+            }
+        }
+
+        /*
+         * We now check the results
+         */
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            if (dcResults.status != CPA_DC_OK)
+            {
+                PRINT_ERR("Results status not as expected (status = %d)\n",
+                          dcResults.status);
+                status = CPA_STATUS_FAIL;
+            }
+            else
+            {
+                PRINT_DBG("Data consumed %d\n", dcResults.consumed);
+                PRINT_DBG("Data produced %d\n", dcResults.produced);
+                PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+            }
+            /* To compare the checksum with decompressed output */
+            checksum = dcResults.checksum;
+        }
+    }
+    /*
+     * We now ensure we can decompress to the original buffer.
+     */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Dst is now the Src buffer - update the length with amount of
+           compressed data added to the buffer */
+        pBufferListDst->pBuffers->dataLenInBytes = dcResults.produced;
+
+        /* Allocate memory for new destination bufferList Dst2, we can use
+         * stateless decompression here because in this scenario we know
+         * that all transmitted data before compress was less than some
+         * max size */
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = PHYS_CONTIG_ALLOC(&pBufferMetaDst2, bufferMetaSize);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = OS_MALLOC(&pBufferListDst2, bufferListMemSize);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = PHYS_CONTIG_ALLOC(&pDst2Buffer, SAMPLE_MAX_BUFF);
+        }
+
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Build destination 2 bufferList */
+            pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst2 + 1);
+
+            pBufferListDst2->pBuffers = pFlatBuffer;
+            pBufferListDst2->numBuffers = 1;
+            pBufferListDst2->pPrivateMetaData = pBufferMetaDst2;
+
+            pFlatBuffer->dataLenInBytes = SAMPLE_MAX_BUFF;
+            pFlatBuffer->pData = pDst2Buffer;
+
+            PRINT_DBG("cpaDcDecompressData2\n");
+
+            //<snippet name="perfOpDecomp">
+            status = cpaDcDecompressData2(
+                dcInstHandle,
+                sessionHdl,
+                pBufferListDst,  /* source buffer list */
+                pBufferListDst2, /* destination buffer list */
+                &opData,
+                &dcResults, /* results structure */
+                (void
+                     *)&complete); /* data sent as is to the callback function*/
+                                   //</snippet>
+
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("cpaDcDecompressData2 failed. (status = %d)\n",
+                          status);
+            }
+
+            /*
+             * We now wait until the completion of the operation.  This uses a
+             * macro
+             * which can be defined differently for different OSes.
+             */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                if (!COMPLETION_WAIT(&complete, TIMEOUT_MS))
+                {
+                    PRINT_ERR(
+                        "timeout or interruption in cpaDcDecompressData2\n");
+                    status = CPA_STATUS_FAIL;
+                }
+            }
+
+            /*
+             * We now check the results
+             */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                if (dcResults.status != CPA_DC_OK)
+                {
+                    PRINT_ERR(
+                        "Results status not as expected decomp (status = %d)\n",
+                        dcResults.status);
+                    status = CPA_STATUS_FAIL;
+                }
+                else
+                {
+                    PRINT_DBG("Data consumed %d\n", dcResults.consumed);
+                    PRINT_DBG("Data produced %d\n", dcResults.produced);
+                    PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+                }
+
+                /* Compare with original Src buffer */
+                if (0 == memcmp(pDst2Buffer, pSrcBuffer, sizeof(sampleData)))
+                {
+                    PRINT_DBG("Output matches expected output\n");
+                }
+                else
+                {
+                    PRINT_ERR("Output does not match expected output\n");
+                    status = CPA_STATUS_FAIL;
+                }
+                if (checksum == dcResults.checksum)
+                {
+                    PRINT_DBG("Checksums match after compression and "
+                              "decompression\n");
+                }
+                else
+                {
+                    PRINT_ERR("Checksums does not match after compression and "
+                              "decompression\n");
+                    status = CPA_STATUS_FAIL;
+                }
+            }
+        }
+    }
+
+    /*
+     * At this stage, the callback function has returned, so it is
+     * sure that the structures won't be needed any more.  Free the
+     * memory!
+     */
+    PHYS_CONTIG_FREE(pSrcBuffer);
+    OS_FREE(pBufferListSrc);
+    PHYS_CONTIG_FREE(pBufferMetaSrc);
+    PHYS_CONTIG_FREE(pDstBuffer);
+    OS_FREE(pBufferListDst);
+    PHYS_CONTIG_FREE(pBufferMetaDst);
+    PHYS_CONTIG_FREE(pDst2Buffer);
+    OS_FREE(pBufferListDst2);
+    PHYS_CONTIG_FREE(pBufferMetaDst2);
+
+    COMPLETION_DESTROY(&complete);
+    return status;
+}
+
+static CpaStatus compPerformOpSrcBufArgument(CpaInstanceHandle dcInstHandle,
+                               CpaDcSessionHandle sessionHdl,
+                               CpaDcHuffType huffType,
+                               Cpa8U *pSrcBuffer,
+                               Cpa32U bufferSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa8U *pBufferMetaSrc = NULL;
+    Cpa8U *pBufferMetaDst = NULL;
+    Cpa8U *pBufferMetaDst2 = NULL;
+    Cpa32U bufferMetaSize = 0;
+    CpaBufferList *pBufferListSrc = NULL;
+    CpaBufferList *pBufferListDst = NULL;
+    CpaBufferList *pBufferListDst2 = NULL;
+    CpaFlatBuffer *pFlatBuffer = NULL;
+    CpaDcOpData opData = {};
+    Cpa32U dstBufferSize = bufferSize;
+    Cpa32U checksum = 0;
+    Cpa32U numBuffers = 1; /* only using 1 buffer in this case */
+    /* allocate memory for bufferlist and array of flat buffers in a contiguous
+     * area and carve it up to reduce number of memory allocations required. */
+    Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+    Cpa8U *pDstBuffer = NULL;
+    Cpa8U *pDst2Buffer = NULL;
+    /* The following variables are allocated on the stack because we block
+     * until the callback comes back. If a non-blocking approach was to be
+     * used then these variables should be dynamically allocated */
+    CpaDcRqResults dcResults;
+    struct COMPLETION_STRUCT complete;
+    INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+    struct timespec bufferAllocStart, bufferAllocEnd,
+        requestCreateStart, requestCreateEnd,
+        requestWaitStart, requestWaitEnd;
+
+    PRINT_DBG("cpaDcBufferListGetMetaSize\n");
+
+    /*
+     * Different implementations of the API require different
+     * amounts of space to store meta-data associated with buffer
+     * lists.  We query the API to find out how much space the current
+     * implementation needs, and then allocate space for the buffer
+     * meta data, the buffer list, and for the buffer itself.
+     */
+    //<snippet name="memAlloc">
+    status =
+        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+
+    /* Destination buffer size is set as sizeof(sampelData) for a
+     * Deflate compression operation with DC_API_VERSION < 2.5.
+     * cpaDcDeflateCompressBound API is used to get maximum output buffer size
+     * for a Deflate compression operation with DC_API_VERSION >= 2.5 */
+#if DC_API_VERSION_AT_LEAST(2, 5)
+    status = cpaDcDeflateCompressBound(
+        dcInstHandle, huffType, bufferSize, &dstBufferSize);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("cpaDcDeflateCompressBound API failed. (status = %d)\n",
+                  status);
+        return CPA_STATUS_FAIL;
+    }
+#endif
+
+    /* Allocate source buffer */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+    }
+
+    /* Allocate destination buffer the same size as source buffer */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
+    }
+    //</snippet>
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
 
         /* Build source bufferList */
         pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
