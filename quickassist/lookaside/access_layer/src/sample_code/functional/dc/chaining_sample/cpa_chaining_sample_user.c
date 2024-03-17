@@ -125,7 +125,8 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    stat = syncHWChainedOpPerf();
+    // stat = syncHWChainedOpPerf();
+    stat = syncSWChainedOpPerf();
     if (CPA_STATUS_SUCCESS != stat)
     {
         PRINT_ERR("\nLegacy DC Chaining Sample Code App failed\n");
