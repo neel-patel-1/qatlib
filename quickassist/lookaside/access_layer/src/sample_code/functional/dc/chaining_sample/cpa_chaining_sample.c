@@ -74,15 +74,19 @@
 #include "openssl/sha.h"
 #include "zlib.h"
 #include "cpa_chaining_sample_input.h"
-#include "timer.h"
 #include "icp_sal_poll.h"
 #include <time.h>
+#include <assert.h>
 
 extern int gDebugParam;
 
-struct timespec *startPollTimes;
-struct timespec *endPollTimes;
-int numPolls = 0;
+struct timespec *userDescStart;
+struct timespec *userDescEnd;
+struct timespec *userSubmitStart;
+struct timespec *userSubmitEnd;
+struct timespec *userPollStart;
+struct timespec *userPollEnd;
+
 int requestCtr = 0;
 
 #define NUM_SESSIONS_TWO (2)
@@ -219,14 +223,11 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
 //<snippet name="dcCallback">
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
-    clock_gettime( CLOCK_MONOTONIC, &endPollTimes[numPolls]);
-    PRINT_DBG("Latency seen at callback = %ld.\n", endPollTimes[numPolls].tv_nsec - startPollTimes[numPolls].tv_nsec);
     if (NULL != pCallbackTag)
     {
         /* indicate that the function has been called */
         COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
     }
-    numPolls++;
 }
 //</snippet>
 
@@ -350,6 +351,7 @@ CpaStatus syncHWChainedOpPerf(void)
     Cpa32U sess_size = 0;
     CpaDcStats dcStats = {0};
     CpaDcInstanceCapabilities cap = {0};
+    Cpa8U numSessions = NUM_SESSIONS_TWO;
     sampleDcGetInstance(&dcInstHandle);
     if (dcInstHandle == NULL)
     {
@@ -438,24 +440,140 @@ CpaStatus syncHWChainedOpPerf(void)
                                        CPA_DC_CHAIN_HASH_THEN_COMPRESS,
                                        NUM_SESSIONS_TWO,
                                        chainSessionData,
-                                       dcCallback);
+                                       NULL);
+        printf("Init Session Status: %d\n", status);
     }
     if (CPA_STATUS_SUCCESS == status)
     {
         #define CALGARY "/lib/firmware/calgary"
         char ** testBufs = NULL;
-        int inputSize = 4096;
-        char *inputBuf = (char *)malloc(inputSize);
+        int bufferSize = 4096;
+        char *inputBuf = (char *)malloc(bufferSize);
         FILE * file = fopen(CALGARY, "r");
-        assert(file > 0);
         uint64_t fileSize = fseek(file, 0, SEEK_END);
-        int32_t num_bufs = fileSize / inputSize;
-        startPollTimes = (struct timespec *)malloc(num_bufs * sizeof(struct timespec));
-        endPollTimes = (struct timespec *)malloc(num_bufs * sizeof(struct timespec));
+        fileSize = ftell(file);
+        int32_t numBuffers = fileSize / bufferSize;
+        userDescStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userDescEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userSubmitStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userSubmitEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userPollStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userPollEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
         fseek(file, 0, SEEK_SET);
-        while(fread(inputBuf, 1, inputSize, file) == inputSize){
-            printf("Performing operation\n");
+        for(int i=0; i<numBuffers; i++){
+        // while(fread(inputBuf, 1, bufferSize, file) == bufferSize){
+            printf("Buffer:%d\n", i);
+            Cpa32U bufferMetaSize = 0;
+            CpaBufferList *pBufferListSrc = NULL;
+            CpaBufferList *pBufferListDst = NULL;
+            CpaFlatBuffer *pFlatBuffer = NULL;
+            Cpa8U *pDigestBuffer = NULL;
+            CpaDcChainOpData chainOpData[2] = {{0}, {0}};
+            CpaDcOpData dcOpData = {0};
+            CpaCySymOpData cySymOpData = {0};
+            CpaDcChainRqResults chainResult = {0};
+
+            CpaDcChainOperations operation = CPA_DC_CHAIN_HASH_THEN_COMPRESS;
+            CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
+            status =
+                cpaDcBufferListGetMetaSize(dcInstHandle, 1, &bufferMetaSize);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error get meta size\n");
+                return CPA_STATUS_FAIL;
+            }
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                PRINT_DBG("Build Buffer List\n");
+                status = dcChainBuildBufferList(
+                    &pBufferListSrc, 1, bufferSize, bufferMetaSize);
+            }
+
+            /* copy source data into buffer */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+                memcpy(pFlatBuffer->pData, inputBuf, bufferSize);
+            }
+
+            /* Allocate destination buffer the four times as source buffer */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                status = dcChainBuildBufferList(
+                    &pBufferListDst, 1, 4 * bufferSize, bufferMetaSize);
+            }
+
+            /* Allocate digest result buffer to store hash value */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                status =
+                    PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
+            }
+
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                clock_gettime(CLOCK_MONOTONIC, &userDescStart[requestCtr]);
+                dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
+                dcOpData.compressAndVerify = CPA_TRUE;
+                dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
+
+                cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+                cySymOpData.hashStartSrcOffsetInBytes = 0;
+                cySymOpData.messageLenToHashInBytes = bufferSize;
+                cySymOpData.pDigestResult = pDigestBuffer;
+
+                /* Set chaining operation data */
+                chainOpData[0].opType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
+                chainOpData[0].pCySymOp = &cySymOpData;
+                chainOpData[1].opType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
+                chainOpData[1].pDcOp = &dcOpData;
+                clock_gettime(CLOCK_MONOTONIC, &userDescEnd[requestCtr]);
+
+                clock_gettime(CLOCK_MONOTONIC, &userSubmitStart[requestCtr]);
+                status = cpaDcChainPerformOp(dcInstHandle,
+                    sessionHdl,
+                    pBufferListSrc,
+                    pBufferListDst,
+                    operation,
+                    numSessions,
+                    chainOpData,
+                    &chainResult,
+                    NULL);
+                clock_gettime(CLOCK_MONOTONIC, &userSubmitEnd[requestCtr]);
+            }
+            if(status == CPA_STATUS_SUCCESS){
+                clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
+                while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
+                clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
+            }
+            printf("Request: %d\n", requestCtr);
+            uint64_t userDescPopTime =
+                userDescEnd[requestCtr].tv_sec * 1000000000
+                    + userDescEnd[requestCtr].tv_nsec
+                    - userDescStart[requestCtr].tv_sec * 1000000000
+                    - userDescStart[requestCtr].tv_nsec;
+            uint64_t userSubmitTime =
+                userSubmitEnd[requestCtr].tv_sec * 1000000000
+                    + userSubmitEnd[requestCtr].tv_nsec
+                    - userSubmitStart[requestCtr].tv_sec * 1000000000
+                    - userSubmitStart[requestCtr].tv_nsec;
+            uint64_t userPollTime =
+                userPollEnd[requestCtr].tv_sec * 1000000000
+                    + userPollEnd[requestCtr].tv_nsec
+                    - userPollStart[requestCtr].tv_sec * 1000000000
+                    - userPollStart[requestCtr].tv_nsec;
+            printf("User Desc Pop Time: %lu\n", userDescPopTime);
+            printf("User Submit Time: %lu\n", userSubmitTime);
+            printf("User Poll Time: %lu\n", userPollTime);
+            requestCtr ++;
+            PHYS_CONTIG_FREE(pDigestBuffer);
+            dcChainFreeBufferList(&pBufferListSrc);
+            dcChainFreeBufferList(&pBufferListDst);
+            // PHYS_CONTIG_FREE(pSWDigestBuffer);
+            // PHYS_CONTIG_FREE(pHWCompBuffer);
+            // PHYS_CONTIG_FREE(pDecompBuffer);
         }
+        return CPA_STATUS_SUCCESS;
     }
 }
 
@@ -556,9 +674,6 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
          */
         //<snippet name="perfOp">
         COMPLETION_INIT(&complete);
-        PRINT("Perform Op: %ld ns\n",
-                  (endPollTimes[requestCtr].tv_sec - startPollTimes[requestCtr].tv_sec) * 1000000000 +
-                      (endPollTimes[requestCtr].tv_nsec - startPollTimes[requestCtr].tv_nsec));
         status = cpaDcChainPerformOp(dcInstHandle,
                                      sessionHdl,
                                      pBufferListSrc,
@@ -569,14 +684,8 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
                                      &chainResult,
                                      (void *)&complete);
 
-        clock_gettime(CLOCK_MONOTONIC, &startPollTimes[requestCtr]);
         while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ } // busy_poll
-        clock_gettime(CLOCK_MONOTONIC, &endPollTimes[requestCtr]);
-        PRINT("Polling time: %ld ns\n",
-                  (endPollTimes[requestCtr].tv_sec - startPollTimes[requestCtr].tv_sec) * 1000000000 +
-                      (endPollTimes[requestCtr].tv_nsec - startPollTimes[requestCtr].tv_nsec));
         //</snippet>
-        requestCtr ++;
         if (CPA_STATUS_SUCCESS != status)
         {
             PRINT_ERR("cpaDcChainPerformOp failed. (status = %d)\n", status);
@@ -666,7 +775,7 @@ static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
         status = inflate_init(&stream);
         if (CPA_STATUS_SUCCESS != status)
         {
-            PRINT("zlib stream initialize failed");
+            PRINT_DBG("zlib stream initialize failed");
         }
 
         decompBufferLength = pBufferListSrc->numBuffers *
@@ -895,8 +1004,7 @@ CpaStatus dcChainSample(void)
         assert(file > 0);
         uint64_t fileSize = fseek(file, 0, SEEK_END);
         int32_t num_bufs = fileSize / inputSize;
-        startPollTimes = (struct timespec *)malloc(num_bufs * sizeof(struct timespec));
-        endPollTimes = (struct timespec *)malloc(num_bufs * sizeof(struct timespec));
+
         fseek(file, 0, SEEK_SET);
         while(fread(inputBuf, 1, inputSize, file) == inputSize){
             status = dcChainingPerformOp(dcInstHandle, sessionHdl, inputBuf, inputSize);

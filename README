@@ -1,3 +1,29 @@
+Monolithic HW Chaining Performance:
+Qs:
+VFIO_DEVICE_GET_REGION_INFO ioctl failed ?
+CPM
+SHRAM Constants table?
+Does buffer allocation happen at session initialization time?
+- How are the number of descriptors to allocate determined?
+
+Implementation of SW and HW Chaining in the QAT Library:
+Regular && Chained Operations use callback functions. The callback is invoked a single time once the entire offload has completed.
+(1) called upon completion of an asynchronous operation. 
+(2) perform postprocessing -- app logic
+
+For chained (and other) operations, descriptor preparation happens at application layer and at the library layer.
+(App Layer) The programmer specifies the types of operations in the chain and the domain-specific parameters for each operation : 
+Whether the compression function should verify that compressed data can be successfully decompressed (compressAndVerify/AndRecover), whether to recover from errors when the data can't be decompressed, the destination buffer for a hash digest.
+
+(Library Layer)
+https://vscode.dev/github/neel-patel-1/qatlib/blob/dc_chain_sample_app_breakdown/quickassist/lookaside/access_layer/src/common/compression/dc_chain.c#L1220
+At the library layer, algorithm-specific parameters are used to populate the fields of descriptors consumed by the hardware.
+\def\sym{symmetric enc/decryption\xspace}
+Different common descriptors functions are used for \dc or \sym operations. 
+Descriptors are drawn from the session at population time. \todo{does this mean they are allocated at session initialization time?}
+
+
+
 Utilization of Other Chained ops: https://vscode.dev/github/neel-patel-1/qatlib/blob/dc_chain_sample_app_breakdown/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_chaining_main.c#L1735
 
 
@@ -39,28 +65,6 @@ App-polling with no callback:
 
 Latency seen at callback:
 
-Callback functions:
-(1) called upon completion of an asynchronous operation. 
-(2) perform postprocessing -- app logic
-
-Primitives for accel-sw-chain:
-Low-latency callbacks
-
-ERROR: can't free buffer list on second call to dcChainingPerformOp
-Program received signal SIGSEGV, Segmentation fault.
-0x00007ffff7ca5449 in arena_for_chunk (ptr=0x55555556adf0) at ./malloc/arena.c:156
-610         dcChainFreeBufferList(&pBufferListDst);
-
-Why does hash+comp take ~45us vs. comp's ~9us
-- printfs?
-- hash individual
-- example: /home/n869p538/spr-accel-profiling/interrupt_qat_dc/qatlib/quickassist/lookaside/access_layer/src/sample_code/functional/sym/hash_sample/cpa_hash_sample.c
-- hash + comp individual
-- not using hw for both?
-
-https://vscode.dev/github/neel-patel-1/qatlib/blob/user_dcc_sample/quickassist/lookaside/access_layer/src/sample_code/functional/sym/hash_sample/cpa_hash_sample.c#L223
-- insert compression offload here, but perform comp on the dst of the hash
-- what operations does hash + comp perform
 
 # SYNC Chained Operation Latency
 /home/n869p538/spr-accel-profiling/interrupt_qat_dc/qatlib/quickassist/include/dc/cpa_dc_chain.h -- are all of these operations supported?

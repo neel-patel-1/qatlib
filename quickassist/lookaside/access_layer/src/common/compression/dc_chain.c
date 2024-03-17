@@ -103,7 +103,7 @@
 #include "lac_sym_hash.h"
 #include "lac_sym_alg_chain.h"
 #include "lac_sym_auth_enc.h"
-#define MAX_REQUESTS 5
+#define MAX_REQUESTS 100
 OsalTimeval submitStartTimes[MAX_REQUESTS];
 OsalTimeval submitEndTimes[MAX_REQUESTS];
 
@@ -121,8 +121,8 @@ void printRequestTimes()
         subsum += submitEndTimes[i].nsecs - submitStartTimes[i].nsecs;
         reqsum += createRequestEndTimes[i].nsecs - createRequestStartTimes[i].nsecs;
     }
-    printf("Average time to submit request: %f\n", (double)subsum/(double)requestsSubmitted);
-    printf("Average time to create request: %f\n", (double)reqsum/(double)requestsSubmitted);
+    printf("Library submit time: %f\n", (double)subsum/(double)requestsSubmitted);
+    printf("Library create request time: %f\n", (double)reqsum/(double)requestsSubmitted);
     requestsSubmitted = 0;
 }
 
@@ -1376,9 +1376,9 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
 
     osalAtomicInc(&(pSessHead->pendingChainCbCount));
     pTemp = (Cpa8U *)pSessionHandle + sizeof(dc_chain_session_head_t);
-    printf("pTemp = %p\n", pTemp);
     for (i = 0; i < numOperations; i++)
     {
+        printf("Chaining operation %d\n", i);
         osalTimeGet(&createRequestStartTimes[requestsSubmitted]);
         if (DC_CHAIN_TYPE_GET(pTemp) == CPA_DC_CHAIN_COMPRESS_DECOMPRESS)
         {
