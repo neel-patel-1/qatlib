@@ -435,11 +435,49 @@ CpaStatus validateHashAndCompressChainInSw(Cpa8U *sampleData,
 
 CpaStatus syncSWChainedOpPerf(void){
     CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U sessionCtxSize = 0;
+    CpaInstanceHandle cyInstHandle = NULL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    CpaCySymSessionSetupData cySessionData = {0};
+    CpaCySymStats64 symStats = {0};
+
+    /* Initialize crypto session data */
+    cySessionData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+    /* Hash operation on the source data */
+    cySessionData.symOperation = CPA_CY_SYM_OP_HASH;
+    cySessionData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+    cySessionData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
+    cySessionData.hashSetupData.digestResultLenInBytes =
+        GET_HASH_DIGEST_LENGTH(cySessionData.hashSetupData.hashAlgorithm);
+    /* Place the digest result in a buffer unrelated to srcBuffer */
+    cySessionData.digestIsAppended = CPA_FALSE;
+    /* Generate the digest */
+    cySessionData.verifyDigest = CPA_FALSE;
+    status = cpaCySymSessionCtxGetSize(
+        cyInstHandle, &cySessionData, &sessionCtxSize);
+    printf("SessionCtxSize: %d\n", sessionCtxSize);
+
+    sampleCyGetInstance(&cyInstHandle);
+    if (cyInstHandle == NULL)
+    {
+        return CPA_STATUS_FAIL;
+    }
+
+    PRINT_DBG("cpaCyStartInstance\n");
+    status = cpaCyStartInstance(cyInstHandle);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    }
+    return 0;
     CpaInstanceHandle dcInstHandle = NULL;
     CpaDcSessionHandle sessionHdl = NULL;
     CpaDcChainSessionSetupData chainSessionData[2] = {{0}, {0}};
     CpaDcSessionSetupData dcSessionData = {0};
-    CpaCySymSessionSetupData cySessionData = {0};
     Cpa32U sess_size = 0;
     CpaDcStats dcStats = {0};
     CpaDcInstanceCapabilities cap = {0};
