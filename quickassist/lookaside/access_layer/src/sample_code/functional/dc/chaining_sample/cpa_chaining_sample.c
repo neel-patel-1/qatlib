@@ -86,6 +86,8 @@ struct timespec *userSubmitStart;
 struct timespec *userSubmitEnd;
 struct timespec *userPollStart;
 struct timespec *userPollEnd;
+struct timespec sessionInitStart;
+struct timespec sessionInitEnd;
 
 int requestCtr = 0;
 
@@ -391,6 +393,7 @@ CpaStatus syncHWChainedOpPerf(void)
         /* Start static data compression component */
         status = cpaDcStartInstance(dcInstHandle, 0, NULL);
     }
+    clock_gettime(CLOCK_MONOTONIC, &sessionInitStart);
     if (CPA_STATUS_SUCCESS == status)
     {
         dcSessionData.compLevel = CPA_DC_L1;
@@ -421,17 +424,21 @@ CpaStatus syncHWChainedOpPerf(void)
         chainSessionData[1].sessType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
         chainSessionData[1].pDcSetupData = &dcSessionData;
 
+
         status = cpaDcChainGetSessionSize(dcInstHandle,
                                           CPA_DC_CHAIN_HASH_THEN_COMPRESS,
                                           NUM_SESSIONS_TWO,
                                           chainSessionData,
                                           &sess_size);
+
+
     }
     if (CPA_STATUS_SUCCESS == status)
     {
         /* Allocate session memory */
         status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
     }
+
     if (CPA_STATUS_SUCCESS == status)
     {
         PRINT_DBG("cpaDcChainInitSession\n");
@@ -443,6 +450,12 @@ CpaStatus syncHWChainedOpPerf(void)
                                        NULL);
         printf("Init Session Status: %d\n", status);
     }
+    clock_gettime(CLOCK_MONOTONIC, &sessionInitEnd);
+    printf("Required Session Size: %d\n", sess_size);
+    printf("Session_Init: %ld\n", sessionInitEnd.tv_sec * 1000000000 +
+            sessionInitEnd.tv_nsec -
+            sessionInitStart.tv_sec * 1000000000 -
+            sessionInitStart.tv_nsec);
     if (CPA_STATUS_SUCCESS == status)
     {
         #define CALGARY "/lib/firmware/calgary"
@@ -460,120 +473,123 @@ CpaStatus syncHWChainedOpPerf(void)
         userPollStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
         userPollEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
         fseek(file, 0, SEEK_SET);
-        for(int i=0; i<numBuffers; i++){
-        // while(fread(inputBuf, 1, bufferSize, file) == bufferSize){
-            printf("Buffer:%d\n", i);
-            Cpa32U bufferMetaSize = 0;
-            CpaBufferList *pBufferListSrc = NULL;
-            CpaBufferList *pBufferListDst = NULL;
-            CpaFlatBuffer *pFlatBuffer = NULL;
-            Cpa8U *pDigestBuffer = NULL;
-            CpaDcChainOpData chainOpData[2] = {{0}, {0}};
-            CpaDcOpData dcOpData = {0};
-            CpaCySymOpData cySymOpData = {0};
-            CpaDcChainRqResults chainResult = {0};
+        int numIter = 10;
+        for(int j=0; j<numIter; j++){
+            for(int i=0; i<numBuffers; i++){
+            // while(fread(inputBuf, 1, bufferSize, file) == bufferSize){
+                printf("Buffer:%d\n", i);
+                Cpa32U bufferMetaSize = 0;
+                CpaBufferList *pBufferListSrc = NULL;
+                CpaBufferList *pBufferListDst = NULL;
+                CpaFlatBuffer *pFlatBuffer = NULL;
+                Cpa8U *pDigestBuffer = NULL;
+                CpaDcChainOpData chainOpData[2] = {{0}, {0}};
+                CpaDcOpData dcOpData = {0};
+                CpaCySymOpData cySymOpData = {0};
+                CpaDcChainRqResults chainResult = {0};
 
-            CpaDcChainOperations operation = CPA_DC_CHAIN_HASH_THEN_COMPRESS;
-            CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
-            status =
-                cpaDcBufferListGetMetaSize(dcInstHandle, 1, &bufferMetaSize);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("Error get meta size\n");
-                return CPA_STATUS_FAIL;
-            }
-            if (CPA_STATUS_SUCCESS == status)
-            {
-                PRINT_DBG("Build Buffer List\n");
-                status = dcChainBuildBufferList(
-                    &pBufferListSrc, 1, bufferSize, bufferMetaSize);
-            }
-
-            /* copy source data into buffer */
-            if (CPA_STATUS_SUCCESS == status)
-            {
-                pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
-                memcpy(pFlatBuffer->pData, inputBuf, bufferSize);
-            }
-
-            /* Allocate destination buffer the four times as source buffer */
-            if (CPA_STATUS_SUCCESS == status)
-            {
-                status = dcChainBuildBufferList(
-                    &pBufferListDst, 1, 4 * bufferSize, bufferMetaSize);
-            }
-
-            /* Allocate digest result buffer to store hash value */
-            if (CPA_STATUS_SUCCESS == status)
-            {
+                CpaDcChainOperations operation = CPA_DC_CHAIN_HASH_THEN_COMPRESS;
+                CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
                 status =
-                    PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
+                    cpaDcBufferListGetMetaSize(dcInstHandle, 1, &bufferMetaSize);
+                if (CPA_STATUS_SUCCESS != status)
+                {
+                    PRINT_ERR("Error get meta size\n");
+                    return CPA_STATUS_FAIL;
+                }
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    PRINT_DBG("Build Buffer List\n");
+                    status = dcChainBuildBufferList(
+                        &pBufferListSrc, 1, bufferSize, bufferMetaSize);
+                }
+
+                /* copy source data into buffer */
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+                    memcpy(pFlatBuffer->pData, inputBuf, bufferSize);
+                }
+
+                /* Allocate destination buffer the four times as source buffer */
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    status = dcChainBuildBufferList(
+                        &pBufferListDst, 1, 4 * bufferSize, bufferMetaSize);
+                }
+
+                /* Allocate digest result buffer to store hash value */
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    status =
+                        PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
+                }
+
+                if (CPA_STATUS_SUCCESS == status)
+                {
+                    clock_gettime(CLOCK_MONOTONIC, &userDescStart[requestCtr]);
+                    dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
+                    dcOpData.compressAndVerify = CPA_TRUE;
+                    dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
+
+                    cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+                    cySymOpData.hashStartSrcOffsetInBytes = 0;
+                    cySymOpData.messageLenToHashInBytes = bufferSize;
+                    cySymOpData.pDigestResult = pDigestBuffer;
+
+                    /* Set chaining operation data */
+                    chainOpData[0].opType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
+                    chainOpData[0].pCySymOp = &cySymOpData;
+                    chainOpData[1].opType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
+                    chainOpData[1].pDcOp = &dcOpData;
+                    clock_gettime(CLOCK_MONOTONIC, &userDescEnd[requestCtr]);
+
+                    clock_gettime(CLOCK_MONOTONIC, &userSubmitStart[requestCtr]);
+                    status = cpaDcChainPerformOp(dcInstHandle,
+                        sessionHdl,
+                        pBufferListSrc,
+                        pBufferListDst,
+                        operation,
+                        numSessions,
+                        chainOpData,
+                        &chainResult,
+                        NULL);
+                    clock_gettime(CLOCK_MONOTONIC, &userSubmitEnd[requestCtr]);
+                }
+                if(status == CPA_STATUS_SUCCESS){
+                    clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
+                    while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
+                    clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
+                }
+                printf("Request: %d\n", requestCtr);
+                uint64_t userDescPopTime =
+                    userDescEnd[requestCtr].tv_sec * 1000000000
+                        + userDescEnd[requestCtr].tv_nsec
+                        - userDescStart[requestCtr].tv_sec * 1000000000
+                        - userDescStart[requestCtr].tv_nsec;
+                uint64_t userSubmitTime =
+                    userSubmitEnd[requestCtr].tv_sec * 1000000000
+                        + userSubmitEnd[requestCtr].tv_nsec
+                        - userSubmitStart[requestCtr].tv_sec * 1000000000
+                        - userSubmitStart[requestCtr].tv_nsec;
+                uint64_t userPollTime =
+                    userPollEnd[requestCtr].tv_sec * 1000000000
+                        + userPollEnd[requestCtr].tv_nsec
+                        - userPollStart[requestCtr].tv_sec * 1000000000
+                        - userPollStart[requestCtr].tv_nsec;
+                printf("User Desc Pop Time: %lu\n", userDescPopTime);
+                printf("User Submit Time: %lu\n", userSubmitTime);
+                printf("User Poll Time: %lu\n", userPollTime);
+                requestCtr ++;
+                PHYS_CONTIG_FREE(pDigestBuffer);
+                dcChainFreeBufferList(&pBufferListSrc);
+                dcChainFreeBufferList(&pBufferListDst);
+                // PHYS_CONTIG_FREE(pSWDigestBuffer);
+                // PHYS_CONTIG_FREE(pHWCompBuffer);
+                // PHYS_CONTIG_FREE(pDecompBuffer);
             }
-
-            if (CPA_STATUS_SUCCESS == status)
-            {
-                clock_gettime(CLOCK_MONOTONIC, &userDescStart[requestCtr]);
-                dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
-                dcOpData.compressAndVerify = CPA_TRUE;
-                dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
-
-                cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-                cySymOpData.hashStartSrcOffsetInBytes = 0;
-                cySymOpData.messageLenToHashInBytes = bufferSize;
-                cySymOpData.pDigestResult = pDigestBuffer;
-
-                /* Set chaining operation data */
-                chainOpData[0].opType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
-                chainOpData[0].pCySymOp = &cySymOpData;
-                chainOpData[1].opType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
-                chainOpData[1].pDcOp = &dcOpData;
-                clock_gettime(CLOCK_MONOTONIC, &userDescEnd[requestCtr]);
-
-                clock_gettime(CLOCK_MONOTONIC, &userSubmitStart[requestCtr]);
-                status = cpaDcChainPerformOp(dcInstHandle,
-                    sessionHdl,
-                    pBufferListSrc,
-                    pBufferListDst,
-                    operation,
-                    numSessions,
-                    chainOpData,
-                    &chainResult,
-                    NULL);
-                clock_gettime(CLOCK_MONOTONIC, &userSubmitEnd[requestCtr]);
-            }
-            if(status == CPA_STATUS_SUCCESS){
-                clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
-                while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
-                clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
-            }
-            printf("Request: %d\n", requestCtr);
-            uint64_t userDescPopTime =
-                userDescEnd[requestCtr].tv_sec * 1000000000
-                    + userDescEnd[requestCtr].tv_nsec
-                    - userDescStart[requestCtr].tv_sec * 1000000000
-                    - userDescStart[requestCtr].tv_nsec;
-            uint64_t userSubmitTime =
-                userSubmitEnd[requestCtr].tv_sec * 1000000000
-                    + userSubmitEnd[requestCtr].tv_nsec
-                    - userSubmitStart[requestCtr].tv_sec * 1000000000
-                    - userSubmitStart[requestCtr].tv_nsec;
-            uint64_t userPollTime =
-                userPollEnd[requestCtr].tv_sec * 1000000000
-                    + userPollEnd[requestCtr].tv_nsec
-                    - userPollStart[requestCtr].tv_sec * 1000000000
-                    - userPollStart[requestCtr].tv_nsec;
-            printf("User Desc Pop Time: %lu\n", userDescPopTime);
-            printf("User Submit Time: %lu\n", userSubmitTime);
-            printf("User Poll Time: %lu\n", userPollTime);
-            requestCtr ++;
-            PHYS_CONTIG_FREE(pDigestBuffer);
-            dcChainFreeBufferList(&pBufferListSrc);
-            dcChainFreeBufferList(&pBufferListDst);
-            // PHYS_CONTIG_FREE(pSWDigestBuffer);
-            // PHYS_CONTIG_FREE(pHWCompBuffer);
-            // PHYS_CONTIG_FREE(pDecompBuffer);
+            return CPA_STATUS_SUCCESS;
         }
-        return CPA_STATUS_SUCCESS;
     }
 }
 
