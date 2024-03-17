@@ -1,4 +1,5 @@
 Monolithic HW Chaining Performance:
+====
 Qs:
 VFIO_DEVICE_GET_REGION_INFO ioctl failed ?
 CPM
@@ -24,14 +25,8 @@ Descriptors are drawn from the session at population time. \todo{does this mean 
 
 
 
+----
 Utilization of Other Chained ops: https://vscode.dev/github/neel-patel-1/qatlib/blob/dc_chain_sample_app_breakdown/quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_chaining_main.c#L1735
-
-
-Obs:
-Complexity of the callback function increases polling time seen by the application
-- timestamp in the callback Function
-Hypo: 
-- response time observed in the callback function will be lowest
 
 
 Are any other requirements for establishing a sync session besides passing NULL as the cb here?: https://vscode.dev/github/neel-patel-1/qatlib/blob/dc_chain_sample_app_breakdown/quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample.c#L755
@@ -50,7 +45,8 @@ What takes place in the kernel bottom half? What is a kernel bottom half?
 does sync op require app to poll the ring to determine completion? Yes, icp_sal_DcPollInstance is required -- passing NULL just prevents a callback from being registered / called once polling completes
 
 Can we invoke another accelerator in the callback function of the prior accelerator?
-- in the callback function we: update a single field pass a pre-prepped descriptor and 
+Is this faster or slower than polling and invoking the next accelerator in the chain?
+Setup: in the callback function we: update a single field pass a pre-prepped descriptor and 
 (1) update a field in a preallocated descriptor
 (2) call CpaPerformOp
 

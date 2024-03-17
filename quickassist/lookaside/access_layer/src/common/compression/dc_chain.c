@@ -103,28 +103,28 @@
 #include "lac_sym_hash.h"
 #include "lac_sym_alg_chain.h"
 #include "lac_sym_auth_enc.h"
-#define MAX_REQUESTS 100
-OsalTimeval submitStartTimes[MAX_REQUESTS];
-OsalTimeval submitEndTimes[MAX_REQUESTS];
+// #define MAX_REQUESTS 100
+// OsalTimeval submitStartTimes[MAX_REQUESTS];
+// OsalTimeval submitEndTimes[MAX_REQUESTS];
 
-OsalTimeval createRequestStartTimes[MAX_REQUESTS];
-OsalTimeval createRequestEndTimes[MAX_REQUESTS];
+// OsalTimeval createRequestStartTimes[MAX_REQUESTS];
+// OsalTimeval createRequestEndTimes[MAX_REQUESTS];
 
-int requestsSubmitted = 0;
+// int requestsSubmitted = 0;
 
-void printRequestTimes()
-{
-    int i;
-    uint64_t subsum=0, reqsum=0;
-    for (i = 0; i < requestsSubmitted; i++)
-    {
-        subsum += submitEndTimes[i].nsecs - submitStartTimes[i].nsecs;
-        reqsum += createRequestEndTimes[i].nsecs - createRequestStartTimes[i].nsecs;
-    }
-    printf("Library submit time: %f\n", (double)subsum/(double)requestsSubmitted);
-    printf("Library create request time: %f\n", (double)reqsum/(double)requestsSubmitted);
-    requestsSubmitted = 0;
-}
+// void printRequestTimes()
+// {
+//     int i;
+//     uint64_t subsum=0, reqsum=0;
+//     for (i = 0; i < requestsSubmitted; i++)
+//     {
+//         subsum += submitEndTimes[i].nsecs - submitStartTimes[i].nsecs;
+//         reqsum += createRequestEndTimes[i].nsecs - createRequestStartTimes[i].nsecs;
+//     }
+//     printf("Library submit time: %f\n", (double)subsum/(double)requestsSubmitted);
+//     printf("Library create request time: %f\n", (double)reqsum/(double)requestsSubmitted);
+//     requestsSubmitted = 0;
+// }
 
 static const dc_chain_cmd_tbl_t dc_chain_cmd_table[] = {
     /* link0: additional=2(hash)|dir=0(rsvd)|type=1(crypto)
@@ -1379,7 +1379,7 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
     for (i = 0; i < numOperations; i++)
     {
         printf("Chaining operation %d\n", i);
-        osalTimeGet(&createRequestStartTimes[requestsSubmitted]);
+        // osalTimeGet(&createRequestStartTimes[requestsSubmitted]);
         if (DC_CHAIN_TYPE_GET(pTemp) == CPA_DC_CHAIN_COMPRESS_DECOMPRESS)
         {
             pTemp += sizeof(CpaDcChainSessionType);
@@ -1461,20 +1461,20 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
             0,
             0);
     }
-    osalTimeGet(&createRequestEndTimes[requestsSubmitted]);
+    // osalTimeGet(&createRequestEndTimes[requestsSubmitted]);
 
     /*Put message on the ring*/
-    osalTimeGet(&submitStartTimes[requestsSubmitted]);
+    // osalTimeGet(&submitStartTimes[requestsSubmitted]);
     status = SalQatMsg_transPutMsg(pDcService->trans_handle_compression_tx,
                                    (void *)&pChainCookie->request,
                                    LAC_QAT_DC_REQ_SZ_LW,
                                    LAC_LOG_MSG_DC,
                                    NULL);
-    osalTimeGet(&submitEndTimes[requestsSubmitted]);
-    requestsSubmitted++;
-    if(! (requestsSubmitted % MAX_REQUESTS) ){
-        printRequestTimes();
-    }
+    // osalTimeGet(&submitEndTimes[requestsSubmitted]);
+    // requestsSubmitted++;
+    // if(! (requestsSubmitted % MAX_REQUESTS) ){
+    //     printRequestTimes();
+    // }
     /*update stats*/
     if (CPA_STATUS_SUCCESS == status)
     {
