@@ -1,5 +1,14 @@
 Monolithic HW Chaining Performance:
 ====
+Userspace latency measurements: 
+https://github.com/intel/qatlib.git (push)
+```
+git checkout user_dcc_chain_timestamps_only
+./chaining_sample > user_times.log
+grep 'User ' user_times.log  | awk '/Desc/{DescPop+=$5;} /Poll/{Poll+=$4} /Submit/{Submit+=$4} END{printf("UserDescPop(ns):%f,UserSubmitApi:%f,UserPollTime:%f\n",DescPop/(NR/3),Submit/(NR/3),Poll/(NR/3));}'
+UserDescPop(ns):36.414880,UserSubmitApi:1222.795712,UserPollTime:10494.133670
+```
+
 Qs:
 VFIO_DEVICE_GET_REGION_INFO ioctl failed ?
 CPM
