@@ -651,8 +651,8 @@ CpaStatus syncSWChainedOpPerf(void){
                     while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
                     clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
                 }
-                if( !validateHashAndCompressChainInSw(inputBuf, bufferSize,
-                    pDigestBuffer, hashAlg, pBufferListSrc, pBufferListDst) ){
+                if( validateHashAndCompressChainInSw(inputBuf, bufferSize,
+                    pDigestBuffer, hashAlg, pBufferListSrc, pBufferListDst) != CPA_STATUS_SUCCESS ){
                     return CPA_STATUS_FAIL;
                 }
                 printf("Request: %d\n", requestCtr);
