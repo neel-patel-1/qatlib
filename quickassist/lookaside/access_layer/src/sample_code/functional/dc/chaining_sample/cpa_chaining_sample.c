@@ -477,9 +477,25 @@ CpaStatus syncSWChainedOpPerf(void){
     Cpa8U *pDigestBuffer = NULL;
     struct COMPLETION_STRUCT complete;
 
+    CpaInstanceHandle dcInstHandle = NULL;
+    CpaDcSessionHandle sessionHdl = NULL;
+    CpaDcSessionSetupData sd = {0};
+    CpaDcStats dcStats = {0};
+    CpaDcInstanceCapabilities cap = {0};
+    CpaBufferList **bufferInterArray = NULL;
+    Cpa32U buffMetaSize = 0;
+    Cpa16U numInterBuffLists = 0;
+    Cpa16U bufferNum = 0;
+
+    sampleDcGetInstance(&dcInstHandle);
     sampleCyGetInstance(&cyInstHandle);
+
+    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
+
     status = cpaCyStartInstance(cyInstHandle);
     status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+
     sampleCyStartPolling(cyInstHandle);
     sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
     sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
@@ -497,6 +513,31 @@ CpaStatus syncSWChainedOpPerf(void){
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
     status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+
+    status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+    status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                    &numInterBuffLists);
+    status = PHYS_CONTIG_ALLOC(
+                &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
+    for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+    {
+        status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                           sizeof(CpaBufferList));
+        status = PHYS_CONTIG_ALLOC(
+                    &bufferInterArray[bufferNum]->pPrivateMetaData,
+                    buffMetaSize);
+        status =
+                    PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                                      sizeof(CpaFlatBuffer));
+        status = PHYS_CONTIG_ALLOC(
+                    &bufferInterArray[bufferNum]->pBuffers->pData,
+                    2 * 4096);
+        bufferInterArray[bufferNum]->numBuffers = 1;
+                bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+                    2 * 4096;
+    }
+    status = cpaDcStartInstance(
+        dcInstHandle, numInterBuffLists, bufferInterArray);
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
