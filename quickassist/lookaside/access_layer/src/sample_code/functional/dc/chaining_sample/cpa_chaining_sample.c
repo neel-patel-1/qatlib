@@ -529,6 +529,24 @@ CpaStatus syncSWChainedOpPerf(void){
         pBufferList,       /* same src & dst for an in-place operation*/
         NULL);
     while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
+
+    Cpa8U *pSWDigestBuffer = NULL;
+    CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
+    status = PHYS_CONTIG_ALLOC(&pSWDigestBuffer,
+                                GET_HASH_DIGEST_LENGTH(CPA_CY_SYM_HASH_SHA256));
+    status = calSWDigest(pSrcBuffer,
+                        4096,
+                        pSWDigestBuffer,
+                        GET_HASH_DIGEST_LENGTH(hashAlg),
+                        hashAlg);
+
+    if (memcmp(pDigestBuffer,
+                       pSWDigestBuffer,
+                       GET_HASH_DIGEST_LENGTH(hashAlg)))
+    {
+        status = CPA_STATUS_FAIL;
+        PRINT_ERR("Digest buffer does not match expected output\n");
+    }
     PHYS_CONTIG_FREE(pSrcBuffer);
     OS_FREE(pBufferList);
     PHYS_CONTIG_FREE(pBufferMeta);
