@@ -455,6 +455,24 @@ static void symCallback(void *pCallbackTag,
     }
 }
 
+CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
+    Cpa8U* hwDigest, Cpa32U size){
+    struct z_stream_s stream = {0};
+    Cpa8U *pDecompBuffer = NULL;
+    Cpa8U *pHWCompBuffer = NULL;
+    Cpa8U *swDigestBuffer = NULL;
+
+
+    CpaStatus status;
+    status = PHYS_CONTIG_ALLOC(&swDigestBuffer, SHA256_DIGEST_LENGTH);
+    calSWDigest(orig, size,swDigestBuffer, SHA256_DIGEST_LENGTH, CPA_CY_SYM_HASH_SHA256);
+    FAIL_ON(memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0, "Digests do not match\n");
+    // status = inflate_init(&stream);
+    // status = PHYS_CONTIG_ALLOC(&pDecompBuffer, size);
+    return CPA_STATUS_SUCCESS;
+
+}
+
 
 CpaStatus syncSWChainedOpPerf(void){
     Cpa32U sessionCtxSize = 0;
@@ -616,7 +634,7 @@ CpaStatus syncSWChainedOpPerf(void){
                         pSWDigestBuffer,
                         GET_HASH_DIGEST_LENGTH(hashAlg),
                         hashAlg);
-
+    status = decompressAndVerify(pSrcBuffer, pDigestBuffer, pDigestBuffer, 4096);
     if (memcmp(pDigestBuffer,
                        pSWDigestBuffer,
                        GET_HASH_DIGEST_LENGTH(hashAlg)))
@@ -625,22 +643,23 @@ CpaStatus syncSWChainedOpPerf(void){
         PRINT_ERR("Digest buffer does not match expected output\n");
     }
 
+    /* DC Op */
     status =
         cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
     status = cpaDcDeflateCompressBound(
         dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
     status = cpaDcDeflateCompressBound(
         dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
-    printf("Buffer Size: %d\n", bufferSize);
+
     status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
     FAIL_ON_CPA_FAIL(status);
-    printf("Buffer Size: %d\n", bufferSize);
+
     status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
     FAIL_ON_CPA_FAIL(status);
-    printf("Buffer Size: %d\n", bufferSize);
+
     status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
     FAIL_ON_CPA_FAIL(status);
-    printf("Buffer Size: %d\n", bufferSize);
+
     status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
     FAIL_ON_CPA_FAIL(status);
     status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
