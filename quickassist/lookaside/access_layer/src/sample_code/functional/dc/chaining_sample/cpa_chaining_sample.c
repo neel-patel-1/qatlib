@@ -698,8 +698,6 @@ CpaStatus syncSWChainedOpPerf(void){
         pFlatBuffer->dataLenInBytes = dstBufferSize;
         pFlatBuffer->pData = pDstBuffer;
         // COMPLETION_INIT(&complete);
-
-        clock_gettime(CLOCK_MONOTONIC, &userHashPollStart[i]);
         status = cpaCySymPerformOp(
             cyInstHandle,
             NULL, /* data sent as is to the callback function*/
@@ -707,11 +705,10 @@ CpaStatus syncSWChainedOpPerf(void){
             pBufferListSrc,       /* source buffer list */
             pBufferListSrc,       /* same src & dst for an in-place operation*/
             NULL);
-
+        clock_gettime(CLOCK_MONOTONIC, &userHashPollStart[i]);
         while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
         clock_gettime(CLOCK_MONOTONIC, &userHashPollEnd[i]);
 
-        clock_gettime(CLOCK_MONOTONIC, &userDCPollStart[i]);
         status = cpaDcCompressData2(
             dcInstHandle,
             sessionHdl,
@@ -720,9 +717,8 @@ CpaStatus syncSWChainedOpPerf(void){
             &opData,            /* Operational data */
             &dcResults,         /* results structure */
             NULL);
-        while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
-        {
-        }
+        clock_gettime(CLOCK_MONOTONIC, &userDCPollStart[i]);
+        while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS){ }
         clock_gettime(CLOCK_MONOTONIC, &userDCPollEnd[i]);
         status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
         if(status != CPA_STATUS_SUCCESS){
