@@ -84,12 +84,28 @@ struct timespec *userDescStart;
 struct timespec *userDescEnd;
 struct timespec *userSubmitStart;
 struct timespec *userSubmitEnd;
+struct timespec *userSubmitHashStart;
+struct timespec *userSubmitHashEnd;
 struct timespec *userPollStart;
 struct timespec *userPollEnd;
 struct timespec sessionInitStart;
 struct timespec sessionInitEnd;
 
 int requestCtr = 0;
+
+#define CALGARY "/lib/firmware/calgary"
+#define FAIL_ON_CPA_FAIL(x)                                                             \
+    if (x != CPA_STATUS_SUCCESS)                                                                     \
+    {                                                                          \
+        PRINT_ERR("Error: %s\n", #x);                                           \
+        return CPA_STATUS_FAIL;                                                \
+    }
+#define FAIL_ON(x, msg)                                                             \
+    if (x)                                                                     \
+    {                                                                          \
+        PRINT_ERR("Error: %s\n", msg);                                          \
+    }
+
 
 #define NUM_SESSIONS_TWO (2)
 
@@ -205,6 +221,89 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
         offset += pBuffers->dataLenInBytes;
         pBuffers++;
     }
+}
+
+static void genCalgaryFlatBuffer(CpaBufferList **testBufferList,
+                                 Cpa32U numBuffers,
+                                 Cpa32U bufferSize,
+                                 Cpa32U bufferMetaSize,
+                                 Cpa64U fileOffset)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaBufferList *pBuffList = NULL;
+    CpaFlatBuffer *pFlatBuff = NULL;
+    Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+
+    status = OS_MALLOC(&pBuffList, bufferListMemSize);
+    pBuffList->numBuffers = numBuffers;
+
+    if (bufferMetaSize)
+    {
+        status =
+            PHYS_CONTIG_ALLOC(&pBuffList->pPrivateMetaData, bufferMetaSize);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("Error in allocating pBuffList->pPrivateMetaData\n");
+            OS_FREE(pBuffList);
+            return CPA_STATUS_FAIL;
+        }
+    }
+    else
+    {
+        pBuffList->pPrivateMetaData = NULL;
+    }
+    pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
+    pBuffList->pBuffers = pFlatBuff;
+
+    printf("flatBuffListSt:%lx flatBuffPtrAddr:%lx\n", (uint64_t)(pBuffList), (uint64_t)(pFlatBuff));
+
+    FILE *file = fopen(CALGARY, "r");
+    uint64_t fileSize = fseek(file, 0, SEEK_END);
+    fileSize = ftell(file);
+    if ( fseek(file, fileOffset, SEEK_SET) != 0)
+    {
+        PRINT_ERR("Error in fseek\n");
+        return CPA_STATUS_FAIL;
+    }
+    int32_t totalBuffers = fileSize / bufferSize;
+    FAIL_ON(totalBuffers < 1, "File size is too small\n")
+    FAIL_ON(numBuffers > totalBuffers , "File size is too small\n")
+
+    Cpa32U curBuff = 0;
+    Cpa8U *pMsg = NULL;
+    while (curBuff < numBuffers)
+    {
+
+        if (0 != bufferSize)
+        {
+            status = PHYS_CONTIG_ALLOC(&pMsg, bufferSize);
+            if (CPA_STATUS_SUCCESS != status || NULL == pMsg)
+            {
+                PRINT_ERR("Error in allocating pMsg\n");
+                dcChainFreeBufferList(&pBuffList);
+                return CPA_STATUS_FAIL;
+            }
+            uint64_t rdBytes=0, offset=0;
+            do{
+                rdBytes += fread(pMsg + offset, 1, bufferSize - offset, file);
+                if(rdBytes < bufferSize){
+                    rewind(file);
+                }
+                offset += rdBytes;
+            } while(offset < bufferSize);
+
+            pFlatBuff->pData = pMsg;
+        }
+        else
+        {
+            pFlatBuff->pData = NULL;
+        }
+        pFlatBuff->dataLenInBytes = bufferSize;
+        pFlatBuff++;
+        curBuff++;
+    }
+    fclose(file);
 }
 
 /*
@@ -433,12 +532,164 @@ CpaStatus validateHashAndCompressChainInSw(Cpa8U *sampleData,
     return CPA_STATUS_SUCCESS;
 }
 
+CpaStatus startHashSession(CpaCySymSessionSetupData *cySessionData)
+{
+
+    cySessionData =
+        PHYS_CONTIG_ALLOC(sizeof(CpaCySymSessionSetupData));
+    /* Initialize crypto session data */
+    cySessionData->sessionPriority = CPA_CY_PRIORITY_NORMAL;
+    /* Hash operation on the source data */
+    cySessionData->symOperation = CPA_CY_SYM_OP_HASH;
+    cySessionData->hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+    cySessionData->hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
+    cySessionData->hashSetupData.digestResultLenInBytes =
+        GET_HASH_DIGEST_LENGTH(cySessionData->hashSetupData.hashAlgorithm);
+    /* Place the digest result in a buffer unrelated to srcBuffer */
+    cySessionData->digestIsAppended = CPA_FALSE;
+    /* Generate the digest */
+    cySessionData->verifyDigest = CPA_FALSE;
+
+}
+
+CpaStatus startCompressSession(CpaDcSessionSetupData *dcSessionData)
+{
+    dcSessionData = PHYS_CONTIG_ALLOC(sizeof(CpaDcSessionSetupData));
+    dcSessionData->compLevel = CPA_DC_L1;
+    dcSessionData->compType = CPA_DC_DEFLATE;
+    dcSessionData->huffType = CPA_DC_HT_STATIC;
+    dcSessionData->autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+    dcSessionData->sessDirection = CPA_DC_DIR_COMPRESS;
+    dcSessionData->sessState = CPA_DC_STATELESS;
+    dcSessionData->checksum = CPA_DC_CRC32;
+}
+
+CpaStatus allocIntermediateDCBuffers(CpaBufferList **bufferInterArray,
+                                     Cpa16U numInterBuffLists,
+                                     Cpa32U bufferMetaSize,
+                                     Cpa32U outputBufferSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa16U bufferNum = 0;
+    for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+    {
+        status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                   sizeof(CpaBufferList));
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = PHYS_CONTIG_ALLOC(
+                &bufferInterArray[bufferNum]->pPrivateMetaData,
+                bufferMetaSize);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                                       sizeof(CpaFlatBuffer));
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Implementation requires an intermediate buffer approximately
+               twice the size of the output buffer */
+            status = PHYS_CONTIG_ALLOC(
+                &bufferInterArray[bufferNum]->pBuffers->pData, 2 * outputBufferSize);
+            bufferInterArray[bufferNum]->numBuffers = 1;
+            bufferInterArray[bufferNum]->pBuffers->dataLenInBytes = 2 * outputBufferSize;
+        }
+    }
+    return status;
+}
+
+CpaStatus syncSwHashOp(void){
+
+    Cpa32U dcCtxSize = 0;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    CpaCySymStats64 symStats = {0};
+    CpaDcRqResults dcResults;
+    CpaCySymOpData cySymOpData = {0};
+
+    CpaDcInstanceCapabilities cap = {0};
+
+    CpaInstanceHandle instHandle = NULL;
+
+    CpaDcSessionSetupData *dcSessionData = NULL;
+
+    CpaBufferList **bufferInterArray = NULL;
+    Cpa16U numInterBuffLists = 0;
+    Cpa16U bufferNum = 0;
+    Cpa32U buffMetaSize = 0;
+
+    Cpa8U *pDigestBuffer = NULL;
+
+    CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
+
+    CpaCySymSessionSetupData *cySessionData = NULL;
+    startHashSession(cySessionData);
+    status = cpaCySymSessionCtxGetSize(
+        instHandle, &cySessionData, &cyCtxSize);
+    printf("SessionCtxSize: %d\n", cyCtxSize);
+
+    status = sampleCyGetInstance(&instHandle);
+    FAIL_ON_CPA_FAIL(status);
+
+    PRINT_DBG("cpaCyStartInstance\n");
+    status = cpaCyStartInstance(instHandle);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(instHandle, sampleVirtToPhys);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Initialize the Hash session */
+        status = cpaCySymInitSession(
+            instHandle, NULL, &cySessionData, sessionCtx);
+    }
+
+
+    CpaBufferList *pBufferListSrc = NULL;
+    CpaBufferList *pBufferListDst = NULL;
+    CpaFlatBuffer *pFlatBuffer = NULL;
+    Cpa8U *inputBuffer = NULL;
+    Cpa32U bufferSize = 4096;
+
+    status = genCalgaryFlatBuffer(pBufferListSrc, 1, bufferSize, buffMetaSize, 0);
+    FAIL_ON_CPA_FAIL(status);
+    status = cpaCyBufferListGetMetaSize(instHandle, 1, &buffMetaSize);
+    FAIL_ON_CPA_FAIL(status);
+
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+    inputBuffer = (Cpa8U *)pBufferListSrc->pBuffers[0].pData;
+    memcpy(pFlatBuffer->pData, inputBuffer, bufferSize);
+    status = dcChainBuildBufferList(
+        &pBufferListDst, 1, 4 * bufferSize, buffMetaSize);
+    status = dcChainBuildBufferList(
+        &pBufferListDst, 1, 4 * bufferSize, buffMetaSize);
+    status =
+        PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
+
+    cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    cySymOpData.hashStartSrcOffsetInBytes = 0;
+    cySymOpData.messageLenToHashInBytes = bufferSize;
+    cySymOpData.pDigestResult = pDigestBuffer;
+    status = cpaCySymPerformOp(
+        instHandle,
+        NULL, /* data sent as is to the callback function*/
+        &cySymOpData,           /* operational data struct */
+        pBufferListSrc,       /* source buffer list */
+        pBufferListDst,       /* Separate buffer for pDigestResult */
+        NULL);
+}
+
 CpaStatus syncSWChainedOpPerf(void){
     CpaStatus status = CPA_STATUS_SUCCESS;
     Cpa32U cyCtxSize = 0;
     Cpa32U dcCtxSize = 0;
     CpaCySymSessionCtx sessionCtx = NULL;
     CpaCySymStats64 symStats = {0};
+    CpaDcRqResults dcResults;
 
     CpaDcInstanceCapabilities cap = {0};
 
@@ -450,6 +701,8 @@ CpaStatus syncSWChainedOpPerf(void){
     Cpa16U numInterBuffLists = 0;
     Cpa16U bufferNum = 0;
     Cpa32U buffMetaSize = 0;
+
+    Cpa8U *pDigestBuffer = NULL;
 
     /* Initialize crypto session data */
     cySessionData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
@@ -592,9 +845,91 @@ CpaStatus syncSWChainedOpPerf(void){
                                        NULL);
 
     }
-    if(CPA_STATUS_SUCCESS == status)
+    if(CPA_STATUS_SUCCESS == status) /* Perform Ops on Calgary */
     {
+        char ** testBufs = NULL;
+        int bufferSize = 4096;
+        char *inputBuf = (char *)malloc(bufferSize);
+        FILE * file = fopen(CALGARY, "r");
+        uint64_t fileSize = fseek(file, 0, SEEK_END);
+        fileSize = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        int32_t numBuffers = fileSize / bufferSize;
 
+        userDescStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userDescEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userSubmitStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userSubmitEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userPollStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userPollEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userSubmitHashStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+        userSubmitHashEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+
+        int numIter = 10;
+        for(int j=0; j<numIter; j++){
+            for(int i=0; i<numBuffers; i++){
+                Cpa32U bufferMetaSize = 0;
+                CpaBufferList *pBufferListSrc = NULL;
+                CpaBufferList *pBufferListDst = NULL;
+                CpaBufferList *pBufferList = NULL;
+                CpaFlatBuffer *pFlatBuffer = NULL;
+                Cpa8U *pDigestBuffer = NULL;
+                CpaDcOpData dcOpData = {0};
+                CpaCySymOpData cySymOpData = {0};
+                CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
+
+                status =
+                    cpaCyBufferListGetMetaSize(instHandle, numBuffers, &bufferMetaSize);
+                status = dcChainBuildBufferList(
+                        &pBufferListSrc, 1, bufferSize, bufferMetaSize);
+                FAIL_ON_CPA_FAIL(status);
+                pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+                memcpy(pFlatBuffer->pData, inputBuf, bufferSize);
+                status = dcChainBuildBufferList(
+                    &pBufferListDst, 1, 4 * bufferSize, bufferMetaSize);
+                status =
+                    PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
+                FAIL_ON_CPA_FAIL(status);
+
+                clock_gettime(CLOCK_MONOTONIC, &userDescStart[requestCtr]);
+                dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
+                dcOpData.compressAndVerify = CPA_TRUE;
+                dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
+
+                cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+                cySymOpData.hashStartSrcOffsetInBytes = 0;
+                cySymOpData.messageLenToHashInBytes = bufferSize;
+                cySymOpData.pDigestResult = pDigestBuffer;
+                clock_gettime(CLOCK_MONOTONIC, &userDescEnd[requestCtr]);
+
+                clock_gettime(CLOCK_MONOTONIC, &userSubmitHashStart[requestCtr]);
+                status = cpaCySymPerformOp(
+                    instHandle,
+                    NULL, /* data sent as is to the callback function*/
+                    &cySymOpData,           /* operational data struct */
+                    pBufferListSrc,       /* source buffer list */
+                    pBufferListDst,       /* Separate buffer for pDigestResult */
+                    NULL);
+
+                status = cpaDcCompressData2(
+                    instHandle,
+                    dcSessionHdl,
+                    pBufferListSrc,     /* source buffer list */
+                    pBufferListDst,     /* destination buffer list */
+                    &dcOpData,            /* Operational data */
+                    &dcResults,         /* results structure */
+                    NULL); /* data sent as is to the callback function*/
+                                        //</snippet>
+                FAIL_ON_CPA_FAIL(status);
+                clock_gettime(CLOCK_MONOTONIC, &userSubmitHashEnd[requestCtr]);
+
+                clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
+                // while (icp_sal_CyPollInstance(instHandle, 1) != CPA_STATUS_SUCCESS) {}
+                clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
+
+
+            }
+        }
     }
 
     return 0;

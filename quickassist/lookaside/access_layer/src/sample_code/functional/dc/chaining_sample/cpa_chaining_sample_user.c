@@ -83,6 +83,8 @@ int useXstorExtensions = 0;
 
 extern CpaStatus dcChainSample(void);
 extern CpaStatus syncHWChainedOpPerf(void);
+extern CpaStatus syncSWChainedOpPerf(void);
+extern CpaStatus syncSwHashOp(void);
 
 int main(int argc, const char **argv)
 {
@@ -126,7 +128,8 @@ int main(int argc, const char **argv)
 
     /* Legacy DC Chaining Sample Code */
     // stat = syncHWChainedOpPerf();
-    stat = syncSWChainedOpPerf();
+    // stat = syncSWChainedOpPerf();
+    stat = syncSwHashOp();
     if (CPA_STATUS_SUCCESS != stat)
     {
         PRINT_ERR("\nLegacy DC Chaining Sample Code App failed\n");
