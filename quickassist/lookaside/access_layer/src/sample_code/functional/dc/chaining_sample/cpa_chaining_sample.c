@@ -702,6 +702,10 @@ CpaStatus syncSWChainedOpPerf(void){
     {
     }
     status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
+    if(status != CPA_STATUS_SUCCESS){
+        PRINT_ERR("Operation failed\n");
+        exit(-1);
+    }
     // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
 
 
