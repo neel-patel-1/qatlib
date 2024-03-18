@@ -467,8 +467,11 @@ CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     status = PHYS_CONTIG_ALLOC(&swDigestBuffer, SHA256_DIGEST_LENGTH);
     calSWDigest(orig, size,swDigestBuffer, SHA256_DIGEST_LENGTH, CPA_CY_SYM_HASH_SHA256);
     FAIL_ON(memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0, "Digests do not match\n");
-    // status = inflate_init(&stream);
-    // status = PHYS_CONTIG_ALLOC(&pDecompBuffer, size);
+
+    status = inflate_init(&stream);
+    status = PHYS_CONTIG_ALLOC(&pDecompBuffer, size);
+    inflate_decompress(&stream, hwCompBuf, size, pDecompBuffer, size);
+    FAIL_ON(memcmp(orig, pDecompBuffer, size)!=0, "Decompressed data does not match original\n");
     return CPA_STATUS_SUCCESS;
 
 }
@@ -516,6 +519,9 @@ CpaStatus syncSWChainedOpPerf(void){
     CpaDcOpData opData = {};
     CpaDcRqResults dcResults;
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+
+    struct timespec hashSessionInit, dcSessionInit;
+    struct timespec *userHashSubmit, *userDCSubmit, *userHashPoll, *userDCPoll;
 
     sampleDcGetInstance(&dcInstHandle);
     sampleCyGetInstance(&cyInstHandle);
@@ -623,7 +629,10 @@ CpaStatus syncSWChainedOpPerf(void){
         pBufferList,       /* source buffer list */
         pBufferList,       /* same src & dst for an in-place operation*/
         NULL);
+
+    // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
     while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
+    // clock_gettime(CLOCK_MONOTONIC, &userPollEnd);
 
     Cpa8U *pSWDigestBuffer = NULL;
     CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
@@ -634,7 +643,6 @@ CpaStatus syncSWChainedOpPerf(void){
                         pSWDigestBuffer,
                         GET_HASH_DIGEST_LENGTH(hashAlg),
                         hashAlg);
-    status = decompressAndVerify(pSrcBuffer, pDigestBuffer, pDigestBuffer, 4096);
     if (memcmp(pDigestBuffer,
                        pSWDigestBuffer,
                        GET_HASH_DIGEST_LENGTH(hashAlg)))
@@ -689,9 +697,13 @@ CpaStatus syncSWChainedOpPerf(void){
         &opData,            /* Operational data */
         &dcResults,         /* results structure */
         (void *)&complete);
+    // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
     while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
     {
     }
+    status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
+    // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
+
 
     PHYS_CONTIG_FREE(pSrcBuffer);
     OS_FREE(pBufferList);
