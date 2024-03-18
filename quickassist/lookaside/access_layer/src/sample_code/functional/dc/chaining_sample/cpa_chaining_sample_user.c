@@ -127,8 +127,8 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    // stat = syncHWChainedOpPerf();
-    stat = syncSWChainedOpPerf();
+    stat = syncHWChainedOpPerf();
+    // stat = syncSWChainedOpPerf();
     // stat = syncSwHashOp();
     if (CPA_STATUS_SUCCESS != stat)
     {

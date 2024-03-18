@@ -466,12 +466,19 @@ CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     CpaStatus status;
     status = PHYS_CONTIG_ALLOC(&swDigestBuffer, SHA256_DIGEST_LENGTH);
     calSWDigest(orig, size,swDigestBuffer, SHA256_DIGEST_LENGTH, CPA_CY_SYM_HASH_SHA256);
-    FAIL_ON(memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0, "Digests do not match\n");
+    if (memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0){
+        PRINT_ERR("Decompressed data does not match original\n");
+        return CPA_STATUS_FAIL;
+
+    }
 
     status = inflate_init(&stream);
     status = PHYS_CONTIG_ALLOC(&pDecompBuffer, size);
     inflate_decompress(&stream, hwCompBuf, size, pDecompBuffer, size);
-    FAIL_ON(memcmp(orig, pDecompBuffer, size)!=0, "Decompressed data does not match original\n");
+    if (memcmp(orig, pDecompBuffer, size)!=0){
+        PRINT_ERR("Decompressed data does not match original\n");
+        return CPA_STATUS_FAIL;
+    }
     return CPA_STATUS_SUCCESS;
 
 }
@@ -520,8 +527,10 @@ CpaStatus syncSWChainedOpPerf(void){
     CpaDcRqResults dcResults;
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
-    struct timespec hashSessionInitStart, hashSessionInitEnd, dcSessionInitStart, dcSessionInitEnd;
-    struct timespec *userHashSubmit, *userDCSubmit, *userHashPoll, *userDCPoll;
+    struct timespec hashSessionInitStart, hashSessionInitEnd,
+        dcSessionInitStart, dcSessionInitEnd;
+    struct timespec *userHashPollStart, *userHashPollEnd,
+        *userDCPollStart, *userDCPollEnd;
 
     sampleDcGetInstance(&dcInstHandle);
     sampleCyGetInstance(&cyInstHandle);
@@ -544,7 +553,7 @@ CpaStatus syncSWChainedOpPerf(void){
         cyInstHandle, &sessionSetupData, &sessionCtxSize);
     status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
     status = cpaCySymInitSession(
-        cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
+        cyInstHandle, NULL, &sessionSetupData, sessionCtx);
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
@@ -604,7 +613,6 @@ CpaStatus syncSWChainedOpPerf(void){
     status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
     status = OS_MALLOC(&pBufferList, bufferListMemSize);
     status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
-    // memcpy(pSrcBuffer, vectorData, sizeof(vectorData));
     pDigestBuffer = pSrcBuffer + 4096;
     pFlatBuffer = (CpaFlatBuffer *)(pBufferList + 1);
 
@@ -614,7 +622,8 @@ CpaStatus syncSWChainedOpPerf(void){
 
     pFlatBuffer->dataLenInBytes = bufferSize;
     pFlatBuffer->pData = pSrcBuffer;
-    printf("Buffer Size: %d\n", bufferSize);
+
+    /* Hash Op Data */
     status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
     pOpData->sessionCtx = sessionCtx;
     pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
@@ -622,34 +631,9 @@ CpaStatus syncSWChainedOpPerf(void){
     pOpData->messageLenToHashInBytes = 4096;
     pOpData->pDigestResult = pDigestBuffer;
     COMPLETION_INIT((&complete));
-    status = cpaCySymPerformOp(
-        cyInstHandle,
-        (void *)&complete, /* data sent as is to the callback function*/
-        pOpData,           /* operational data struct */
-        pBufferList,       /* source buffer list */
-        pBufferList,       /* same src & dst for an in-place operation*/
-        NULL);
 
-    // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
-    while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
-    // clock_gettime(CLOCK_MONOTONIC, &userPollEnd);
 
-    Cpa8U *pSWDigestBuffer = NULL;
-    CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
-    status = PHYS_CONTIG_ALLOC(&pSWDigestBuffer,
-                                GET_HASH_DIGEST_LENGTH(CPA_CY_SYM_HASH_SHA256));
-    status = calSWDigest(pSrcBuffer,
-                        4096,
-                        pSWDigestBuffer,
-                        GET_HASH_DIGEST_LENGTH(hashAlg),
-                        hashAlg);
-    if (memcmp(pDigestBuffer,
-                       pSWDigestBuffer,
-                       GET_HASH_DIGEST_LENGTH(hashAlg)))
-    {
-        status = CPA_STATUS_FAIL;
-        PRINT_ERR("Digest buffer does not match expected output\n");
-    }
+
 
     /* DC Op */
     status =
@@ -681,8 +665,14 @@ CpaStatus syncSWChainedOpPerf(void){
     fseek(file, 0, SEEK_SET);
     int numIter = fileSize / 4096;
 
+    userDCPollStart = (struct timespec *)malloc(numIter * sizeof(struct timespec));
+    userDCPollEnd = (struct timespec *)malloc(numIter * sizeof(struct timespec));
+    userHashPollStart = (struct timespec *)malloc(numIter * sizeof(struct timespec));
+    userHashPollEnd = (struct timespec *)malloc(numIter * sizeof(struct timespec));
 
+    printf("Num Iterations: %d\n", numIter);
     for (int i=0; i<numIter; i++){
+
         FAIL_ON(fread(pSrcBuffer, 1, 4096, file) != 4096, "Error in reading file\n");
         pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
         pBufferListSrc->pBuffers = pFlatBuffer;
@@ -696,8 +686,21 @@ CpaStatus syncSWChainedOpPerf(void){
         pBufferListDst->pPrivateMetaData = pBufferMetaDst;
         pFlatBuffer->dataLenInBytes = dstBufferSize;
         pFlatBuffer->pData = pDstBuffer;
-        COMPLETION_INIT(&complete);
+        // COMPLETION_INIT(&complete);
 
+        clock_gettime(CLOCK_MONOTONIC, &userHashPollStart[i]);
+        status = cpaCySymPerformOp(
+            cyInstHandle,
+            NULL, /* data sent as is to the callback function*/
+            pOpData,           /* operational data struct */
+            pBufferListSrc,       /* source buffer list */
+            pBufferListSrc,       /* same src & dst for an in-place operation*/
+            NULL);
+
+        // while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
+        clock_gettime(CLOCK_MONOTONIC, &userHashPollEnd[i]);
+
+        clock_gettime(CLOCK_MONOTONIC, &userDCPollStart[i]);
         status = cpaDcCompressData2(
             dcInstHandle,
             sessionHdl,
@@ -706,17 +709,25 @@ CpaStatus syncSWChainedOpPerf(void){
             &opData,            /* Operational data */
             &dcResults,         /* results structure */
             NULL);
-        // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
-        while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
-        {
-        }
+        // while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
+        // {
+        // }
+        clock_gettime(CLOCK_MONOTONIC, &userDCPollEnd[i]);
         status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
         if(status != CPA_STATUS_SUCCESS){
             PRINT_ERR("Operation failed\n");
             exit(-1);
         }
+        printf("Iteration: %d\n", i);
+        printf("Hash Poll: %ld\n", userHashPollEnd[i].tv_sec * 1000000000 +
+                userHashPollEnd[i].tv_nsec -
+                userHashPollStart[i].tv_sec * 1000000000 -
+                userHashPollStart[i].tv_nsec);
+        printf("DC Poll: %ld\n", userDCPollEnd[i].tv_sec * 1000000000 +
+                userDCPollEnd[i].tv_nsec -
+                userDCPollStart[i].tv_sec * 1000000000 -
+                userDCPollStart[i].tv_nsec);
     }
-    // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
 
 
     PHYS_CONTIG_FREE(pSrcBuffer);
@@ -945,6 +956,13 @@ CpaStatus syncHWChainedOpPerf(void)
                     clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
                     while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
                     clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
+                }
+                status = decompressAndVerify(inputBuf,
+                    pBufferListDst->pBuffers->pData,
+                     pDigestBuffer, 4096);
+                if(status != CPA_STATUS_SUCCESS){
+                    PRINT_ERR("Operation failed\n");
+                    exit(-1);
                 }
                 printf("Request: %d\n", requestCtr);
                 uint64_t userDescPopTime =
