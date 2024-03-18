@@ -77,6 +77,7 @@
 #include "icp_sal_poll.h"
 #include <time.h>
 #include <assert.h>
+#include <stdbool.h>
 
 extern int gDebugParam;
 
@@ -322,11 +323,11 @@ CpaStatus genCalgaryFlatBuffer(CpaBufferList **testBufferList,
 //<snippet name="dcCallback">
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
-    if (NULL != pCallbackTag)
-    {
-        /* indicate that the function has been called */
-        COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    }
+    // if (NULL != pCallbackTag)
+    // {
+    //     /* indicate that the function has been called */
+    //     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
+    // }
 }
 //</snippet>
 
@@ -601,12 +602,22 @@ CpaStatus syncSWChainedOpPerf(void){
     printf("Session Size: %d\n", sess_size);
     FAIL_ON_CPA_FAIL(status);
     status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
-    status = cpaDcInitSession(
+    bool do_sync = false;
+    if(do_sync){
+        status = cpaDcInitSession(
             dcInstHandle,
             sessionHdl, /* session memory */
             &sd,        /* session setup data */
             NULL, /* pContexBuffer not required for stateless operations */
             NULL); /* callback function */
+    } else {
+        status = cpaDcInitSession(
+            dcInstHandle,
+            sessionHdl, /* session memory */
+            &sd,        /* session setup data */
+            NULL, /* pContexBuffer not required for stateless operations */
+            dcCallback); /* callback function */
+    }
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
@@ -709,9 +720,9 @@ CpaStatus syncSWChainedOpPerf(void){
             &opData,            /* Operational data */
             &dcResults,         /* results structure */
             NULL);
-        // while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
-        // {
-        // }
+        while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
+        {
+        }
         clock_gettime(CLOCK_MONOTONIC, &userDCPollEnd[i]);
         status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
         if(status != CPA_STATUS_SUCCESS){

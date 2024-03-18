@@ -64,9 +64,9 @@
  ******************************************************************************
  * @file  cpa_chaining_sample_user.c
  * argv[1], 1 = Enable 0 = Disable -> gDebugParam
- * argv[2], 1 = Enable 0 = Disable -> useHardCodedCrc
+ * argv[2], 1 = Enable 0 = Disable -> useSw
  * argv[3], 1 = Enable 0 = Disable -> useXstorExtensions
- * By default gDebugParam and useHardCodedCrc are enabled.
+ * By default gDebugParam and useSw are enabled.
  * By default useXstorExtensions is disabled.
  * Example to run, ./chaining_sample 1 0 0
  *****************************************************************************/
@@ -78,7 +78,7 @@
 #include "icp_sal_user.h"
 
 int gDebugParam = 1;
-int useHardCodedCrc = 1;
+int useSw = 1;
 int useXstorExtensions = 0;
 
 extern CpaStatus dcChainSample(void);
@@ -99,14 +99,9 @@ int main(int argc, const char **argv)
         else if (argc == 3)
         {
             gDebugParam = atoi(argv[1]);
-            useHardCodedCrc = atoi(argv[2]);
+            useSw = atoi(argv[2]);
         }
-        else if (argc == 4)
-        {
-            gDebugParam = atoi(argv[1]);
-            useHardCodedCrc = atoi(argv[2]);
-            useXstorExtensions = atoi(argv[3]);
-        }
+
     }
 
     PRINT_DBG("Starting Chaining Sample Code App ...\n");
@@ -127,8 +122,10 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    stat = syncHWChainedOpPerf();
-    // stat = syncSWChainedOpPerf();
+    if( useSw )
+        stat = syncSWChainedOpPerf();
+    else
+        stat = syncHWChainedOpPerf();
     // stat = syncSwHashOp();
     if (CPA_STATUS_SUCCESS != stat)
     {
