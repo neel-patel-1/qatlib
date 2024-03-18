@@ -520,7 +520,7 @@ CpaStatus syncSWChainedOpPerf(void){
     CpaDcRqResults dcResults;
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
-    struct timespec hashSessionInit, dcSessionInit;
+    struct timespec hashSessionInitStart, hashSessionInitEnd, dcSessionInitStart, dcSessionInitEnd;
     struct timespec *userHashSubmit, *userDCSubmit, *userHashPoll, *userDCPoll;
 
     sampleDcGetInstance(&dcInstHandle);
@@ -532,7 +532,7 @@ CpaStatus syncSWChainedOpPerf(void){
     status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
     status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
 
-    sampleCyStartPolling(cyInstHandle);
+    // sampleCyStartPolling(cyInstHandle);
     sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
     sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
     sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
@@ -579,7 +579,7 @@ CpaStatus syncSWChainedOpPerf(void){
     }
     status = cpaDcStartInstance(
         dcInstHandle, numInterBuffLists, bufferInterArray);
-    sampleDcStartPolling(dcInstHandle);
+    // sampleDcStartPolling(dcInstHandle);
     sd.compLevel = CPA_DC_L1;
     sd.compType = CPA_DC_DEFLATE;
     sd.huffType = CPA_DC_HT_STATIC;
@@ -597,7 +597,7 @@ CpaStatus syncSWChainedOpPerf(void){
             sessionHdl, /* session memory */
             &sd,        /* session setup data */
             NULL, /* pContexBuffer not required for stateless operations */
-            dcCallback); /* callback function */
+            NULL); /* callback function */
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
@@ -675,36 +675,46 @@ CpaStatus syncSWChainedOpPerf(void){
     status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
     FAIL_ON_CPA_FAIL(status);
     // memcpy(pSrcBuffer, sampleData, buffserSize);
-    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
-    pBufferListSrc->pBuffers = pFlatBuffer;
-    pBufferListSrc->numBuffers = 1;
-    pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
-    pFlatBuffer->dataLenInBytes = bufferSize;
-    pFlatBuffer->pData = pSrcBuffer;
-    pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
-    pBufferListDst->pBuffers = pFlatBuffer;
-    pBufferListDst->numBuffers = 1;
-    pBufferListDst->pPrivateMetaData = pBufferMetaDst;
-    pFlatBuffer->dataLenInBytes = dstBufferSize;
-    pFlatBuffer->pData = pDstBuffer;
-    COMPLETION_INIT(&complete);
+    FILE *file = fopen(CALGARY, "r");
+    fseek(file, 0, SEEK_END);
+    uint64_t fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    int numIter = fileSize / 4096;
 
-    status = cpaDcCompressData2(
-        dcInstHandle,
-        sessionHdl,
-        pBufferListSrc,     /* source buffer list */
-        pBufferListDst,     /* destination buffer list */
-        &opData,            /* Operational data */
-        &dcResults,         /* results structure */
-        (void *)&complete);
-    // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
-    while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
-    {
-    }
-    status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
-    if(status != CPA_STATUS_SUCCESS){
-        PRINT_ERR("Operation failed\n");
-        exit(-1);
+
+    for (int i=0; i<numIter; i++){
+        FAIL_ON(fread(pSrcBuffer, 1, 4096, file) != 4096, "Error in reading file\n");
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+        pBufferListSrc->pBuffers = pFlatBuffer;
+        pBufferListSrc->numBuffers = 1;
+        pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+        pFlatBuffer->dataLenInBytes = bufferSize;
+        pFlatBuffer->pData = pSrcBuffer;
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
+        pBufferListDst->pBuffers = pFlatBuffer;
+        pBufferListDst->numBuffers = 1;
+        pBufferListDst->pPrivateMetaData = pBufferMetaDst;
+        pFlatBuffer->dataLenInBytes = dstBufferSize;
+        pFlatBuffer->pData = pDstBuffer;
+        COMPLETION_INIT(&complete);
+
+        status = cpaDcCompressData2(
+            dcInstHandle,
+            sessionHdl,
+            pBufferListSrc,     /* source buffer list */
+            pBufferListDst,     /* destination buffer list */
+            &opData,            /* Operational data */
+            &dcResults,         /* results structure */
+            NULL);
+        // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
+        while (icp_sal_DcPollInstance(dcInstHandle, 1) != CPA_STATUS_SUCCESS)
+        {
+        }
+        status = decompressAndVerify(pSrcBuffer, pDstBuffer, pDigestBuffer, 4096);
+        if(status != CPA_STATUS_SUCCESS){
+            PRINT_ERR("Operation failed\n");
+            exit(-1);
+        }
     }
     // clock_gettime(CLOCK_MONOTONIC, &userPollStart);
 
