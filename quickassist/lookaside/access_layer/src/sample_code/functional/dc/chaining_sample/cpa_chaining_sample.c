@@ -447,13 +447,13 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    PRINT_DBG("Callback called with status = %d.\n", status);
+    // PRINT_DBG("Callback called with status = %d.\n", status);
 
-    if (NULL != pCallbackTag)
-    {
-        /** indicate that the function has been called*/
-        COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    }
+    // if (NULL != pCallbackTag)
+    // {
+    //     /** indicate that the function has been called*/
+    //     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
+    // }
 }
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
@@ -554,7 +554,7 @@ CpaStatus syncSWChainedOpPerf(void){
         cyInstHandle, &sessionSetupData, &sessionCtxSize);
     status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
     status = cpaCySymInitSession(
-        cyInstHandle, NULL, &sessionSetupData, sessionCtx);
+        cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
@@ -708,7 +708,7 @@ CpaStatus syncSWChainedOpPerf(void){
             pBufferListSrc,       /* same src & dst for an in-place operation*/
             NULL);
 
-        // while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
+        while(icp_sal_CyPollInstance(cyInstHandle, 1) != CPA_STATUS_SUCCESS){}
         clock_gettime(CLOCK_MONOTONIC, &userHashPollEnd[i]);
 
         clock_gettime(CLOCK_MONOTONIC, &userDCPollStart[i]);
