@@ -486,6 +486,8 @@ CpaStatus syncSWChainedOpPerf(void){
     Cpa32U buffMetaSize = 0;
     Cpa16U numInterBuffLists = 0;
     Cpa16U bufferNum = 0;
+    Cpa32U sess_size = 0;
+    Cpa32U ctx_size = 0;
 
     sampleDcGetInstance(&dcInstHandle);
     sampleCyGetInstance(&cyInstHandle);
@@ -538,6 +540,22 @@ CpaStatus syncSWChainedOpPerf(void){
     }
     status = cpaDcStartInstance(
         dcInstHandle, numInterBuffLists, bufferInterArray);
+    sampleDcStartPolling(dcInstHandle);
+    sd.compLevel = CPA_DC_L1;
+    sd.compType = CPA_DC_DEFLATE;
+    sd.huffType = CPA_DC_HT_STATIC;
+    sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+    sd.sessDirection = CPA_DC_DIR_COMPRESS;
+    sd.sessState = CPA_DC_STATELESS;
+    sd.checksum = CPA_DC_CRC32;
+    status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+    status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+    status = cpaDcInitSession(
+            dcInstHandle,
+            sessionHdl, /* session memory */
+            &sd,        /* session setup data */
+            NULL, /* pContexBuffer not required for stateless operations */
+            dcCallback); /* callback function */
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
