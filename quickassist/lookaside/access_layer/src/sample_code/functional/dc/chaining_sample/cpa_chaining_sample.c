@@ -769,260 +769,262 @@ CpaStatus syncSWChainedOpPerf(void){
 
 CpaStatus syncHWChainedOpPerf(void)
 {
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaInstanceHandle dcInstHandle = NULL;
-    CpaDcSessionHandle sessionHdl = NULL;
-    CpaDcChainSessionSetupData chainSessionData[2] = {{0}, {0}};
-    CpaDcSessionSetupData dcSessionData = {0};
-    CpaCySymSessionSetupData cySessionData = {0};
-    Cpa32U sess_size = 0;
-    CpaDcStats dcStats = {0};
-    CpaDcInstanceCapabilities cap = {0};
-    Cpa8U numSessions = NUM_SESSIONS_TWO;
-    sampleDcGetInstance(&dcInstHandle);
-    if (dcInstHandle == NULL)
+    for(int BUF_SIZE=2*1024*1024; BUF_SIZE>=1024; BUF_SIZE/=2)
     {
-        PRINT_ERR("Get instance failed\n");
-        return CPA_STATUS_FAIL;
-    }
-    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
-    if (status != CPA_STATUS_SUCCESS)
-    {
-        PRINT_ERR("Query capabilities failed\n");
-        return status;
-    }
-    if (CPA_FALSE == CPA_BITMAP_BIT_TEST(cap.dcChainCapInfo,
-                                         CPA_DC_CHAIN_HASH_THEN_COMPRESS))
-    {
-        PRINT_ERR(
-            "Hash + compress chained operation is not supported on logical "
-            "instance.\n");
-        PRINT_ERR("Please ensure Chaining related settings are enabled in the "
-                  "device configuration "
-                  "file.\n");
-        return CPA_STATUS_FAIL;
-    }
-    if (!cap.statelessDeflateCompression || !cap.checksumCRC32 ||
-        !cap.checksumAdler32)
-    {
-        PRINT_ERR("Error: Unsupported functionality\n");
-        return CPA_STATUS_FAIL;
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Set the address translation function for the instance */
-        status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Start static data compression component */
-        status = cpaDcStartInstance(dcInstHandle, 0, NULL);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &sessionInitStart);
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        dcSessionData.compLevel = CPA_DC_L1;
-        dcSessionData.compType = CPA_DC_DEFLATE;
-        dcSessionData.huffType = CPA_DC_HT_STATIC;
-        dcSessionData.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
-        dcSessionData.sessDirection = CPA_DC_DIR_COMPRESS;
-        dcSessionData.sessState = CPA_DC_STATELESS;
-        dcSessionData.checksum = CPA_DC_CRC32;
-
-        /* Initialize crypto session data */
-        cySessionData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-        /* Hash operation on the source data */
-        cySessionData.symOperation = CPA_CY_SYM_OP_HASH;
-        cySessionData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
-        cySessionData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
-        cySessionData.hashSetupData.digestResultLenInBytes =
-            GET_HASH_DIGEST_LENGTH(cySessionData.hashSetupData.hashAlgorithm);
-        /* Place the digest result in a buffer unrelated to srcBuffer */
-        cySessionData.digestIsAppended = CPA_FALSE;
-        /* Generate the digest */
-        cySessionData.verifyDigest = CPA_FALSE;
-
-        /* Initialize chaining session data - hash + compression
-         * chain operation */
-        chainSessionData[0].sessType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
-        chainSessionData[0].pCySetupData = &cySessionData;
-        chainSessionData[1].sessType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
-        chainSessionData[1].pDcSetupData = &dcSessionData;
-
-
-        status = cpaDcChainGetSessionSize(dcInstHandle,
-                                          CPA_DC_CHAIN_HASH_THEN_COMPRESS,
-                                          NUM_SESSIONS_TWO,
-                                          chainSessionData,
-                                          &sess_size);
-
-
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Allocate session memory */
-        status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        PRINT_DBG("cpaDcChainInitSession\n");
-        status = cpaDcChainInitSession(dcInstHandle,
-                                       sessionHdl,
-                                       CPA_DC_CHAIN_HASH_THEN_COMPRESS,
-                                       NUM_SESSIONS_TWO,
-                                       chainSessionData,
-                                       NULL);
-        printf("Init Session Status: %d\n", status);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &sessionInitEnd);
-    printf("Required Session Size: %d\n", sess_size);
-    printf("Session_Init: %ld\n", sessionInitEnd.tv_sec * 1000000000 +
-            sessionInitEnd.tv_nsec -
-            sessionInitStart.tv_sec * 1000000000 -
-            sessionInitStart.tv_nsec);
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        #define CALGARY "/lib/firmware/calgary"
-        char ** testBufs = NULL;
-        int bufferSize = 4096;
-        char *inputBuf = (char *)malloc(bufferSize);
-        FILE * file = fopen(CALGARY, "r");
-        uint64_t fileSize = fseek(file, 0, SEEK_END);
-        fileSize = ftell(file);
-        int32_t numBuffers = fileSize / bufferSize;
-        userDescStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
-        userDescEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
-        userSubmitStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
-        userSubmitEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
-        userPollStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
-        userPollEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
-        fseek(file, 0, SEEK_SET);
-        int numIter = 10;
-        for(int j=0; j<numIter; j++){
-            for(int i=0; i<numBuffers; i++){
-            // while(fread(inputBuf, 1, bufferSize, file) == bufferSize){
-                printf("Buffer:%d\n", i);
-                Cpa32U bufferMetaSize = 0;
-                CpaBufferList *pBufferListSrc = NULL;
-                CpaBufferList *pBufferListDst = NULL;
-                CpaFlatBuffer *pFlatBuffer = NULL;
-                Cpa8U *pDigestBuffer = NULL;
-                CpaDcChainOpData chainOpData[2] = {{0}, {0}};
-                CpaDcOpData dcOpData = {0};
-                CpaCySymOpData cySymOpData = {0};
-                CpaDcChainRqResults chainResult = {0};
-
-                CpaDcChainOperations operation = CPA_DC_CHAIN_HASH_THEN_COMPRESS;
-                CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
-                status =
-                    cpaDcBufferListGetMetaSize(dcInstHandle, 1, &bufferMetaSize);
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Error get meta size\n");
-                    return CPA_STATUS_FAIL;
-                }
-                if (CPA_STATUS_SUCCESS == status)
-                {
-                    PRINT_DBG("Build Buffer List\n");
-                    status = dcChainBuildBufferList(
-                        &pBufferListSrc, 1, bufferSize, bufferMetaSize);
-                }
-
-                /* copy source data into buffer */
-                if (CPA_STATUS_SUCCESS == status)
-                {
-                    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
-                    memcpy(pFlatBuffer->pData, inputBuf, bufferSize);
-                }
-
-                /* Allocate destination buffer the four times as source buffer */
-                if (CPA_STATUS_SUCCESS == status)
-                {
-                    status = dcChainBuildBufferList(
-                        &pBufferListDst, 1, 4 * bufferSize, bufferMetaSize);
-                }
-
-                /* Allocate digest result buffer to store hash value */
-                if (CPA_STATUS_SUCCESS == status)
-                {
-                    status =
-                        PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
-                }
-
-                if (CPA_STATUS_SUCCESS == status)
-                {
-                    clock_gettime(CLOCK_MONOTONIC, &userDescStart[requestCtr]);
-                    dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
-                    dcOpData.compressAndVerify = CPA_TRUE;
-                    dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
-
-                    cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-                    cySymOpData.hashStartSrcOffsetInBytes = 0;
-                    cySymOpData.messageLenToHashInBytes = bufferSize;
-                    cySymOpData.pDigestResult = pDigestBuffer;
-
-                    /* Set chaining operation data */
-                    chainOpData[0].opType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
-                    chainOpData[0].pCySymOp = &cySymOpData;
-                    chainOpData[1].opType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
-                    chainOpData[1].pDcOp = &dcOpData;
-                    clock_gettime(CLOCK_MONOTONIC, &userDescEnd[requestCtr]);
-
-                    clock_gettime(CLOCK_MONOTONIC, &userSubmitStart[requestCtr]);
-                    status = cpaDcChainPerformOp(dcInstHandle,
-                        sessionHdl,
-                        pBufferListSrc,
-                        pBufferListDst,
-                        operation,
-                        numSessions,
-                        chainOpData,
-                        &chainResult,
-                        NULL);
-                    clock_gettime(CLOCK_MONOTONIC, &userSubmitEnd[requestCtr]);
-                }
-                if(status == CPA_STATUS_SUCCESS){
-                    clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
-                    while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
-                    clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
-                }
-                status = decompressAndVerify(inputBuf,
-                    pBufferListDst->pBuffers->pData,
-                     pDigestBuffer, 4096);
-                if(status != CPA_STATUS_SUCCESS){
-                    PRINT_ERR("Operation failed\n");
-                    exit(-1);
-                }
-                printf("Request: %d\n", requestCtr);
-                uint64_t userDescPopTime =
-                    userDescEnd[requestCtr].tv_sec * 1000000000
-                        + userDescEnd[requestCtr].tv_nsec
-                        - userDescStart[requestCtr].tv_sec * 1000000000
-                        - userDescStart[requestCtr].tv_nsec;
-                uint64_t userSubmitTime =
-                    userSubmitEnd[requestCtr].tv_sec * 1000000000
-                        + userSubmitEnd[requestCtr].tv_nsec
-                        - userSubmitStart[requestCtr].tv_sec * 1000000000
-                        - userSubmitStart[requestCtr].tv_nsec;
-                uint64_t userPollTime =
-                    userPollEnd[requestCtr].tv_sec * 1000000000
-                        + userPollEnd[requestCtr].tv_nsec
-                        - userPollStart[requestCtr].tv_sec * 1000000000
-                        - userPollStart[requestCtr].tv_nsec;
-                printf("User Desc Pop Time: %lu\n", userDescPopTime);
-                printf("User Submit Time: %lu\n", userSubmitTime);
-                printf("User Poll Time: %lu\n", userPollTime);
-                requestCtr ++;
-                PHYS_CONTIG_FREE(pDigestBuffer);
-                dcChainFreeBufferList(&pBufferListSrc);
-                dcChainFreeBufferList(&pBufferListDst);
-                // PHYS_CONTIG_FREE(pSWDigestBuffer);
-                // PHYS_CONTIG_FREE(pHWCompBuffer);
-                // PHYS_CONTIG_FREE(pDecompBuffer);
-            }
-            return CPA_STATUS_SUCCESS;
+        CpaStatus status = CPA_STATUS_SUCCESS;
+        CpaInstanceHandle dcInstHandle = NULL;
+        CpaDcSessionHandle sessionHdl = NULL;
+        CpaDcChainSessionSetupData chainSessionData[2] = {{0}, {0}};
+        CpaDcSessionSetupData dcSessionData = {0};
+        CpaCySymSessionSetupData cySessionData = {0};
+        Cpa32U sess_size = 0;
+        CpaDcStats dcStats = {0};
+        CpaDcInstanceCapabilities cap = {0};
+        Cpa8U numSessions = NUM_SESSIONS_TWO;
+        sampleDcGetInstance(&dcInstHandle);
+        if (dcInstHandle == NULL)
+        {
+            PRINT_ERR("Get instance failed\n");
+            return CPA_STATUS_FAIL;
         }
+        status = cpaDcQueryCapabilities(dcInstHandle, &cap);
+        if (status != CPA_STATUS_SUCCESS)
+        {
+            PRINT_ERR("Query capabilities failed\n");
+            return status;
+        }
+        if (CPA_FALSE == CPA_BITMAP_BIT_TEST(cap.dcChainCapInfo,
+                                            CPA_DC_CHAIN_HASH_THEN_COMPRESS))
+        {
+            PRINT_ERR(
+                "Hash + compress chained operation is not supported on logical "
+                "instance.\n");
+            PRINT_ERR("Please ensure Chaining related settings are enabled in the "
+                    "device configuration "
+                    "file.\n");
+            return CPA_STATUS_FAIL;
+        }
+        if (!cap.statelessDeflateCompression || !cap.checksumCRC32 ||
+            !cap.checksumAdler32)
+        {
+            PRINT_ERR("Error: Unsupported functionality\n");
+            return CPA_STATUS_FAIL;
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Set the address translation function for the instance */
+            status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Start static data compression component */
+            status = cpaDcStartInstance(dcInstHandle, 0, NULL);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &sessionInitStart);
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            dcSessionData.compLevel = CPA_DC_L1;
+            dcSessionData.compType = CPA_DC_DEFLATE;
+            dcSessionData.huffType = CPA_DC_HT_STATIC;
+            dcSessionData.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+            dcSessionData.sessDirection = CPA_DC_DIR_COMPRESS;
+            dcSessionData.sessState = CPA_DC_STATELESS;
+            dcSessionData.checksum = CPA_DC_CRC32;
+
+            /* Initialize crypto session data */
+            cySessionData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+            /* Hash operation on the source data */
+            cySessionData.symOperation = CPA_CY_SYM_OP_HASH;
+            cySessionData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+            cySessionData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
+            cySessionData.hashSetupData.digestResultLenInBytes =
+                GET_HASH_DIGEST_LENGTH(cySessionData.hashSetupData.hashAlgorithm);
+            /* Place the digest result in a buffer unrelated to srcBuffer */
+            cySessionData.digestIsAppended = CPA_FALSE;
+            /* Generate the digest */
+            cySessionData.verifyDigest = CPA_FALSE;
+
+            /* Initialize chaining session data - hash + compression
+            * chain operation */
+            chainSessionData[0].sessType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
+            chainSessionData[0].pCySetupData = &cySessionData;
+            chainSessionData[1].sessType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
+            chainSessionData[1].pDcSetupData = &dcSessionData;
+
+
+            status = cpaDcChainGetSessionSize(dcInstHandle,
+                                            CPA_DC_CHAIN_HASH_THEN_COMPRESS,
+                                            NUM_SESSIONS_TWO,
+                                            chainSessionData,
+                                            &sess_size);
+
+
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Allocate session memory */
+            status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+        }
+
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            PRINT_DBG("cpaDcChainInitSession\n");
+            status = cpaDcChainInitSession(dcInstHandle,
+                                        sessionHdl,
+                                        CPA_DC_CHAIN_HASH_THEN_COMPRESS,
+                                        NUM_SESSIONS_TWO,
+                                        chainSessionData,
+                                        NULL);
+            printf("Init Session Status: %d\n", status);
+        }
+        clock_gettime(CLOCK_MONOTONIC, &sessionInitEnd);
+        printf("Required Session Size: %d\n", sess_size);
+        printf("Session_Init: %ld\n", sessionInitEnd.tv_sec * 1000000000 +
+                sessionInitEnd.tv_nsec -
+                sessionInitStart.tv_sec * 1000000000 -
+                sessionInitStart.tv_nsec);
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            #define CALGARY "/lib/firmware/calgary"
+            char ** testBufs = NULL;
+            int bufferSize = BUF_SIZE;
+            char *inputBuf = (char *)malloc(bufferSize);
+            FILE * file = fopen(CALGARY, "r");
+            uint64_t fileSize = fseek(file, 0, SEEK_END);
+            fileSize = ftell(file);
+            int32_t numBuffers = fileSize / bufferSize;
+            userDescStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+            userDescEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+            userSubmitStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+            userSubmitEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+            userPollStart = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+            userPollEnd = (struct timespec *)malloc(numBuffers * sizeof(struct timespec));
+            fseek(file, 0, SEEK_SET);
+            int numIter = 10;
+            // for(int j=0; j<numIter; j++){
+                for(int i=0; i<numBuffers; i++){
+                    Cpa32U bufferMetaSize = 0;
+                    CpaBufferList *pBufferListSrc = NULL;
+                    CpaBufferList *pBufferListDst = NULL;
+                    CpaFlatBuffer *pFlatBuffer = NULL;
+                    Cpa8U *pDigestBuffer = NULL;
+                    CpaDcChainOpData chainOpData[2] = {{0}, {0}};
+                    CpaDcOpData dcOpData = {0};
+                    CpaCySymOpData cySymOpData = {0};
+                    CpaDcChainRqResults chainResult = {0};
+
+                    CpaDcChainOperations operation = CPA_DC_CHAIN_HASH_THEN_COMPRESS;
+                    CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
+                    status =
+                        cpaDcBufferListGetMetaSize(dcInstHandle, 1, &bufferMetaSize);
+                    if (CPA_STATUS_SUCCESS != status)
+                    {
+                        PRINT_ERR("Error get meta size\n");
+                        return CPA_STATUS_FAIL;
+                    }
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        PRINT_DBG("Build Buffer List\n");
+                        status = dcChainBuildBufferList(
+                            &pBufferListSrc, 1, bufferSize, bufferMetaSize);
+                    }
+
+                    /* copy source data into buffer */
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+                        memcpy(pFlatBuffer->pData, inputBuf, bufferSize);
+                    }
+
+                    /* Allocate destination buffer the four times as source buffer */
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        status = dcChainBuildBufferList(
+                            &pBufferListDst, 1, 4 * bufferSize, bufferMetaSize);
+                    }
+
+                    /* Allocate digest result buffer to store hash value */
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        status =
+                            PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
+                    }
+
+                    if (CPA_STATUS_SUCCESS == status)
+                    {
+                        clock_gettime(CLOCK_MONOTONIC, &userDescStart[requestCtr]);
+                        dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
+                        dcOpData.compressAndVerify = CPA_TRUE;
+                        dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
+
+                        cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+                        cySymOpData.hashStartSrcOffsetInBytes = 0;
+                        cySymOpData.messageLenToHashInBytes = bufferSize;
+                        cySymOpData.pDigestResult = pDigestBuffer;
+
+                        /* Set chaining operation data */
+                        chainOpData[0].opType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
+                        chainOpData[0].pCySymOp = &cySymOpData;
+                        chainOpData[1].opType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
+                        chainOpData[1].pDcOp = &dcOpData;
+                        clock_gettime(CLOCK_MONOTONIC, &userDescEnd[requestCtr]);
+
+                        clock_gettime(CLOCK_MONOTONIC, &userSubmitStart[requestCtr]);
+                        status = cpaDcChainPerformOp(dcInstHandle,
+                            sessionHdl,
+                            pBufferListSrc,
+                            pBufferListDst,
+                            operation,
+                            numSessions,
+                            chainOpData,
+                            &chainResult,
+                            NULL);
+                        clock_gettime(CLOCK_MONOTONIC, &userSubmitEnd[requestCtr]);
+                    }
+                    if(status == CPA_STATUS_SUCCESS){
+                        clock_gettime(CLOCK_MONOTONIC, &userPollStart[requestCtr]);
+                        while (icp_sal_DcPollInstance(dcInstHandle,1) != CPA_STATUS_SUCCESS ){ }
+                        clock_gettime(CLOCK_MONOTONIC, &userPollEnd[requestCtr]);
+                    }
+                    status = decompressAndVerify(inputBuf,
+                        pBufferListDst->pBuffers->pData,
+                        pDigestBuffer, BUF_SIZE);
+                    if(status != CPA_STATUS_SUCCESS){
+                        PRINT_ERR("Operation failed\n");
+                        exit(-1);
+                    }
+                    printf("Request: %d\n", requestCtr);
+                    uint64_t userDescPopTime =
+                        userDescEnd[requestCtr].tv_sec * 1000000000
+                            + userDescEnd[requestCtr].tv_nsec
+                            - userDescStart[requestCtr].tv_sec * 1000000000
+                            - userDescStart[requestCtr].tv_nsec;
+                    uint64_t userSubmitTime =
+                        userSubmitEnd[requestCtr].tv_sec * 1000000000
+                            + userSubmitEnd[requestCtr].tv_nsec
+                            - userSubmitStart[requestCtr].tv_sec * 1000000000
+                            - userSubmitStart[requestCtr].tv_nsec;
+                    uint64_t userPollTime =
+                        userPollEnd[requestCtr].tv_sec * 1000000000
+                            + userPollEnd[requestCtr].tv_nsec
+                            - userPollStart[requestCtr].tv_sec * 1000000000
+                            - userPollStart[requestCtr].tv_nsec;
+                    printf("Buf_Size: %d Iteration: %d\n", BUF_SIZE, i);
+                    // printf("User-Desc-Pop-Time: %lu\n", userDescPopTime);
+                    printf("User-Submit-Time: %lu\n", userSubmitTime);
+                    printf("User-Poll-Time: %lu\n", userPollTime);
+                    requestCtr ++;
+                    PHYS_CONTIG_FREE(pDigestBuffer);
+                    dcChainFreeBufferList(&pBufferListSrc);
+                    dcChainFreeBufferList(&pBufferListDst);
+                    // PHYS_CONTIG_FREE(pSWDigestBuffer);
+                    // PHYS_CONTIG_FREE(pHWCompBuffer);
+                    // PHYS_CONTIG_FREE(pDecompBuffer);
+                }
+            }
+        // }
     }
+    return CPA_STATUS_SUCCESS;
 }
 
 /*
