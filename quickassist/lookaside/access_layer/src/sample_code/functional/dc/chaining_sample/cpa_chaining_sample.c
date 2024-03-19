@@ -486,7 +486,7 @@ CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
 
 
 CpaStatus syncSWChainedOpPerf(void){
-    for(int BUF_SIZE=1024; BUF_SIZE<32 * 1024; BUF_SIZE*=2)
+    for(int BUF_SIZE=2*1024*1024; BUF_SIZE>=1024; BUF_SIZE/=2)
     {
         // #define BUF_SIZE 1024 * 16
         Cpa32U sessionCtxSize = 0;

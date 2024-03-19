@@ -104,3 +104,19 @@ throughput_out.log
 throughput_sample
 zuc_sample
 
+.pane.log.swp
+.review.txt.swp
+.run_hw_hash_and_compress.sh.swp
+.run_sw_hash_and_compress.sh.swp
+MSI-X
+Samples.am.chained_dcc
+Samples.am.rej
+compile.patch
+meeting
+patch.patch
+readme.old
+review.txt
+sample
+sw_hash_comp.log
+user_times.log
+
