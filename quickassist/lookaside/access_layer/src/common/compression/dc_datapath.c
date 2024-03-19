@@ -132,8 +132,8 @@ void dcPrintRequestEndTimes()
         sum += dcSubEndTimes[i].nsecs - dcSubStartTimes[i].nsecs;
         reqsum += dcCreateRequestEndTimes[i].nsecs - dcCreateReqStartTimes[i].nsecs;
     }
-    printf("Average time to submit request: %f\n", (double)sum/dcReqsSubmitted);
-    printf("Average time to create request: %f\n", (double)reqsum/dcReqsSubmitted);
+    printf("DC-Average time to submit request: %f\n", (double)sum/dcReqsSubmitted);
+    printf("DC-Average time to create request: %f\n", (double)reqsum/dcReqsSubmitted);
     dcReqsSubmitted = 0;
 }
 
