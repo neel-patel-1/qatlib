@@ -1093,7 +1093,6 @@ STATIC CpaStatus LacSym_Perform(const CpaInstanceHandle instanceHandle,
     }
 
 #endif /*ICP_PARAM_CHECK*/
-    printf("LacSym_Perform\n");
     status = LacAlgChain_Perform(instanceHandle,
                                  pSessionDesc,
                                  callbackTag,

@@ -2165,6 +2165,8 @@ CpaStatus LacAlgChain_Perform(const CpaInstanceHandle instanceHandle,
     LAC_ENSURE_NOT_NULL(pSessionDesc);
     LAC_ENSURE_NOT_NULL(pOpData);
 
+    osalTimeGet(&symCreateReqStartTimes[symReqsSubmitted]);
+
     LacAlgChain_LockSessionReader(pSessionDesc);
 
     /* Set the command id */
@@ -2456,7 +2458,6 @@ CpaStatus LacAlgChain_Perform(const CpaInstanceHandle instanceHandle,
          * Now create the Request.
          * Start by populating it from the cache in the session descriptor.
          */
-        osalTimeGet(&symCreateReqStartTimes[symReqsSubmitted]);
         pMsg = &(pCookie->qatMsg);
         pMsgDummy = (Cpa8U *)pMsg;
 
