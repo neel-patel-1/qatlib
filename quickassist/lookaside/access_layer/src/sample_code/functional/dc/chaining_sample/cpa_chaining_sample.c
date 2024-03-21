@@ -224,87 +224,6 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
     }
 }
 
-CpaStatus genCalgaryFlatBuffer(CpaBufferList **testBufferList,
-                                 Cpa32U numBuffers,
-                                 Cpa32U bufferSize,
-                                 Cpa32U bufferMetaSize,
-                                 Cpa64U fileOffset)
-{
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaBufferList *pBuffList = NULL;
-    CpaFlatBuffer *pFlatBuff = NULL;
-    Cpa32U bufferListMemSize =
-        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
-
-    status = OS_MALLOC(&pBuffList, bufferListMemSize);
-    pBuffList->numBuffers = numBuffers;
-
-    if (bufferMetaSize)
-    {
-        status =
-            PHYS_CONTIG_ALLOC(&pBuffList->pPrivateMetaData, bufferMetaSize);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("Error in allocating pBuffList->pPrivateMetaData\n");
-            OS_FREE(pBuffList);
-            return CPA_STATUS_FAIL;
-        }
-    }
-    else
-    {
-        pBuffList->pPrivateMetaData = NULL;
-    }
-    pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
-    pBuffList->pBuffers = pFlatBuff;
-
-    FILE *file = fopen(CALGARY, "r");
-    uint64_t fileSize = fseek(file, 0, SEEK_END);
-    fileSize = ftell(file);
-    if ( fseek(file, fileOffset, SEEK_SET) != 0)
-    {
-        PRINT_ERR("Error in fseek\n");
-        return CPA_STATUS_FAIL;
-    }
-    int32_t totalBuffers = fileSize / bufferSize;
-    FAIL_ON(totalBuffers < 1, "File size is too small\n")
-    FAIL_ON(numBuffers > totalBuffers , "File size is too small\n")
-
-    Cpa32U curBuff = 0;
-    Cpa8U *pMsg = NULL;
-    while (curBuff < numBuffers)
-    {
-
-        if (0 != bufferSize)
-        {
-            status = PHYS_CONTIG_ALLOC(&pMsg, bufferSize);
-            if (CPA_STATUS_SUCCESS != status || NULL == pMsg)
-            {
-                PRINT_ERR("Error in allocating pMsg\n");
-                dcChainFreeBufferList(&pBuffList);
-                return CPA_STATUS_FAIL;
-            }
-            uint64_t rdBytes=0, offset=0;
-            do{
-                rdBytes += fread(pMsg + offset, 1, bufferSize - offset, file);
-                if(rdBytes < bufferSize){
-                    rewind(file);
-                }
-                offset += rdBytes;
-            } while(offset < bufferSize);
-
-            pFlatBuff->pData = pMsg;
-        }
-        else
-        {
-            pFlatBuff->pData = NULL;
-        }
-        pFlatBuff->dataLenInBytes = bufferSize;
-        pFlatBuff++;
-        curBuff++;
-    }
-    fclose(file);
-}
-
 /*
  * Callback function
  *
@@ -405,6 +324,30 @@ static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
     return CPA_STATUS_SUCCESS;
 }
 
+FILE * file = NULL;
+
+static CpaStatus populateBufferList(CpaBufferList **testBufferList,
+                                        Cpa32U numBuffers,
+                                        Cpa32U bufferSize,
+                                        Cpa32U bufferMetaSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaBufferList *pBuffList = *testBufferList;
+
+    if(file == NULL){
+        file = fopen(CALGARY, "r");
+    }
+    for(int i=0; i<numBuffers; i++){
+        uint64_t offset = 0;
+        offset = fread(pBuffList->pBuffers[i].pData, 1, bufferSize, file);
+        if ( offset < bufferSize){
+            rewind(file);
+            fread((pBuffList->pBuffers[i].pData) + offset, 1, bufferSize - offset, file);
+        }
+    }
+    return CPA_STATUS_SUCCESS;
+}
+
 /* Free dc chain buffer lists */
 static void dcChainFreeBufferList(CpaBufferList **testBufferList)
 {
@@ -461,7 +404,7 @@ containing data from the file CALGARY
 
 */
 
-static void createTestBufferLists(CpaBufferList **testBufferLists,
+static void createTestBufferLists(CpaBufferList ***testBufferLists,
                                   int BUF_SIZE,
                                   int numIter)
 {
@@ -494,9 +437,9 @@ static void createTestBufferLists(CpaBufferList **testBufferLists,
             printf("Buffer List Creation Failed\n");
             exit(-1);
         }
-        printf("%s\0\n", pBufferListSrc->pBuffers->pData);
+        // printf("%s\0\n", pBufferListSrc->pBuffers->pData);
     }
-    testBufferLists = *srcBufferLists;
+    *testBufferLists = srcBufferLists;
 }
 
 static void symCallback(void *pCallbackTag,
@@ -731,9 +674,13 @@ CpaStatus requestGen(void){
         /* */
         int numIter = 64;
         CpaBufferList **srcBufferLists = NULL;
-        CpaBufferList **dstBufferLists = NULL;
-        createTestBufferLists(srcBufferLists, BUF_SIZE, numIter);
-        createTestBufferLists(dstBufferLists, BUF_SIZE, numIter);
+        PHYS_CONTIG_ALLOC(&srcBufferLists, numIter * sizeof(CpaBufferList *));
+        for(int i=0; i<numIter;i++){
+            dcChainBuildBufferList(&srcBufferLists[i], 1, BUF_SIZE, bufferMetaSize);
+            populateBufferList(&srcBufferLists[i], 1, BUF_SIZE, bufferMetaSize);
+        }
+        printf("%s\n", srcBufferLists[0]->pBuffers->pData);
+
         return CPA_STATUS_SUCCESS;
 
 
