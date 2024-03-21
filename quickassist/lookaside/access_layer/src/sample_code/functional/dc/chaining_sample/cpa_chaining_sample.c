@@ -692,11 +692,9 @@ CpaStatus requestGen(void){
             }
         }
 
-        return CPA_STATUS_SUCCESS;
-
-
         PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numIter);
         printf("Num Iterations: %d\n", numIter);
+
         for (int i=0; i<numIter; i++){
 
             // FAIL_ON(fread(pSrcBuffer, 1, BUF_SIZE, file) != BUF_SIZE, "Error in reading file\n");
@@ -705,8 +703,8 @@ CpaStatus requestGen(void){
                 cyInstHandle,
                 NULL, /* data sent as is to the callback function*/
                 pOpData,           /* operational data struct */
-                pBufferListSrc,       /* source buffer list */
-                pBufferListSrc,       /* same src & dst for an in-place operation*/
+                srcBufferLists[i],       /* source buffer list */
+                dstBufferLists[i],       /* same src & dst for an in-place operation*/
                 NULL); /*Don't verify*/
         }
         for(int i=0; i<numIter; i++){
