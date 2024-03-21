@@ -608,7 +608,7 @@ CpaStatus requestGen(void){
     sd.sessDirection = CPA_DC_DIR_COMPRESS;
     sd.sessState = CPA_DC_STATELESS;
     sd.checksum = CPA_DC_CRC32;
-    printf("Buffer Size: %d\n", bufferSize);
+    printf("Buffer Size: %d, Fragment Size: %d\n", bufferSize, fragmentSize);
     status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
     printf("Session Size: %d\n", sess_size);
     FAIL_ON_CPA_FAIL(status);
@@ -696,7 +696,7 @@ CpaStatus requestGen(void){
     }
 
     /* Run Tests */
-    #define MIN_TESTS 1000
+    #define MIN_TESTS 1
     uint64_t exeTimes[MIN_TESTS];
     PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numFragments);
     printf("iteration,NumFragments,bufSize,hashNanos\n");
@@ -765,7 +765,7 @@ CpaStatus requestGen(void){
     CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
     for(int i=0; i<numFragments; i++){
         calSWDigest(srcBufferLists[i]->pBuffers->pData, fragmentSize, dstBufferLists[i]->pBuffers->pData, SHA256_DIGEST_LENGTH, hashAlg);
-        if(memcmp((srcBufferLists[i]->pBuffers->pData+fragmentSize), dstBufferLists[i]->pBuffers->pData, SHA256_DIGEST_LENGTH) != 0){
+        if(memcmp((srcBufferLists[i]->pBuffers->pData + fragmentSize), dstBufferLists[i]->pBuffers->pData, SHA256_DIGEST_LENGTH) != 0){
             PRINT_ERR("Hashes do not match\n");
             return CPA_STATUS_FAIL;
         }
