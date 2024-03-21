@@ -447,13 +447,11 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    // PRINT_DBG("Callback called with status = %d.\n", status);
-
-    // if (NULL != pCallbackTag)
-    // {
-    //     /** indicate that the function has been called*/
-    //     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    // }
+    uint64_t time_elapsed = 1;
+    printf("Callback called with status = %d.\n", status);
+    if(requestCtr > 1000){
+        printf("RPS: %ld\n", requestCtr/(time_elapsed));
+    }
 }
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
@@ -543,7 +541,7 @@ CpaStatus requestGen(void){
         status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
         status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
 
-        // sampleCyStartPolling(cyInstHandle);
+        sampleCyStartPolling(cyInstHandle);
         sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
         sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
         sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
@@ -552,7 +550,6 @@ CpaStatus requestGen(void){
         sessionSetupData.digestIsAppended = CPA_FALSE;
         sessionSetupData.verifyDigest = CPA_FALSE;
 
-        sampleCyStartPolling(cyInstHandle);
         status = cpaCySymSessionCtxGetSize(
             cyInstHandle, &sessionSetupData, &sessionCtxSize);
         status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);

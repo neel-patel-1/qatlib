@@ -122,10 +122,15 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    if( useSw )
-        stat = syncSWChainedOpPerf();
-    else
-        stat = syncHWChainedOpPerf();
+    int rpsTest = 1;
+    if(rpsTest){
+        requestGen();
+    } else{
+        if( useSw )
+            stat = syncSWChainedOpPerf();
+        else
+            stat = syncHWChainedOpPerf();
+    }
     // stat = syncSwHashOp();
     if (CPA_STATUS_SUCCESS != stat)
     {
