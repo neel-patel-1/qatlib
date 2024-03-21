@@ -442,6 +442,19 @@ static void dcChainFreeBufferList(CpaBufferList **testBufferList)
 
 uint64_t *ts;
 
+/* Generate Bufferlist length 1 with data*/
+static void createTestBufferList(CpaBufferList **ptrToSrcBufList,
+                                 Cpa8U *pSrcBuffer,
+                                 int size)
+{
+    CpaBufferList *pBufferListSrc = *ptrToSrcBufList;
+    CpaFlatBuffer *pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+    pBufferListSrc->pBuffers = pFlatBuffer;
+    pBufferListSrc->numBuffers = 1;
+    pFlatBuffer->dataLenInBytes = size;
+    pFlatBuffer->pData = pSrcBuffer;
+}
+
 static void symCallback(void *pCallbackTag,
                         CpaStatus status,
                         const CpaCySymOp operationType,
@@ -676,13 +689,14 @@ CpaStatus requestGen(void){
         fseek(file, 0, SEEK_SET);
         int numIter = fileSize / (BUF_SIZE);
 
-        pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
-        pBufferListSrc->pBuffers = pFlatBuffer;
-        pBufferListSrc->numBuffers = 1;
-        pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
-        pFlatBuffer->dataLenInBytes = bufferSize;
         fread(pSrcBuffer, 1, BUF_SIZE, file);
-        pFlatBuffer->pData = pSrcBuffer;
+        createTestBufferList(&pBufferListSrc, pSrcBuffer, BUF_SIZE);
+        if( ! memcmp(pBufferListSrc->pBuffers->pData, pSrcBuffer, BUF_SIZE)){
+            printf("Buffer List Created Successfully\n");
+        }
+        else{
+            printf("Buffer List Creation Failed\n");
+        }
 
         pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
         pBufferListDst->pBuffers = pFlatBuffer;
