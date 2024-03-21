@@ -193,7 +193,7 @@ noinst_PROGRAMS += dc_stateless_multi_op_sample
 dc_stateless_multi_op_sample_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/stateless_multi_op_checksum_sample/cpa_dc_stateless_multi_op_checksum_sample.c \
-	quickassist/lookaside/access_layer/src/sample_code/functional/dc/stateless_sample/cpa_dc_sample_user.c
+quickassist/lookaside/access_layer/src/sample_code/functional/dc/stateless_multi_op_checksum_sample/cpa_dc_sample_user.c
 dc_stateless_multi_op_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \

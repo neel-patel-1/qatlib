@@ -483,6 +483,251 @@ CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     return CPA_STATUS_SUCCESS;
 
 }
+CpaStatus requestGen(void){
+    int BUF_SIZE=8192;
+
+        // #define BUF_SIZE 1024 * 16
+        Cpa32U sessionCtxSize = 0;
+        CpaInstanceHandle cyInstHandle = NULL;
+        CpaCySymSessionCtx sessionCtx = NULL;
+        CpaCySymSessionSetupData sessionSetupData = {0};
+        CpaCySymStats64 symStats = {0};
+        CpaStatus status = CPA_STATUS_SUCCESS;
+
+        Cpa8U *pBufferMeta = NULL;
+        Cpa32U bufferMetaSize = 0;
+        CpaBufferList *pBufferList = NULL;
+        CpaFlatBuffer *pFlatBuffer = NULL;
+        CpaCySymOpData *pOpData = NULL;
+        Cpa32U bufferSize = BUF_SIZE + SHA256_DIGEST_LENGTH;
+        Cpa32U numBuffers = 1;
+        Cpa32U bufferListMemSize =
+            sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+        Cpa8U *pSrcBuffer = NULL;
+        Cpa8U *pDigestBuffer = NULL;
+        struct COMPLETION_STRUCT complete;
+
+        CpaInstanceHandle dcInstHandle = NULL;
+        CpaDcSessionHandle sessionHdl = NULL;
+        CpaDcSessionSetupData sd = {0};
+        CpaDcStats dcStats = {0};
+        CpaDcInstanceCapabilities cap = {0};
+        CpaBufferList **bufferInterArray = NULL;
+        Cpa32U buffMetaSize = 0;
+        Cpa16U numInterBuffLists = 0;
+        Cpa16U bufferNum = 0;
+        Cpa32U sess_size = 0;
+        Cpa32U ctx_size = 0;
+
+        Cpa32U dstBufferSize = bufferSize - SHA256_DIGEST_LENGTH;
+        CpaBufferList *pBufferListSrc = NULL;
+        Cpa8U *pBufferMetaSrc = NULL;
+        Cpa8U *pBufferMetaDst = NULL;
+        CpaBufferList *pBufferListDst = NULL;
+        Cpa8U *pDstBuffer = NULL;
+        CpaDcOpData opData = {};
+        CpaDcRqResults dcResults;
+        INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+
+        struct timespec *hashUserspacePerformOpStart, *hashUserspacePerformOpEnd,
+            *dcUserspacePerformOpEnd, *dcUserspacePerformOpStart;
+        struct timespec *userHashPollStart, *userHashPollEnd,
+            *userDCPollStart, *userDCPollEnd;
+
+        sampleDcGetInstance(&dcInstHandle);
+        sampleCyGetInstance(&cyInstHandle);
+
+        status = cpaDcQueryCapabilities(dcInstHandle, &cap);
+
+        status = cpaCyStartInstance(cyInstHandle);
+        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+        status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+
+        // sampleCyStartPolling(cyInstHandle);
+        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
+        sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+        sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
+        sessionSetupData.hashSetupData.digestResultLenInBytes = SHA256_DIGEST_LENGTH;
+        sessionSetupData.digestIsAppended = CPA_FALSE;
+        sessionSetupData.verifyDigest = CPA_FALSE;
+
+        sampleCyStartPolling(cyInstHandle);
+        status = cpaCySymSessionCtxGetSize(
+            cyInstHandle, &sessionSetupData, &sessionCtxSize);
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+        status = cpaCySymInitSession(
+            cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
+
+        status =
+            cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
+        status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+
+        status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+        printf("Buffer Meta Size: %d\n", buffMetaSize);
+        status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                        &numInterBuffLists);
+        printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
+
+        if (numInterBuffLists > 0){
+            status = PHYS_CONTIG_ALLOC(
+                    &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
+            for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+            {
+                status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                                sizeof(CpaBufferList));
+                status = PHYS_CONTIG_ALLOC(
+                            &bufferInterArray[bufferNum]->pPrivateMetaData,
+                            buffMetaSize);
+                status =
+                            PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                                            sizeof(CpaFlatBuffer));
+                status = PHYS_CONTIG_ALLOC(
+                            &bufferInterArray[bufferNum]->pBuffers->pData,
+                            2 * BUF_SIZE);
+                bufferInterArray[bufferNum]->numBuffers = 1;
+                        bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+                            2 * BUF_SIZE;
+            }
+        }
+        status = cpaDcStartInstance(
+            dcInstHandle, numInterBuffLists, bufferInterArray);
+        sampleDcStartPolling(dcInstHandle);
+        sd.compLevel = CPA_DC_L1;
+        sd.compType = CPA_DC_DEFLATE;
+        sd.huffType = CPA_DC_HT_STATIC;
+        sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+        sd.sessDirection = CPA_DC_DIR_COMPRESS;
+        sd.sessState = CPA_DC_STATELESS;
+        sd.checksum = CPA_DC_CRC32;
+        printf("Buffer Size: %d\n", bufferSize);
+        status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+        printf("Session Size: %d\n", sess_size);
+        FAIL_ON_CPA_FAIL(status);
+        status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+        bool do_sync = false;
+        if(do_sync){
+            status = cpaDcInitSession(
+                dcInstHandle,
+                sessionHdl, /* session memory */
+                &sd,        /* session setup data */
+                NULL, /* pContexBuffer not required for stateless operations */
+                NULL); /* callback function */
+        } else {
+            status = cpaDcInitSession(
+                dcInstHandle,
+                sessionHdl, /* session memory */
+                &sd,        /* session setup data */
+                NULL, /* pContexBuffer not required for stateless operations */
+                dcCallback); /* callback function */
+        }
+
+        status =
+            cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
+        status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+        status = OS_MALLOC(&pBufferList, bufferListMemSize);
+        status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+        pDigestBuffer = pSrcBuffer + BUF_SIZE;
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferList + 1);
+
+        pBufferList->pBuffers = pFlatBuffer;
+        pBufferList->numBuffers = 1;
+        pBufferList->pPrivateMetaData = pBufferMeta;
+
+        pFlatBuffer->dataLenInBytes = bufferSize;
+        pFlatBuffer->pData = pSrcBuffer;
+
+        /* Hash Op Data */
+        status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+        pOpData->sessionCtx = sessionCtx;
+        pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+        pOpData->hashStartSrcOffsetInBytes = 0;
+        pOpData->messageLenToHashInBytes = BUF_SIZE;
+        pOpData->pDigestResult = pDigestBuffer;
+        COMPLETION_INIT((&complete));
+
+
+
+
+        /* DC Op */
+        status =
+            cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+        status = cpaDcDeflateCompressBound(
+            dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
+        status = cpaDcDeflateCompressBound(
+            dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
+
+        status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+        FAIL_ON_CPA_FAIL(status);
+
+        status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+        FAIL_ON_CPA_FAIL(status);
+
+        status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+        FAIL_ON_CPA_FAIL(status);
+
+        status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
+        FAIL_ON_CPA_FAIL(status);
+        status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
+        FAIL_ON_CPA_FAIL(status);
+        status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
+        FAIL_ON_CPA_FAIL(status);
+        // memcpy(pSrcBuffer, sampleData, buffserSize);
+        FILE *file = fopen(CALGARY, "r");
+        fseek(file, 0, SEEK_END);
+        uint64_t fileSize = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        int numIter = fileSize / (BUF_SIZE);
+
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+        pBufferListSrc->pBuffers = pFlatBuffer;
+        pBufferListSrc->numBuffers = 1;
+        pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+        pFlatBuffer->dataLenInBytes = bufferSize;
+        fread(pSrcBuffer, 1, BUF_SIZE, file);
+        pFlatBuffer->pData = pSrcBuffer;
+
+        pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
+        pBufferListDst->pBuffers = pFlatBuffer;
+        pBufferListDst->numBuffers = 1;
+        pBufferListDst->pPrivateMetaData = pBufferMetaDst;
+        pFlatBuffer->dataLenInBytes = dstBufferSize;
+        pFlatBuffer->pData = pDstBuffer;
+
+
+
+        printf("Num Iterations: %d\n", numIter);
+        for (int i=0; i<numIter; i++){
+
+            // FAIL_ON(fread(pSrcBuffer, 1, BUF_SIZE, file) != BUF_SIZE, "Error in reading file\n");
+
+            status = cpaCySymPerformOp(
+                cyInstHandle,
+                NULL, /* data sent as is to the callback function*/
+                pOpData,           /* operational data struct */
+                pBufferListSrc,       /* source buffer list */
+                pBufferListSrc,       /* same src & dst for an in-place operation*/
+                NULL);
+        }
+        for(int i=0; i<numIter; i++){
+            status = cpaDcCompressData2(
+                dcInstHandle,
+                sessionHdl,
+                pBufferListSrc,     /* source buffer list */
+                pBufferListDst,     /* destination buffer list */
+                &opData,            /* Operational data */
+                &dcResults,         /* results structure */
+                NULL);
+        }
+
+
+        PHYS_CONTIG_FREE(pSrcBuffer);
+        OS_FREE(pBufferList);
+        PHYS_CONTIG_FREE(pBufferMeta);
+        OS_FREE(pOpData);
+
+
+}
 
 
 CpaStatus syncSWChainedOpPerf(void){
