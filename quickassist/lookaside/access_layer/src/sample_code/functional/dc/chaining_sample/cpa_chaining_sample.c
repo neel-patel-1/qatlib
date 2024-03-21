@@ -461,7 +461,7 @@ containing data from the file CALGARY
 
 */
 
-static void createTestBufferLists(CpaBufferList ***testBufferLists,
+static void createTestBufferLists(CpaBufferList **testBufferLists,
                                   int BUF_SIZE,
                                   int numIter)
 {
@@ -496,7 +496,7 @@ static void createTestBufferLists(CpaBufferList ***testBufferLists,
         }
         printf("%s\0\n", pBufferListSrc->pBuffers->pData);
     }
-    *testBufferLists = srcBufferLists;
+    testBufferLists = *srcBufferLists;
 }
 
 static void symCallback(void *pCallbackTag,
