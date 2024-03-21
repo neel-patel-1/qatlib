@@ -1400,7 +1400,7 @@ int main(int argc, char *argv[])
         {
             disableAdditionalCmpbufferSize_g = 1;
             dynamicHuffmanEnabled(NULL, &dynamicEnabled);
-
+            goto max_band_decomp;
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
             status = setupDcTest(CPA_DC_DEFLATE,
@@ -1509,7 +1509,30 @@ int main(int argc, char *argv[])
                 {
                     retStatus = CPA_STATUS_FAIL;
                 }
-
+max_band_decomp:
+                for(int bufSize=1024*1024; bufSize<=1024*1024; bufSize*=2){
+                    status = setupDcTest(CPA_DC_DEFLATE,
+                                         CPA_DC_DIR_DECOMPRESS,
+                                         SAMPLE_CODE_CPA_DC_L1,
+                                         CPA_DC_HT_FULL_DYNAMIC,
+                                         CPA_DC_STATELESS,
+                                         DEFAULT_COMPRESSION_WINDOW_SIZE,
+                                         bufSize,
+                                         sampleCorpus,
+                                         SYNC,
+                                         dcLoops);
+                    if (CPA_STATUS_SUCCESS != status)
+                    {
+                        PRINT_ERR("Error calling setupDcTest\n");
+                        return CPA_STATUS_FAIL;
+                    }
+                    status = createStartandWaitForCompletion(COMPRESSION);
+                    if (CPA_STATUS_SUCCESS != status)
+                    {
+                        retStatus = CPA_STATUS_FAIL;
+                    }
+                }
+                return 0;
                 status = setupDcTest(CPA_DC_DEFLATE,
                                      CPA_DC_DIR_DECOMPRESS,
                                      SAMPLE_CODE_CPA_DC_L1,
