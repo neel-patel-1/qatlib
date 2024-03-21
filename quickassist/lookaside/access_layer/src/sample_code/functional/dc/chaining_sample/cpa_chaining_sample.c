@@ -674,12 +674,16 @@ CpaStatus requestGen(void){
         /* */
         int numIter = 64;
         CpaBufferList **srcBufferLists = NULL;
+        CpaBufferList **dstBufferLists = NULL;
         PHYS_CONTIG_ALLOC(&srcBufferLists, numIter * sizeof(CpaBufferList *));
+        PHYS_CONTIG_ALLOC(&dstBufferLists, numIter * sizeof(CpaBufferList *));
         for(int i=0; i<numIter;i++){
             dcChainBuildBufferList(&srcBufferLists[i], 1, BUF_SIZE, bufferMetaSize);
+            dcChainBuildBufferList(&dstBufferLists[i], 1, BUF_SIZE, bufferMetaSize);
+        }
+        for(int i=0; i<numIter;i++){
             populateBufferList(&srcBufferLists[i], 1, BUF_SIZE, bufferMetaSize);
         }
-        printf("%s\n", srcBufferLists[0]->pBuffers->pData);
 
         return CPA_STATUS_SUCCESS;
 
