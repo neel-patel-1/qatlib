@@ -455,6 +455,12 @@ static void createTestBufferList(CpaBufferList **ptrToSrcBufList,
     pFlatBuffer->pData = pSrcBuffer;
 }
 
+/*
+Create numIter bufferlists each of size BUF_SIZE
+containing data from the file CALGARY
+
+*/
+
 static void createTestBufferLists(CpaBufferList ***testBufferLists,
                                   int BUF_SIZE,
                                   int numIter)
@@ -465,7 +471,8 @@ static void createTestBufferLists(CpaBufferList ***testBufferLists,
     fseek(file, 0, SEEK_SET);
     CpaBufferList **srcBufferLists = NULL;
     OS_MALLOC(&srcBufferLists, numIter * sizeof(CpaBufferList *));
-
+    Cpa32U bufferListMemSize =
+            sizeof(CpaBufferList) + (numIter * sizeof(CpaFlatBuffer));
     Cpa8U *pSrcBuffer = NULL;
     CpaStatus status = PHYS_CONTIG_ALLOC(&pSrcBuffer, BUF_SIZE);
     for(int i=0; i<numIter; i++){
@@ -483,10 +490,11 @@ static void createTestBufferLists(CpaBufferList ***testBufferLists,
             fread(pSrcBuffer + offset, 1, BUF_SIZE - offset, file);
         }
         createTestBufferList(&pBufferListSrc, pSrcBuffer, BUF_SIZE);
-        if( ! memcmp(pBufferListSrc->pBuffers->pData, pSrcBuffer, BUF_SIZE)){
+        if( memcmp(pBufferListSrc->pBuffers->pData, pSrcBuffer, BUF_SIZE) != 0){
             printf("Buffer List Creation Failed\n");
             exit(-1);
         }
+        printf("%s\0\n", pBufferListSrc->pBuffers->pData);
     }
     *testBufferLists = srcBufferLists;
 }
