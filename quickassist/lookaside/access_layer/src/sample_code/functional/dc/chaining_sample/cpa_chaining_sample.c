@@ -440,6 +440,8 @@ static void dcChainFreeBufferList(CpaBufferList **testBufferList)
     *testBufferList = NULL;
 }
 
+uint64_t *ts;
+
 static void symCallback(void *pCallbackTag,
                         CpaStatus status,
                         const CpaCySymOp operationType,
@@ -447,11 +449,9 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    uint64_t time_elapsed = 1;
-    printf("Callback called with status = %d.\n", status);
-    if(requestCtr > 1000){
-        printf("RPS: %ld\n", requestCtr/(time_elapsed));
-    }
+
+    ts[requestCtr] = sampleCoderdtsc();
+    requestCtr++;
 }
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
@@ -692,7 +692,7 @@ CpaStatus requestGen(void){
         pFlatBuffer->pData = pDstBuffer;
 
 
-
+        PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numIter);
         printf("Num Iterations: %d\n", numIter);
         for (int i=0; i<numIter; i++){
 
@@ -704,7 +704,7 @@ CpaStatus requestGen(void){
                 pOpData,           /* operational data struct */
                 pBufferListSrc,       /* source buffer list */
                 pBufferListSrc,       /* same src & dst for an in-place operation*/
-                NULL);
+                NULL); /*Don't verify*/
         }
         for(int i=0; i<numIter; i++){
             status = cpaDcCompressData2(
@@ -716,6 +716,9 @@ CpaStatus requestGen(void){
                 &dcResults,         /* results structure */
                 NULL);
         }
+        uint64_t hashCycles = ts[numIter-1] - ts[0];
+        uint64_t hashMicros = hashCycles / 2000;
+        printf("%ld,%ld\n", hashCycles,hashMicros);
 
 
         PHYS_CONTIG_FREE(pSrcBuffer);

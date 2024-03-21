@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- *
+ * 
  *   GPL LICENSE SUMMARY
- *
+ * 
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- *
+ * 
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- *
+ * 
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- *
+ * 
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- *
+ * 
  *   Contact Information:
  *   Intel Corporation
- *
+ * 
  *   BSD LICENSE
- *
+ * 
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- *
+ * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- *
+ * 
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- *
+ * 
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *
+ * 
+ * 
  *
  ***************************************************************************/
 
@@ -103,28 +103,7 @@
 #include "lac_sym_hash.h"
 #include "lac_sym_alg_chain.h"
 #include "lac_sym_auth_enc.h"
-#define MAX_REQUESTS 100
-OsalTimeval submitStartTimes[MAX_REQUESTS];
-OsalTimeval submitEndTimes[MAX_REQUESTS];
 
-OsalTimeval createRequestStartTimes[MAX_REQUESTS];
-OsalTimeval createRequestEndTimes[MAX_REQUESTS];
-
-int requestsSubmitted = 0;
-
-void printRequestTimes()
-{
-    int i;
-    uint64_t subsum=0, reqsum=0;
-    for (i = 0; i < requestsSubmitted; i++)
-    {
-        subsum += submitEndTimes[i].nsecs - submitStartTimes[i].nsecs;
-        reqsum += createRequestEndTimes[i].nsecs - createRequestStartTimes[i].nsecs;
-    }
-    printf("Library submit time: %f\n", (double)subsum/(double)requestsSubmitted);
-    printf("Library create request time: %f\n", (double)reqsum/(double)requestsSubmitted);
-    requestsSubmitted = 0;
-}
 
 static const dc_chain_cmd_tbl_t dc_chain_cmd_table[] = {
     /* link0: additional=2(hash)|dir=0(rsvd)|type=1(crypto)
@@ -1378,8 +1357,6 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
     pTemp = (Cpa8U *)pSessionHandle + sizeof(dc_chain_session_head_t);
     for (i = 0; i < numOperations; i++)
     {
-        printf("Chaining operation %d\n", i);
-        osalTimeGet(&createRequestStartTimes[requestsSubmitted]);
         if (DC_CHAIN_TYPE_GET(pTemp) == CPA_DC_CHAIN_COMPRESS_DECOMPRESS)
         {
             pTemp += sizeof(CpaDcChainSessionType);
@@ -1396,7 +1373,6 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
                 status = CPA_STATUS_RETRY;
                 goto out_err;
             }
-
             status = dcChainPrepare_CompRequest(dcInstance,
                                                 pChainCookie,
                                                 pTemp,
@@ -1441,13 +1417,13 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
         }
     }
 
-
     if (NULL == pDcSessDesc)
     {
         LAC_LOG_ERROR("No compression request on Chaining\n");
         status = CPA_STATUS_INVALID_PARAM;
         goto out_err;
     }
+
     if (pDcService->generic_service_info.isGen4)
     {
         /* Populates the QAT common request middle part of the message
@@ -1461,20 +1437,14 @@ CpaStatus dcChainPerformOp(CpaInstanceHandle dcInstance,
             0,
             0);
     }
-    osalTimeGet(&createRequestEndTimes[requestsSubmitted]);
 
     /*Put message on the ring*/
-    osalTimeGet(&submitStartTimes[requestsSubmitted]);
     status = SalQatMsg_transPutMsg(pDcService->trans_handle_compression_tx,
                                    (void *)&pChainCookie->request,
                                    LAC_QAT_DC_REQ_SZ_LW,
                                    LAC_LOG_MSG_DC,
                                    NULL);
-    osalTimeGet(&submitEndTimes[requestsSubmitted]);
-    requestsSubmitted++;
-    if(! (requestsSubmitted % MAX_REQUESTS) ){
-        printRequestTimes();
-    }
+
     /*update stats*/
     if (CPA_STATUS_SUCCESS == status)
     {
