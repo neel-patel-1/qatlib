@@ -682,28 +682,43 @@ CpaStatus requestGen(void){
         FAIL_ON_CPA_FAIL(status);
         status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
         FAIL_ON_CPA_FAIL(status);
-        // memcpy(pSrcBuffer, sampleData, buffserSize);
+
         FILE *file = fopen(CALGARY, "r");
         fseek(file, 0, SEEK_END);
         uint64_t fileSize = ftell(file);
         fseek(file, 0, SEEK_SET);
         int numIter = fileSize / (BUF_SIZE);
 
-        fread(pSrcBuffer, 1, BUF_SIZE, file);
-        createTestBufferList(&pBufferListSrc, pSrcBuffer, BUF_SIZE);
-        if( ! memcmp(pBufferListSrc->pBuffers->pData, pSrcBuffer, BUF_SIZE)){
-            printf("Buffer List Created Successfully\n");
-        }
-        else{
-            printf("Buffer List Creation Failed\n");
+        CpaBufferList **srcBufferLists = NULL;
+        OS_MALLOC(&srcBufferLists, numIter * sizeof(CpaBufferList *));
+        for(int i=0; i<numIter; i++){
+            CpaBufferList *pBufferListSrc = srcBufferLists[i];
+            status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error in allocating pBufferListSrc\n");
+                return CPA_STATUS_FAIL;
+            }
+            fread(pSrcBuffer, 1, BUF_SIZE, file);
+            createTestBufferList(&pBufferListSrc, pSrcBuffer, BUF_SIZE);
+            if( ! memcmp(pBufferListSrc->pBuffers->pData, pSrcBuffer, BUF_SIZE)){
+                printf("Buffer List Created Successfully\n");
+            }
+            else{
+                printf("Buffer List Creation Failed\n");
+            }
         }
 
-        pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
-        pBufferListDst->pBuffers = pFlatBuffer;
-        pBufferListDst->numBuffers = 1;
-        pBufferListDst->pPrivateMetaData = pBufferMetaDst;
-        pFlatBuffer->dataLenInBytes = dstBufferSize;
-        pFlatBuffer->pData = pDstBuffer;
+
+
+        // createTestBufferList(&pBufferListSrc, pSrcBuffer, BUF_SIZE);
+        // pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
+        // pBufferListDst->pBuffers = pFlatBuffer;
+        // pBufferListDst->numBuffers = 1;
+        // pBufferListDst->pPrivateMetaData = pBufferMetaDst;
+        // pFlatBuffer->dataLenInBytes = dstBufferSize;
+        // pFlatBuffer->pData = pDstBuffer;
+        return CPA_STATUS_SUCCESS;
 
 
         PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numIter);
