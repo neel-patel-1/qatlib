@@ -731,7 +731,7 @@ CpaStatus requestGen(void){
                 (void *)&complete, /* data sent as is to the callback function*/
                 pOpData,           /* operational data struct */
                 srcBufferLists[i],       /* source buffer list */
-                dstBufferLists[i],       /* same src & dst for an in-place operation*/
+                srcBufferLists[i],       /* same src & dst for an in-place operation*/
                 NULL); /*Don't verify*/
             }
         }
@@ -758,7 +758,8 @@ CpaStatus requestGen(void){
             return CPA_STATUS_FAIL;
         }
 
-        printf("%d,%d,%d,%ld\n", testCtr, numFragments,fragmentSize,hashNanos);
+        printf("%d,%d,%d,%ld,%ld\n",
+        testCtr, numFragments,fragmentSize,hashNanos, numFragments*fragmentSize/hashNanos);
     }
 
     /* Validate Destination Buffers */
