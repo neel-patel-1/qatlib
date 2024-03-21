@@ -450,9 +450,12 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-
     ts[requestCtr] = sampleCoderdtsc();
     requestCtr++;
+    if(pCallbackTag != NULL){
+        COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
+    }
+
 }
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
@@ -695,28 +698,41 @@ CpaStatus requestGen(void){
         PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numIter);
         printf("Num Iterations: %d\n", numIter);
 
+        COMPLETION_INIT((&complete));
         for (int i=0; i<numIter; i++){
 
             // FAIL_ON(fread(pSrcBuffer, 1, BUF_SIZE, file) != BUF_SIZE, "Error in reading file\n");
-
-            status = cpaCySymPerformOp(
+            if(i < numIter - 1){
+                status = cpaCySymPerformOp(
+                    cyInstHandle,
+                    NULL, /* data sent as is to the callback function*/
+                    pOpData,           /* operational data struct */
+                    srcBufferLists[i],       /* source buffer list */
+                    dstBufferLists[i],       /* same src & dst for an in-place operation*/
+                    NULL); /*Don't verify*/
+                }
+            else{
+                status = cpaCySymPerformOp(
                 cyInstHandle,
-                NULL, /* data sent as is to the callback function*/
+                (void *)&complete, /* data sent as is to the callback function*/
                 pOpData,           /* operational data struct */
                 srcBufferLists[i],       /* source buffer list */
                 dstBufferLists[i],       /* same src & dst for an in-place operation*/
                 NULL); /*Don't verify*/
+            }
         }
-        for(int i=0; i<numIter; i++){
-            status = cpaDcCompressData2(
-                dcInstHandle,
-                sessionHdl,
-                pBufferListSrc,     /* source buffer list */
-                pBufferListDst,     /* destination buffer list */
-                &opData,            /* Operational data */
-                &dcResults,         /* results structure */
-                NULL);
-        }
+        // for(int i=0; i<numIter; i++){
+        //     status = cpaDcCompressData2(
+        //         dcInstHandle,
+        //         sessionHdl,
+        //         pBufferListSrc,     /* source buffer list */
+        //         pBufferListDst,     /* destination buffer list */
+        //         &opData,            /* Operational data */
+        //         &dcResults,         /* results structure */
+        //         NULL);
+        // }
+        COMPLETION_WAIT((&complete),50);
+        COMPLETION_DESTROY((&complete));
         uint64_t hashCycles = ts[numIter-1] - ts[0];
         uint64_t hashMicros = hashCycles / 2000;
         printf("%ld,%ld\n", hashCycles,hashMicros);
