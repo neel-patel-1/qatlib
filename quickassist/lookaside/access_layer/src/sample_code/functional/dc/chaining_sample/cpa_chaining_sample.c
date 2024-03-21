@@ -78,6 +78,7 @@
 #include <time.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <immintrin.h>
 
 extern int gDebugParam;
 
@@ -683,6 +684,12 @@ CpaStatus requestGen(void){
         }
         for(int i=0; i<numIter;i++){
             populateBufferList(&srcBufferLists[i], 1, BUF_SIZE, bufferMetaSize);
+        }
+
+        for(int i=0; i<numIter;i++){
+            for(int j=0; j<srcBufferLists[i]->pBuffers->dataLenInBytes; j+=64){
+                _mm_clflush((srcBufferLists[i]->pBuffers->pData)+j);
+            }
         }
 
         return CPA_STATUS_SUCCESS;
