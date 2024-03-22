@@ -95,8 +95,9 @@ static volatile int gPollingCy = 0;
 static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
 
-Cpa16U numDcResps_g = 0;
-Cpa16U numHashResps_g = 0;
+volatile Cpa16U numDcResps_g = 0;
+volatile Cpa16U numHashResps_g = 0;
+volatile Cpa16U lastHashResp_idx = 0;
 
 Cpa16U numBufs_g = 0;
 Cpa32U bufSize_g = 0;
@@ -176,14 +177,40 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 
 void printeHashBWAndUpdateLastHashTimeStamp(void)
 {
-    if(hashStartTime_g.tv_sec > 0){
+    if(hashStartTime_g.tv_nsec == 0){
+        clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+        return;
+    } else {
         struct timespec curTime;
         clock_gettime(CLOCK_MONOTONIC, &curTime);
         uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
             (hashStartTime_g.tv_sec * 1000000000 + hashStartTime_g.tv_nsec);
-        printf("Hash-BW(MB/s): %ld\n", (numHashResps_g * bufSize_g) / (ns/1000));
+        uint64_t us = ns/1000;
+        if(us == 0){
+            return;
+        }
+        printf("Hash-BW(MB/s): %ld\n", (numHashResps_g * bufSize_g) / (us));
+        clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     }
-    clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+}
+
+void printeDCBWAndUpdateLastDCTimeStamp(void)
+{
+    if(dcStartTime_g.tv_nsec == 0){
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+        return;
+    } else {
+        struct timespec curTime;
+        clock_gettime(CLOCK_MONOTONIC, &curTime);
+        uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+            (dcStartTime_g.tv_sec * 1000000000 + dcStartTime_g.tv_nsec);
+        uint64_t us = ns/1000;
+        if(us == 0){
+            return;
+        }
+        printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (us));
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+    }
 }
 
 void symCallback(void *pCallbackTag,
@@ -193,7 +220,7 @@ void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    if ((Cpa16U) (numHashResps_g + 1) < (Cpa16U)numHashResps_g){
+    if ((Cpa16U) (numHashResps_g + 1) < numHashResps_g ){
         printeHashBWAndUpdateLastHashTimeStamp();
     }
     numHashResps_g++;
@@ -209,14 +236,7 @@ void symCallback(void *pCallbackTag,
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
-        if(dcStartTime_g.tv_sec > 0){
-            struct timespec curTime;
-            clock_gettime(CLOCK_MONOTONIC, &curTime);
-            uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
-                (dcStartTime_g.tv_sec * 1000000000 + dcStartTime_g.tv_nsec);
-            // printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
-        }
-        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+        printeDCBWAndUpdateLastDCTimeStamp();
 
     }
     numDcResps_g++;
@@ -238,7 +258,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa32U ctx_size = 0;
     CpaStatus status;
     sampleDcGetInstance(&dcInstHandle);
-    clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+
 
     status = cpaDcQueryCapabilities(dcInstHandle, &cap);
 
@@ -300,6 +320,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     CpaDcRqResults dcResults;
     CpaDcOpData opData = {};
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+    clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+    clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     while (gPollingCy)
     {
         int cur=0;
@@ -319,7 +341,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
            if(unlikely(cur > numHashResps_g)){
-                printeHashBWAndUpdateLastHashTimeStamp();
+
                 while (cur < UINT16_MAX){
                     status = cpaDcCompressData2(
                         dcInstHandle,
@@ -343,6 +365,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     NULL);
                 cur= (cur + 1);
             }
+            // printf("Caught up to responses\n");
+            printeHashBWAndUpdateLastHashTimeStamp();
         }
     }
 

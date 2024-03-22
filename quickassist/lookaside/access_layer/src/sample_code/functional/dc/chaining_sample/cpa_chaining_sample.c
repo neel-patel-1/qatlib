@@ -85,9 +85,6 @@ extern Cpa32U fragmentSize_g;
 extern CpaBufferList **pSrcBufferList_g;
 extern CpaBufferList **pDstBufferList_g;
 extern Cpa16U numBufs_g;
-extern Cpa16U nResps_g;
-extern Cpa16U numHashResps_g;
-extern Cpa16U numDcResps_g;
 extern Cpa32U bufSize_g;
 extern struct timespec hashStartTime_g;
 
