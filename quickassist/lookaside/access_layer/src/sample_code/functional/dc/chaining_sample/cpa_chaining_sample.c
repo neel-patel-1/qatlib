@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  ***************************************************************************/
 
@@ -74,8 +74,48 @@
 #include "openssl/sha.h"
 #include "zlib.h"
 #include "cpa_chaining_sample_input.h"
+#include "icp_sal_poll.h"
+#include <time.h>
+#include <assert.h>
+#include <stdbool.h>
+#include <immintrin.h>
 
 extern int gDebugParam;
+extern Cpa32U fragmentSize_g;
+extern CpaBufferList **pSrcBufferList_g;
+extern CpaBufferList **pDstBufferList_g;
+extern Cpa16U numBufs_g;
+extern Cpa32U bufSize_g;
+extern struct timespec hashStartTime_g;
+
+struct timespec *userDescStart;
+struct timespec *userDescEnd;
+struct timespec *userSubmitStart;
+struct timespec *userSubmitEnd;
+struct timespec *userSubmitHashStart;
+struct timespec *userSubmitHashEnd;
+struct timespec *userPollStart;
+struct timespec *userPollEnd;
+struct timespec sessionInitStart;
+struct timespec sessionInitEnd;
+
+int requestCtr = 0;
+
+
+
+#define CALGARY "/lib/firmware/calgary"
+#define FAIL_ON_CPA_FAIL(x)                                                             \
+    if (x != CPA_STATUS_SUCCESS)                                                                     \
+    {                                                                          \
+        PRINT_ERR("Error: %s\n", #x);                                           \
+        return CPA_STATUS_FAIL;                                                \
+    }
+#define FAIL_ON(x, msg)                                                             \
+    if (x)                                                                     \
+    {                                                                          \
+        PRINT_ERR("Error: %s\n", msg);                                          \
+    }
+
 
 #define NUM_SESSIONS_TWO (2)
 
@@ -209,16 +249,7 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
  * complete variable to indicate it has been called.
  */
 //<snippet name="dcCallback">
-static void dcCallback(void *pCallbackTag, CpaStatus status)
-{
-    PRINT_DBG("Callback called with status = %d.\n", status);
 
-    if (NULL != pCallbackTag)
-    {
-        /* indicate that the function has been called */
-        COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    }
-}
 //</snippet>
 
 /* Build dc chain buffer lists */
@@ -295,6 +326,33 @@ static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
     return CPA_STATUS_SUCCESS;
 }
 
+FILE * file = NULL;
+
+static CpaStatus populateBufferList(CpaBufferList **testBufferList,
+                                        Cpa32U numBuffers,
+                                        Cpa32U bufferSize,
+                                        Cpa32U bufferMetaSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaBufferList *pBuffList = *testBufferList;
+
+    if(file == NULL){
+        file = fopen(CALGARY, "r");
+    }
+    for(int i=0; i<numBuffers; i++){
+        uint64_t offset = 0;
+        offset = fread(pBuffList->pBuffers[i].pData, 1, bufferSize, file);
+        if ( offset < bufferSize){
+            rewind(file);
+            if (fread((pBuffList->pBuffers[i].pData) + offset, 1, bufferSize - offset, file) < 1){
+                PRINT_ERR("Error in reading file\n");
+                return CPA_STATUS_FAIL;
+            }
+        }
+    }
+    return CPA_STATUS_SUCCESS;
+}
+
 /* Free dc chain buffer lists */
 static void dcChainFreeBufferList(CpaBufferList **testBufferList)
 {
@@ -326,489 +384,328 @@ static void dcChainFreeBufferList(CpaBufferList **testBufferList)
         pBuffList->pPrivateMetaData = NULL;
     }
 
-    OS_FREE(pBuffList);
+    // OS_FREE(pBuffList);
     *testBufferList = NULL;
 }
 
-/*
- * This function performs a dc chain operation.
- */
-static CpaStatus dcChainingPerformOp(CpaInstanceHandle dcInstHandle,
-                                     CpaDcSessionHandle sessionHdl)
+uint64_t *ts;
+
+/* Generate Bufferlist length 1 with data*/
+static void createTestBufferList(CpaBufferList **ptrToSrcBufList,
+                                 Cpa8U *pSrcBuffer,
+                                 int size)
 {
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    Cpa32U bufferMetaSize = 0;
-    CpaBufferList *pBufferListSrc = NULL;
-    CpaBufferList *pBufferListDst = NULL;
-    CpaFlatBuffer *pFlatBuffer = NULL;
-    Cpa32U bufferSize = 0;
-    Cpa32U numBuffers = 1;
-    Cpa8U *pDigestBuffer = NULL;
-    CpaDcChainOpData chainOpData[2] = {{0}, {0}};
-    CpaDcOpData dcOpData = {0};
-    CpaCySymOpData cySymOpData = {0};
-    CpaDcChainRqResults chainResult = {0};
-    CpaDcChainOperations operation = CPA_DC_CHAIN_HASH_THEN_COMPRESS;
-    CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
-    Cpa8U numSessions = NUM_SESSIONS_TWO;
-    struct COMPLETION_STRUCT complete;
-    Cpa8U *pSWDigestBuffer = NULL;
-
-    PRINT_DBG("cpaDcBufferListGetMetaSize\n");
-
-    /*
-     * Different implementations of the API require different
-     * amounts of space to store meta-data associated with buffer
-     * lists.  We query the API to find out how much space the current
-     * implementation needs, and then allocate space for the buffer
-     * meta data, the buffer list, and for the buffer itself.
-     */
-    //<snippet name="memAlloc">
-    status =
-        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
-    if (CPA_STATUS_SUCCESS != status)
-    {
-        PRINT_ERR("Error get meta size\n");
-        return CPA_STATUS_FAIL;
-    }
-    bufferSize = sampleDataSize;
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        status = dcChainBuildBufferList(
-            &pBufferListSrc, numBuffers, bufferSize, bufferMetaSize);
-    }
-
-    /* copy source data into buffer */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
-        memcpy(pFlatBuffer->pData, sampleData, bufferSize);
-    }
-
-    /* Allocate destination buffer the four times as source buffer */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        status = dcChainBuildBufferList(
-            &pBufferListDst, numBuffers, 4 * bufferSize, bufferMetaSize);
-    }
-
-    /* Allocate digest result buffer to store hash value */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        status =
-            PHYS_CONTIG_ALLOC(&pDigestBuffer, GET_HASH_DIGEST_LENGTH(hashAlg));
-    }
-    //</snippet>
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        dcOpData.flushFlag = CPA_DC_FLUSH_FINAL;
-        dcOpData.compressAndVerify = CPA_TRUE;
-        dcOpData.compressAndVerifyAndRecover = CPA_TRUE;
-
-        cySymOpData.packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-        cySymOpData.hashStartSrcOffsetInBytes = 0;
-        cySymOpData.messageLenToHashInBytes = bufferSize;
-        cySymOpData.pDigestResult = pDigestBuffer;
-
-        /* Set chaining operation data */
-        chainOpData[0].opType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
-        chainOpData[0].pCySymOp = &cySymOpData;
-        chainOpData[1].opType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
-        chainOpData[1].pDcOp = &dcOpData;
-
-        /*
-         * Now, we initialize the completion variable which is used by the
-         * callback function to indicate that the operation is complete.
-         * We then perform the operation.
-         */
-        //<snippet name="perfOp">
-        COMPLETION_INIT(&complete);
-        status = cpaDcChainPerformOp(dcInstHandle,
-                                     sessionHdl,
-                                     pBufferListSrc,
-                                     pBufferListDst,
-                                     operation,
-                                     numSessions,
-                                     chainOpData,
-                                     &chainResult,
-                                     (void *)&complete);
-        //</snippet>
-
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("cpaDcChainPerformOp failed. (status = %d)\n", status);
-        }
-
-        /*
-         * We now wait until the completion of the operation.  This uses a macro
-         * which can be defined differently for different OSes.
-         */
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            if (!COMPLETION_WAIT(&complete, TIMEOUT_MS))
-            {
-                PRINT_ERR("timeout or interruption in cpaDcChainPerformOp\n");
-                status = CPA_STATUS_FAIL;
-            }
-        }
-    }
-
-    /*
-     * We now check the results
-     */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        if (chainResult.dcStatus != CPA_DC_OK)
-        {
-            PRINT_ERR("Results dcStatus not as expected (dcStatus = %d)\n",
-                      chainResult.dcStatus);
-            status = CPA_STATUS_FAIL;
-        }
-        else if (chainResult.cyStatus != CPA_DC_OK)
-        {
-            PRINT_ERR("Results cyStatus not as expected (cyStatus = %d)\n",
-                      chainResult.cyStatus);
-            status = CPA_STATUS_FAIL;
-        }
-        else
-        {
-            PRINT_DBG("Data consumed %d\n", chainResult.consumed);
-            PRINT_DBG("Data produced %d\n", chainResult.produced);
-            PRINT_DBG("Crc32 checksum 0x%x\n", chainResult.crc32);
-        }
-    }
-    /* Allocate digest result buffer for execution in software*/
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        status = PHYS_CONTIG_ALLOC(&pSWDigestBuffer,
-                                   GET_HASH_DIGEST_LENGTH(hashAlg));
-    }
-    /* Use software to calculate digest and verify digest */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        status = calSWDigest(sampleData,
-                             bufferSize,
-                             pSWDigestBuffer,
-                             GET_HASH_DIGEST_LENGTH(hashAlg),
-                             hashAlg);
-
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            if (memcmp(pDigestBuffer,
-                       pSWDigestBuffer,
-                       GET_HASH_DIGEST_LENGTH(hashAlg)))
-            {
-                status = CPA_STATUS_FAIL;
-                PRINT_ERR("Digest buffer does not match expected output\n");
-            }
-            else
-            {
-                PRINT_DBG("Digest buffer matches expected output\n");
-            }
-        }
-
-        PHYS_CONTIG_FREE(pSWDigestBuffer);
-    }
-
-    /* Use zlib to decompress and verify integrity */
-    //<snippet name="software decompress">
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        struct z_stream_s stream = {0};
-        Cpa8U *pDecompBuffer = NULL;
-        Cpa8U *pHWCompBuffer = NULL;
-        Cpa32U decompBufferLength = 0;
-        Cpa32U compBufferLength = 0;
-
-        status = inflate_init(&stream);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT("zlib stream initialize failed");
-        }
-
-        decompBufferLength = pBufferListSrc->numBuffers *
-                             pBufferListSrc->pBuffers->dataLenInBytes;
-
-        compBufferLength = pBufferListDst->numBuffers *
-                           pBufferListDst->pBuffers->dataLenInBytes;
-
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = PHYS_CONTIG_ALLOC(&pDecompBuffer, decompBufferLength);
-        }
-
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = PHYS_CONTIG_ALLOC(&pHWCompBuffer, compBufferLength);
-        }
-
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            copyMultiFlatBufferToBuffer(pBufferListDst, pHWCompBuffer);
-        }
-
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = inflate_decompress(&stream,
-                                        pHWCompBuffer,
-                                        compBufferLength,
-                                        pDecompBuffer,
-                                        decompBufferLength);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("Decompress data on zlib stream failed\n");
-            }
-        }
-
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            /* Compare with original Src buffer */
-            if (memcmp(pDecompBuffer, sampleData, bufferSize))
-            {
-                status = CPA_STATUS_FAIL;
-                PRINT_ERR("Decompressed Buffer does not match source buffer\n");
-            }
-            else
-            {
-                PRINT_DBG("Decompressed Buffer matches source buffer\n");
-            }
-        }
-
-        inflate_destroy(&stream);
-
-        PHYS_CONTIG_FREE(pHWCompBuffer);
-        PHYS_CONTIG_FREE(pDecompBuffer);
-    }
-    //</snippet>
-
-    /*
-     * At this stage, the callback function has returned, so it is
-     * sure that the structures won't be needed any more.  Free the
-     * memory!
-     */
-    COMPLETION_DESTROY(&complete);
-    PHYS_CONTIG_FREE(pDigestBuffer);
-    dcChainFreeBufferList(&pBufferListSrc);
-    dcChainFreeBufferList(&pBufferListDst);
-    return status;
+    CpaBufferList *pBufferListSrc = *ptrToSrcBufList;
+    CpaFlatBuffer *pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+    pBufferListSrc->pBuffers = pFlatBuffer;
+    pBufferListSrc->numBuffers = 1;
+    pFlatBuffer->dataLenInBytes = size;
+    pFlatBuffer->pData = pSrcBuffer;
 }
 
 /*
- * This is the main entry point for the sample data dc chain code.
- * demonstrates the sequence of calls to be made to the API in order
- * to create a session, perform one or more hash plus compression operations,
- * and
- * then tear down the session.
- */
-CpaStatus dcChainSample(void)
+Create numFragments bufferlists each of size fragmentSize
+containing data from the file CALGARY
+
+*/
+
+static void createTestBufferLists(CpaBufferList ***testBufferLists,
+                                  int fragmentSize,
+                                  int numFragments)
 {
+    FILE *file = fopen(CALGARY, "r");
+    fseek(file, 0, SEEK_END);
+    uint64_t fileSize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    CpaBufferList **srcBufferLists = NULL;
+    OS_MALLOC(&srcBufferLists, numFragments * sizeof(CpaBufferList *));
+    Cpa32U bufferListMemSize =
+            sizeof(CpaBufferList) + (numFragments * sizeof(CpaFlatBuffer));
+    Cpa8U *pSrcBuffer = NULL;
+    CpaStatus status = PHYS_CONTIG_ALLOC(&pSrcBuffer, fragmentSize);
+    for(int i=0; i<numFragments; i++){
+        CpaBufferList *pBufferListSrc = srcBufferLists[i];
+        status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("Error in allocating pBufferListSrc\n");
+            return;
+        }
+        uint64_t offset = 0;
+        offset = fread(pSrcBuffer, 1, fragmentSize, file);
+        if ( offset < fragmentSize){
+            rewind(file);
+            fread(pSrcBuffer + offset, 1, fragmentSize - offset, file);
+        }
+        createTestBufferList(&pBufferListSrc, pSrcBuffer, fragmentSize);
+        if( memcmp(pBufferListSrc->pBuffers->pData, pSrcBuffer, fragmentSize) != 0){
+            printf("Buffer List Creation Failed\n");
+            exit(-1);
+        }
+        // printf("%s\0\n", pBufferListSrc->pBuffers->pData);
+    }
+    *testBufferLists = srcBufferLists;
+}
+
+void symCallback(void *pCallbackTag,
+                        CpaStatus status,
+                        const CpaCySymOp operationType,
+                        void *pOpData,
+                        CpaBufferList *pDstBuffer,
+                        CpaBoolean verifyResult);
+
+CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
+    Cpa8U* hwDigest, Cpa32U size){
+    struct z_stream_s stream = {0};
+    Cpa8U *pDecompBuffer = NULL;
+    Cpa8U *pHWCompBuffer = NULL;
+    Cpa8U *swDigestBuffer = NULL;
+
+
+    CpaStatus status;
+    status = PHYS_CONTIG_ALLOC(&swDigestBuffer, SHA256_DIGEST_LENGTH);
+    calSWDigest(orig, size,swDigestBuffer, SHA256_DIGEST_LENGTH, CPA_CY_SYM_HASH_SHA256);
+    if (memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0){
+        PRINT_ERR("Decompressed data does not match original\n");
+        return CPA_STATUS_FAIL;
+
+    }
+
+    status = inflate_init(&stream);
+    status = PHYS_CONTIG_ALLOC(&pDecompBuffer, size);
+    inflate_decompress(&stream, hwCompBuf, size, pDecompBuffer, size);
+    if (memcmp(orig, pDecompBuffer, size)!=0){
+        PRINT_ERR("Decompressed data does not match original\n");
+        return CPA_STATUS_FAIL;
+    }
+    return CPA_STATUS_SUCCESS;
+
+}
+
+CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
+    Cpa32U sessionCtxSize = 0;
+    CpaInstanceHandle cyInstHandle = NULL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymStats64 symStats = {0};
     CpaStatus status = CPA_STATUS_SUCCESS;
+
+    Cpa8U *pBufferMeta = NULL;
+    Cpa32U bufferMetaSize = 0;
+    CpaBufferList *pBufferList = NULL;
+    CpaFlatBuffer *pFlatBuffer = NULL;
+    CpaCySymOpData *pOpData = NULL;
+    Cpa32U bufferSize = fragmentSize + SHA256_DIGEST_LENGTH;
+    Cpa32U numBuffers = 1;
+    Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+    Cpa8U *pSrcBuffer = NULL;
+    Cpa8U **pDigestBuffers = NULL;
+    struct COMPLETION_STRUCT complete;
+
     CpaInstanceHandle dcInstHandle = NULL;
     CpaDcSessionHandle sessionHdl = NULL;
-    CpaDcChainSessionSetupData chainSessionData[2] = {{0}, {0}};
-    CpaDcSessionSetupData dcSessionData = {0};
-    CpaCySymSessionSetupData cySessionData = {0};
-    Cpa32U sess_size = 0;
+    CpaDcSessionSetupData sd = {0};
     CpaDcStats dcStats = {0};
     CpaDcInstanceCapabilities cap = {0};
+    CpaBufferList **bufferInterArray = NULL;
+    Cpa32U buffMetaSize = 0;
+    Cpa16U numInterBuffLists = 0;
+    Cpa16U bufferNum = 0;
+    Cpa32U sess_size = 0;
+    Cpa32U ctx_size = 0;
 
-    /*
-     * In this simplified version of instance discovery, we discover
-     * exactly one instance of a data compression service.
-     */
-    sampleDcGetInstance(&dcInstHandle);
-    if (dcInstHandle == NULL)
-    {
-        PRINT_ERR("Get instance failed\n");
+    Cpa32U dstBufferSize = bufferSize - SHA256_DIGEST_LENGTH;
+    CpaBufferList *pBufferListSrc = NULL;
+    Cpa8U *pBufferMetaSrc = NULL;
+    Cpa8U *pBufferMetaDst = NULL;
+    CpaBufferList *pBufferListDst = NULL;
+    Cpa8U *pDstBuffer = NULL;
+    CpaDcOpData opData = {};
+    CpaDcRqResults dcResults;
+    INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+
+    struct timespec *hashUserspacePerformOpStart, *hashUserspacePerformOpEnd,
+        *dcUserspacePerformOpEnd, *dcUserspacePerformOpStart;
+    struct timespec *userHashPollStart, *userHashPollEnd,
+        *userDCPollStart, *userDCPollEnd;
+
+    sampleCyGetInstance(&cyInstHandle);
+
+
+    status = cpaCyStartInstance(cyInstHandle);
+    status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+
+
+    sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+    sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
+    sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+    sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
+    sessionSetupData.hashSetupData.digestResultLenInBytes = SHA256_DIGEST_LENGTH;
+    sessionSetupData.digestIsAppended = CPA_FALSE;
+    sessionSetupData.verifyDigest = CPA_FALSE;
+
+    fragmentSize_g = fragmentSize;
+    bufSize_g = fragmentSize;
+
+    status = cpaCySymSessionCtxGetSize(
+        cyInstHandle, &sessionSetupData, &sessionCtxSize);
+    status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    status = cpaCySymInitSession(
+        cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
+
+    status =
+        cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
+    status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+
+    status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+    printf("Buffer Meta Size: %d\n", buffMetaSize);
+    status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                    &numInterBuffLists);
+    printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
+
+    if (numInterBuffLists > 0){
+        status = PHYS_CONTIG_ALLOC(
+                &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
+        for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+        {
+            status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                            sizeof(CpaBufferList));
+            status = PHYS_CONTIG_ALLOC(
+                        &bufferInterArray[bufferNum]->pPrivateMetaData,
+                        buffMetaSize);
+            status =
+                        PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                                        sizeof(CpaFlatBuffer));
+            status = PHYS_CONTIG_ALLOC(
+                        &bufferInterArray[bufferNum]->pBuffers->pData,
+                        2 * fragmentSize);
+            bufferInterArray[bufferNum]->numBuffers = 1;
+                    bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+                        2 * fragmentSize;
+        }
+    }
+    status = cpaDcStartInstance(
+        dcInstHandle, numInterBuffLists, bufferInterArray);
+    sd.compLevel = CPA_DC_L1;
+    sd.compType = CPA_DC_DEFLATE;
+    sd.huffType = CPA_DC_HT_STATIC;
+    sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+    sd.sessDirection = CPA_DC_DIR_COMPRESS;
+    sd.sessState = CPA_DC_STATELESS;
+    sd.checksum = CPA_DC_CRC32;
+    printf("Buffer Size: %d, Fragment Size: %d\n", bufferSize, fragmentSize);
+    status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+    printf("Session Size: %d\n", sess_size);
+    FAIL_ON_CPA_FAIL(status);
+    status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+    bool do_sync = false;
+
+
+    status =
+        cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
+    status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+    status = OS_MALLOC(&pBufferList, bufferListMemSize);
+    status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferList + 1);
+
+    pBufferList->pBuffers = pFlatBuffer;
+    pBufferList->numBuffers = 1;
+    pBufferList->pPrivateMetaData = pBufferMeta;
+
+    pFlatBuffer->dataLenInBytes = bufferSize;
+    pFlatBuffer->pData = pSrcBuffer;
+
+    /* Hash Op Data */
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->sessionCtx = sessionCtx;
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->hashStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToHashInBytes = fragmentSize;
+
+    COMPLETION_INIT((&complete));
+
+
+
+
+    /* DC Op */
+    status =
+        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+    status = cpaDcDeflateCompressBound(
+        dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
+    status = cpaDcDeflateCompressBound(
+        dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
+
+    status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+    FAIL_ON_CPA_FAIL(status);
+
+    status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+    FAIL_ON_CPA_FAIL(status);
+
+    status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+    FAIL_ON_CPA_FAIL(status);
+
+    status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
+    FAIL_ON_CPA_FAIL(status);
+    status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
+    FAIL_ON_CPA_FAIL(status);
+    status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
+    FAIL_ON_CPA_FAIL(status);
+
+
+        /* */
+    CpaBufferList **srcBufferLists = NULL;
+    CpaBufferList **dstBufferLists = NULL;
+    PHYS_CONTIG_ALLOC(&srcBufferLists, numFragments * sizeof(CpaBufferList *));
+    PHYS_CONTIG_ALLOC(&dstBufferLists, numFragments * sizeof(CpaBufferList *));
+    for(int i=0; i<numFragments;i++){
+        dcChainBuildBufferList(&srcBufferLists[i], 1, fragmentSize, bufferMetaSize);
+        dcChainBuildBufferList(&dstBufferLists[i], 1, fragmentSize, bufferMetaSize);
+    }
+    for(int i=0; i<numFragments;i++){
+        populateBufferList(&srcBufferLists[i], 1, fragmentSize, bufferMetaSize);
+    }
+    pDstBufferList_g = dstBufferLists;
+    pSrcBufferList_g = srcBufferLists;
+    numBufs_g = numBuffers;
+
+    sampleCyStartPolling(cyInstHandle);
+
+    /* Run Tests */
+    uint64_t exeTimes[testIter];
+    PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numFragments);
+    int buf_idx = 0;
+
+    /* Affinitize Requestor */
+    pthread_t self = pthread_self();
+    status = utilCodeThreadBind(self, 4);
+    if(status != CPA_STATUS_SUCCESS){
+        PRINT_ERR("Error in binding thread\n");
         return CPA_STATUS_FAIL;
     }
+    while(1){
+        Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
+        pOpData->pDigestResult = pDigestBuffer;
+        status = cpaCySymPerformOp(
+            cyInstHandle,
+            NULL, /* data sent as is to the callback function*/
+            pOpData,           /* operational data struct */
+            srcBufferLists[buf_idx],       /* source buffer list */
+            dstBufferLists[buf_idx],       /* same src & dst for an in-place operation*/
+            NULL); /*Don't verify*/
 
-    /* Query Capabilities */
-    PRINT_DBG("cpaDcQueryCapabilities\n");
-    //<snippet name="queryStart">
-    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
-    if (status != CPA_STATUS_SUCCESS)
-    {
-        PRINT_ERR("Query capabilities failed\n");
-        return status;
+
+        buf_idx = (buf_idx + 1) % numFragments;
     }
 
-    if (CPA_FALSE == CPA_BITMAP_BIT_TEST(cap.dcChainCapInfo,
-                                         CPA_DC_CHAIN_HASH_THEN_COMPRESS))
-    {
-        PRINT_ERR(
-            "Hash + compress chained operation is not supported on logical "
-            "instance.\n");
-        PRINT_ERR("Please ensure Chaining related settings are enabled in the "
-                  "device configuration "
-                  "file.\n");
-        return CPA_STATUS_FAIL;
-    }
 
-    if (!cap.statelessDeflateCompression || !cap.checksumCRC32 ||
-        !cap.checksumAdler32)
-    {
-        PRINT_ERR("Error: Unsupported functionality\n");
-        return CPA_STATUS_FAIL;
-    }
 
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Set the address translation function for the instance */
-        status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
-    }
+    PHYS_CONTIG_FREE(pSrcBuffer);
+    OS_FREE(pBufferList);
+    PHYS_CONTIG_FREE(pBufferMeta);
+    OS_FREE(pOpData);
 
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Start static data compression component */
-        PRINT_DBG("cpaDcStartInstance\n");
-        status = cpaDcStartInstance(dcInstHandle, 0, NULL);
-    }
-    //</snippet>
 
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /*
-         * If the instance is polled start the polling thread. Note that
-         * how the polling is done is implementation-dependent.
-         */
-        sampleDcStartPolling(dcInstHandle);
-        /*
-         * We now populate the fields of the session operational data and create
-         * the session.  Note that the size required to store a session is
-         * implementation-dependent, so we query the API first to determine how
-         * much memory to allocate, and then allocate that memory.
-         */
-
-        //<snippet name="initSession">
-        /* Initialize compression session data */
-        dcSessionData.compLevel = CPA_DC_L1;
-        dcSessionData.compType = CPA_DC_DEFLATE;
-        dcSessionData.huffType = CPA_DC_HT_STATIC;
-        dcSessionData.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
-        dcSessionData.sessDirection = CPA_DC_DIR_COMPRESS;
-        dcSessionData.sessState = CPA_DC_STATELESS;
-        dcSessionData.checksum = CPA_DC_CRC32;
-
-        /* Initialize crypto session data */
-        cySessionData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-        /* Hash operation on the source data */
-        cySessionData.symOperation = CPA_CY_SYM_OP_HASH;
-        cySessionData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
-        cySessionData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
-        cySessionData.hashSetupData.digestResultLenInBytes =
-            GET_HASH_DIGEST_LENGTH(cySessionData.hashSetupData.hashAlgorithm);
-        /* Place the digest result in a buffer unrelated to srcBuffer */
-        cySessionData.digestIsAppended = CPA_FALSE;
-        /* Generate the digest */
-        cySessionData.verifyDigest = CPA_FALSE;
-
-        /* Initialize chaining session data - hash + compression
-         * chain operation */
-        chainSessionData[0].sessType = CPA_DC_CHAIN_SYMMETRIC_CRYPTO;
-        chainSessionData[0].pCySetupData = &cySessionData;
-        chainSessionData[1].sessType = CPA_DC_CHAIN_COMPRESS_DECOMPRESS;
-        chainSessionData[1].pDcSetupData = &dcSessionData;
-
-        /* Determine size of session context to allocate */
-        PRINT_DBG("cpaDcChainGetSessionSize\n");
-        status = cpaDcChainGetSessionSize(dcInstHandle,
-                                          CPA_DC_CHAIN_HASH_THEN_COMPRESS,
-                                          NUM_SESSIONS_TWO,
-                                          chainSessionData,
-                                          &sess_size);
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Allocate session memory */
-        status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
-    }
-
-    /* Initialize the chaining session */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        PRINT_DBG("cpaDcChainInitSession\n");
-        status = cpaDcChainInitSession(dcInstHandle,
-                                       sessionHdl,
-                                       CPA_DC_CHAIN_HASH_THEN_COMPRESS,
-                                       NUM_SESSIONS_TWO,
-                                       chainSessionData,
-                                       dcCallback);
-    }
-    //</snippet>
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        CpaStatus sessionStatus = CPA_STATUS_SUCCESS;
-
-        /* Perform chaining operation */
-        status = dcChainingPerformOp(dcInstHandle, sessionHdl);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("dcChainingPerformOp failed\n");
-        }
-        /*
-         * In a typical usage, the session might be used to compression
-         * multiple buffers.  In this example however, we can now
-         * tear down the session.
-         */
-        PRINT_DBG("cpaDcChainRemoveSession\n");
-        //<snippet name="removeSession">
-        status = cpaDcChainRemoveSession(dcInstHandle, sessionHdl);
-        //</snippet>
-
-        /* Maintain status of remove session only when status of all operations
-         * before it are successful. */
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = sessionStatus;
-        }
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /*
-         * We can now query the statistics on the instance.
-         *
-         * Note that some implementations may also make the stats
-         * available through other mechanisms, e.g. in the /proc
-         * virtual filesystem.
-         */
-        status = cpaDcGetStats(dcInstHandle, &dcStats);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("cpaDcGetStats failed, status = %d\n", status);
-        }
-        else
-        {
-            PRINT_DBG("Number of compression operations completed: %llu\n",
-                      (unsigned long long)dcStats.numCompCompleted);
-        }
-    }
-
-    /*
-     * Free up memory, stop the instance, etc.
-     */
-
-    /* Stop the polling thread */
-    sampleDcStopPolling();
-
-    PRINT_DBG("cpaDcStopInstance\n");
-    cpaDcStopInstance(dcInstHandle);
-
-    /* Free session Context */
-    PHYS_CONTIG_FREE(sessionHdl);
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        PRINT_DBG("Sample code ran successfully\n");
-    }
-    else
-    {
-        PRINT_ERR("Sample code failed with status of %d\n", status);
-    }
-
-    return status;
 }

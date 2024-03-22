@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  ***************************************************************************/
 
@@ -74,6 +74,7 @@
 #include "cpa_sample_utils.h"
 #include "cpa_dc.h"
 #include "icp_sal_poll.h"
+#include <time.h>
 
 /*
  * Maximum number of instances to query from the API
@@ -93,6 +94,21 @@ static volatile int gPollingCy = 0;
 
 static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
+
+volatile Cpa16U numDcResps_g = 0;
+volatile Cpa16U numHashResps_g = 0;
+volatile Cpa16U lastHashResp_idx = 0;
+
+Cpa16U numBufs_g = 0;
+Cpa32U bufSize_g = 0;
+
+CpaBufferList **pSrcBufferList_g = NULL;
+CpaBufferList **pDstBufferList_g = NULL;
+
+Cpa32U fragmentSize_g = 0;
+
+struct timespec dcStartTime_g = {0};
+struct timespec hashStartTime_g = {0};
 
 #ifdef SC_ENABLE_DYNAMIC_COMPRESSION
 CpaDcHuffType huffmanType_g = CPA_DC_HT_FULL_DYNAMIC;
@@ -159,18 +175,199 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 #endif
 //</snippet>
 
+void printeHashBWAndUpdateLastHashTimeStamp(void)
+{
+    if(hashStartTime_g.tv_nsec == 0){
+        clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+        return;
+    } else {
+        struct timespec curTime;
+        clock_gettime(CLOCK_MONOTONIC, &curTime);
+        uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+            (hashStartTime_g.tv_sec * 1000000000 + hashStartTime_g.tv_nsec);
+        uint64_t us = ns/1000;
+        if(us == 0){
+            return;
+        }
+        printf("Hash-BW(MB/s): %ld\n", (numHashResps_g * bufSize_g) / (us));
+        clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+    }
+}
+
+void printeDCBWAndUpdateLastDCTimeStamp(void)
+{
+    if(dcStartTime_g.tv_nsec == 0){
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+        return;
+    } else {
+        struct timespec curTime;
+        clock_gettime(CLOCK_MONOTONIC, &curTime);
+        uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+            (dcStartTime_g.tv_sec * 1000000000 + dcStartTime_g.tv_nsec);
+        uint64_t us = ns/1000;
+        if(us == 0){
+            return;
+        }
+        printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (us));
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+    }
+}
+
+void symCallback(void *pCallbackTag,
+                        CpaStatus status,
+                        const CpaCySymOp operationType,
+                        void *pOpData,
+                        CpaBufferList *pDstBuffer,
+                        CpaBoolean verifyResult)
+{
+    if ((Cpa16U) (numHashResps_g + 1) < numHashResps_g ){
+        printeHashBWAndUpdateLastHashTimeStamp();
+    }
+    numHashResps_g++;
+
+
+}
+
 /*
  * This function polls a crypto instance.
  *
  */
+
+static void dcCallback(void *pCallbackTag, CpaStatus status)
+{
+    if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
+        printeDCBWAndUpdateLastDCTimeStamp();
+
+    }
+    numDcResps_g++;
+}
+
 #ifdef DO_CRYPTO
 static void sal_polling(CpaInstanceHandle cyInstHandle)
 {
+    CpaInstanceHandle dcInstHandle = NULL;
+    CpaDcSessionHandle sessionHdl = NULL;
+    CpaDcSessionSetupData sd = {0};
+    CpaDcStats dcStats = {0};
+    CpaDcInstanceCapabilities cap = {0};
+    CpaBufferList **bufferInterArray = NULL;
+    Cpa32U buffMetaSize = 0;
+    Cpa16U numInterBuffLists = 0;
+    Cpa16U bufferNum = 0;
+    Cpa32U sess_size = 0;
+    Cpa32U ctx_size = 0;
+    CpaStatus status;
+    sampleDcGetInstance(&dcInstHandle);
+
+
+    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
+
+    status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+    printf("Buffer Meta Size: %d\n", buffMetaSize);
+    status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                    &numInterBuffLists);
+    printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
+
+    if (numInterBuffLists > 0){
+        status = PHYS_CONTIG_ALLOC(
+                &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
+        for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+        {
+            status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                            sizeof(CpaBufferList));
+            status = PHYS_CONTIG_ALLOC(
+                        &bufferInterArray[bufferNum]->pPrivateMetaData,
+                        buffMetaSize);
+            status =
+                        PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                                        sizeof(CpaFlatBuffer));
+            status = PHYS_CONTIG_ALLOC(
+                        &bufferInterArray[bufferNum]->pBuffers->pData,
+                        2 * fragmentSize_g);
+            bufferInterArray[bufferNum]->numBuffers = 1;
+                    bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+                        2 * fragmentSize_g;
+        }
+    }
+    status = cpaDcStartInstance(
+        dcInstHandle, numInterBuffLists, bufferInterArray);
+    sd.compLevel = CPA_DC_L1;
+    sd.compType = CPA_DC_DEFLATE;
+    sd.huffType = CPA_DC_HT_STATIC;
+    sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+    sd.sessDirection = CPA_DC_DIR_COMPRESS;
+    sd.sessState = CPA_DC_STATELESS;
+    sd.checksum = CPA_DC_CRC32;
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start DC Instance\n");
+    }
+
+    status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+    status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+
+    status = cpaDcInitSession(
+        dcInstHandle,
+        sessionHdl, /* session memory */
+        &sd,        /* session setup data */
+        NULL, /* pContexBuffer not required for stateless operations */
+        dcCallback); /* callback function */
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start DC Session: %d\n"  , status);
+    }
+    sampleDcStartPolling(dcInstHandle);
+
     gPollingCy = 1;
+    CpaDcRqResults dcResults;
+    CpaDcOpData opData = {};
+    INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+    clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+    clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     while (gPollingCy)
     {
-        icp_sal_CyPollInstance(cyInstHandle, 0);
-        OS_SLEEP(10);
+        int cur=0;
+        if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
+            /* what if all numBufs_g got callback'd? L
+
+            while( cur < numHashResps_g)   but use cur % numBufs_g  for bufs approach
+                - need to check if numHashResps_g overflow'd (cur > numHashReps_g):
+                if(unlikely(cur > numHashResps_g)){
+                    while (cur < MAX_CPA16U){
+                        comp(cur%num_bufs)
+                    }
+                }
+                while( cur < numHashResps_g)
+                    comp(cur%num_bufs)
+            */
+
+#define unlikely(x) __builtin_expect(!!(x), 0)
+           if(unlikely(cur > numHashResps_g)){
+
+                while (cur < UINT16_MAX){
+                    status = cpaDcCompressData2(
+                        dcInstHandle,
+                        sessionHdl,
+                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                        &opData,            /* Operational data */
+                        &dcResults,         /* results structure */
+                        NULL);
+                    cur= (cur + 1);
+                }
+            }
+            while( cur < numHashResps_g ){
+                status = cpaDcCompressData2(
+                    dcInstHandle,
+                    sessionHdl,
+                    pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                    pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                    &opData,            /* Operational data */
+                    &dcResults,         /* results structure */
+                    NULL);
+                cur= (cur + 1);
+            }
+            // printf("Caught up to responses\n");
+            printeHashBWAndUpdateLastHashTimeStamp();
+        }
     }
 
     sampleThreadExit();
@@ -180,6 +377,21 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
  * This function checks the instance info. If the instance is
  * required to be polled then it starts a polling thread.
  */
+
+CpaStatus utilCodeThreadBind(sampleThread *thread, Cpa32U logicalCore)
+{
+    int status = 1;
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(logicalCore, &cpuset);
+
+    status = pthread_setaffinity_np(*thread, sizeof(cpu_set_t), &cpuset);
+    if (status != 0)
+    {
+        return CPA_STATUS_FAIL;
+    }
+    return CPA_STATUS_SUCCESS;
+}
 
 #ifdef DO_CRYPTO
 void sampleCyStartPolling(CpaInstanceHandle cyInstHandle)
@@ -192,6 +404,9 @@ void sampleCyStartPolling(CpaInstanceHandle cyInstHandle)
     {
         /* Start thread to poll instance */
         sampleThreadCreate(&gPollingThread, sal_polling, cyInstHandle);
+        printf("Affinitizing cy thread: %ld\n", gPollingThread);
+        printf("to core: %d\n", 3);
+        utilCodeThreadBind(&gPollingThread, 3);
     }
 }
 #endif
@@ -251,12 +466,13 @@ static void sal_dc_polling(CpaInstanceHandle dcInstHandle)
     gPollingDc = 1;
     while (gPollingDc)
     {
-        icp_sal_DcPollInstance(dcInstHandle, 0);
-        OS_SLEEP(10);
+        if(icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
+        }
     }
 
     sampleThreadExit();
 }
+
 
 /*
  * This function checks the instance info. If the instance is
@@ -271,7 +487,11 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
     if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
     {
         /* Start thread to poll instance */
+        printf("Starting DC Polling\n");
         sampleThreadCreate(&gPollingThreadDc, sal_dc_polling, dcInstHandle);
+        printf("Affinitizing dc thread: %ld\n", gPollingThreadDc);
+        printf("to core: %d\n", 2);
+        utilCodeThreadBind(&gPollingThreadDc, 2);
     }
 }
 

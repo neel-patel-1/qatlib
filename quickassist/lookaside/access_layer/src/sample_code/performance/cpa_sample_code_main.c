@@ -1510,11 +1510,33 @@ int main(int argc, char *argv[])
                     retStatus = CPA_STATUS_FAIL;
                 }
 max_band_decomp:
-                for(int bufSize=1024*1024; bufSize<=1024*1024; bufSize*=2){
+                for(int bufSize=1024; bufSize<=1024*1024; bufSize*=2){
+                    // status = setupDcTest(CPA_DC_DEFLATE,
+                    //                      CPA_DC_DIR_DECOMPRESS,
+                    //                      SAMPLE_CODE_CPA_DC_L1,
+                    //                      CPA_DC_HT_FULL_DYNAMIC,
+                    //                      CPA_DC_STATELESS,
+                    //                      DEFAULT_COMPRESSION_WINDOW_SIZE,
+                    //                      bufSize,
+                    //                      sampleCorpus,
+                    //                      SYNC,
+                    //                      dcLoops);
+                    // if (CPA_STATUS_SUCCESS != status)
+                    // {
+                    //     PRINT_ERR("Error calling setupDcTest\n");
+                    //     return CPA_STATUS_FAIL;
+                    // }
+                    // status = createStartandWaitForCompletion(COMPRESSION);
+                    // if (CPA_STATUS_SUCCESS != status)
+                    // {
+                    //     retStatus = CPA_STATUS_FAIL;
+                    // }
+                }
+                for(int bufSize=1024; bufSize<=1024*1024; bufSize*=2){
                     status = setupDcTest(CPA_DC_DEFLATE,
-                                         CPA_DC_DIR_DECOMPRESS,
+                                         CPA_DC_DIR_COMPRESS,
                                          SAMPLE_CODE_CPA_DC_L1,
-                                         CPA_DC_HT_FULL_DYNAMIC,
+                                         CPA_DC_HT_STATIC,
                                          CPA_DC_STATELESS,
                                          DEFAULT_COMPRESSION_WINDOW_SIZE,
                                          bufSize,

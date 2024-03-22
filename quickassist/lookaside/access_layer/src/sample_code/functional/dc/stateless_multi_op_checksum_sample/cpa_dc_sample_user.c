@@ -62,49 +62,33 @@
 
 /**
  ******************************************************************************
- * @file  cpa_chaining_sample_user.c
- * argv[1], 1 = Enable 0 = Disable -> gDebugParam
- * argv[2], 1 = Enable 0 = Disable -> useSw
- * argv[3], 1 = Enable 0 = Disable -> useXstorExtensions
- * By default gDebugParam and useSw are enabled.
- * By default useXstorExtensions is disabled.
- * Example to run, ./chaining_sample 1 0 0
+ * @file  cpa_dc_sample_user.c
+ *
  *****************************************************************************/
-#include "cpa.h"
-#include "cpa_cy_sym.h"
-#include "cpa_dc.h"
-#include "cpa_dc_chain.h"
+
 #include "cpa_sample_utils.h"
 #include "icp_sal_user.h"
+#include <stdbool.h>
+extern CpaStatus dcStatelessSample(void);
+extern CpaStatus startupDcSession(CpaDcSessionHandle sessionHdl,
+                    CpaInstanceHandle dcInstHandle,
+                    CpaDcSessionSetupData sd,
+                    Cpa32U bufferSize,
+                    bool do_sync);
+
 
 int gDebugParam = 1;
-int useSw = 1;
-int useXstorExtensions = 0;
-
-extern CpaStatus dcChainSample(void);
-extern CpaStatus syncHWChainedOpPerf(void);
-extern CpaStatus syncSWChainedOpPerf(void);
-extern CpaStatus syncSwHashOp(void);
 
 int main(int argc, const char **argv)
 {
     CpaStatus stat = CPA_STATUS_SUCCESS;
 
-    if (argc > 1 && argc < 5)
+    if (argc > 1)
     {
-        if (argc == 2)
-        {
-            gDebugParam = atoi(argv[1]);
-        }
-        else if (argc == 3)
-        {
-            gDebugParam = atoi(argv[1]);
-            useSw = atoi(argv[2]);
-        }
-
+        gDebugParam = atoi(argv[1]);
     }
 
-    PRINT_DBG("Starting Chaining Sample Code App ...\n");
+    PRINT_DBG("Starting Stateless Compression Sample Code App ...\n");
 
     stat = qaeMemInit();
     if (CPA_STATUS_SUCCESS != stat)
@@ -120,27 +104,15 @@ int main(int argc, const char **argv)
         qaeMemDestroy();
         return (int)stat;
     }
-
-    /* Legacy DC Chaining Sample Code */
-    int rpsTest = 1;
-    if(rpsTest){
-        requestGen(8192,64, 128);
-    } else{
-        if( useSw )
-            stat = syncSWChainedOpPerf();
-        else
-            stat = syncHWChainedOpPerf();
-    }
-    // stat = syncSwHashOp();
+    dcStatelessSample();
     if (CPA_STATUS_SUCCESS != stat)
     {
-        PRINT_ERR("\nLegacy DC Chaining Sample Code App failed\n");
+        PRINT_ERR("\nStateless Compression Sample Code App failed\n");
     }
     else
     {
-        PRINT_DBG("\nLegacy DC Chaining Sample Code App finished\n");
+        PRINT_DBG("\nStateless Compression Sample Code App finished\n");
     }
-
 
     icp_sal_userStop();
 
