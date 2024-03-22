@@ -86,8 +86,10 @@ extern CpaBufferList **pSrcBufferList_g;
 extern CpaBufferList **pDstBufferList_g;
 extern Cpa16U numBufs_g;
 extern Cpa16U nResps_g;
+extern Cpa16U numHashResps_g;
 extern Cpa16U numDcResps_g;
 extern Cpa32U bufSize_g;
+extern struct timespec hashStartTime_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -455,7 +457,18 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    nResps_g++;
+    if ((Cpa16U) (numHashResps_g + 1) < (Cpa16U)numHashResps_g){
+        if(hashStartTime_g.tv_sec > 0){
+            struct timespec curTime;
+            clock_gettime(CLOCK_MONOTONIC, &curTime);
+            uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+                (hashStartTime_g.tv_sec * 1000000000 + hashStartTime_g.tv_nsec);
+            printf("Hash-BW(MB/s): %ld\n", (numHashResps_g * bufSize_g) / (ns/1000));
+        }
+        clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+
+    }
+    numHashResps_g++;
 
 }
 

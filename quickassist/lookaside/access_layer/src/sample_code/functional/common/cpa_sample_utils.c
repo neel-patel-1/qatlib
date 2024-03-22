@@ -96,8 +96,8 @@ static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
 
 Cpa16U numDcResps_g = 0;
+Cpa16U numHashResps_g = 0;
 
-Cpa16U nResps_g = 0;
 Cpa16U numBufs_g = 0;
 Cpa32U bufSize_g = 0;
 
@@ -106,7 +106,8 @@ CpaBufferList **pDstBufferList_g = NULL;
 
 Cpa32U fragmentSize_g = 0;
 
-struct timespec startTime_g = {0};
+struct timespec dcStartTime_g = {0};
+struct timespec hashStartTime_g = {0};
 
 #ifdef SC_ENABLE_DYNAMIC_COMPRESSION
 CpaDcHuffType huffmanType_g = CPA_DC_HT_FULL_DYNAMIC;
@@ -181,14 +182,14 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
-        if(startTime_g.tv_sec > 0){
+        if(dcStartTime_g.tv_sec > 0){
             struct timespec curTime;
             clock_gettime(CLOCK_MONOTONIC, &curTime);
             uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
-                (startTime_g.tv_sec * 1000000000 + startTime_g.tv_nsec);
-            printf("BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
+                (dcStartTime_g.tv_sec * 1000000000 + dcStartTime_g.tv_nsec);
+            printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
         }
-        clock_gettime(CLOCK_MONOTONIC, &startTime_g);
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
 
     }
     numDcResps_g++;
@@ -268,29 +269,51 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     sampleDcStartPolling(dcInstHandle);
 
     gPollingCy = 1;
-    int jRq = 0;
     CpaDcRqResults dcResults;
     CpaDcOpData opData = {};
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
     while (gPollingCy)
     {
+        int cur=0;
         if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
-            // printf("Got Cy Response\n");
-            for(int i=0; i<nResps_g; i++){
+            /* what if all numBufs_g got callback'd? L
+
+            while( cur < numHashResps_g)   but use cur % numBufs_g  for bufs approach
+                - need to check if numHashResps_g overflow'd (cur > numHashReps_g):
+                if(unlikely(cur > numHashResps_g)){
+                    while (cur < MAX_CPA16U){
+                        comp(cur%num_bufs)
+                    }
+                }
+                while( cur < numHashResps_g)
+                    comp(cur%num_bufs)
+            */
+#define unlikely(x) __builtin_expect(!!(x), 0)
+           if(unlikely(cur > numHashResps_g)){
+                while (cur < UINT16_MAX){
+                    status = cpaDcCompressData2(
+                        dcInstHandle,
+                        sessionHdl,
+                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                        &opData,            /* Operational data */
+                        &dcResults,         /* results structure */
+                        NULL);
+                    cur= (cur + 1) % numBufs_g;
+                }
+            }
+            while( cur < numHashResps_g ){
                 status = cpaDcCompressData2(
                     dcInstHandle,
                     sessionHdl,
-                    pSrcBufferList_g[(jRq+i)%numBufs_g],     /* source buffer list */
-                    pDstBufferList_g[(jRq+i)%numBufs_g],     /* destination buffer list */
+                    pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                    pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
                     &opData,            /* Operational data */
                     &dcResults,         /* results structure */
                     NULL);
+                cur= (cur + 1) % numBufs_g;
             }
-            jRq = (jRq + nResps_g) % numBufs_g;
-            fflush(NULL);
-            // printf("Forwarded %d requests\n", nResps_g);
         }
-        nResps_g = 0;
     }
 
     sampleThreadExit();
