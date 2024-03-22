@@ -174,6 +174,33 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 #endif
 //</snippet>
 
+void printeHashBWAndUpdateLastHashTimeStamp(void)
+{
+    if(hashStartTime_g.tv_sec > 0){
+        struct timespec curTime;
+        clock_gettime(CLOCK_MONOTONIC, &curTime);
+        uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+            (hashStartTime_g.tv_sec * 1000000000 + hashStartTime_g.tv_nsec);
+        printf("Hash-BW(MB/s): %ld\n", (numHashResps_g * bufSize_g) / (ns/1000));
+    }
+    clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
+}
+
+void symCallback(void *pCallbackTag,
+                        CpaStatus status,
+                        const CpaCySymOp operationType,
+                        void *pOpData,
+                        CpaBufferList *pDstBuffer,
+                        CpaBoolean verifyResult)
+{
+    if ((Cpa16U) (numHashResps_g + 1) < (Cpa16U)numHashResps_g){
+        printeHashBWAndUpdateLastHashTimeStamp();
+    }
+    numHashResps_g++;
+
+
+}
+
 /*
  * This function polls a crypto instance.
  *
@@ -187,7 +214,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
             clock_gettime(CLOCK_MONOTONIC, &curTime);
             uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
                 (dcStartTime_g.tv_sec * 1000000000 + dcStartTime_g.tv_nsec);
-            printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
+            // printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
         }
         clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
 
@@ -211,6 +238,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa32U ctx_size = 0;
     CpaStatus status;
     sampleDcGetInstance(&dcInstHandle);
+    clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
 
     status = cpaDcQueryCapabilities(dcInstHandle, &cap);
 
@@ -288,8 +316,10 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 while( cur < numHashResps_g)
                     comp(cur%num_bufs)
             */
+
 #define unlikely(x) __builtin_expect(!!(x), 0)
            if(unlikely(cur > numHashResps_g)){
+                printeHashBWAndUpdateLastHashTimeStamp();
                 while (cur < UINT16_MAX){
                     status = cpaDcCompressData2(
                         dcInstHandle,
@@ -299,7 +329,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                         &opData,            /* Operational data */
                         &dcResults,         /* results structure */
                         NULL);
-                    cur= (cur + 1) % numBufs_g;
+                    cur= (cur + 1);
                 }
             }
             while( cur < numHashResps_g ){
@@ -311,7 +341,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     &opData,            /* Operational data */
                     &dcResults,         /* results structure */
                     NULL);
-                cur= (cur + 1) % numBufs_g;
+                cur= (cur + 1);
             }
         }
     }
@@ -324,6 +354,21 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
  * required to be polled then it starts a polling thread.
  */
 
+CpaStatus utilCodeThreadBind(sampleThread *thread, Cpa32U logicalCore)
+{
+    int status = 1;
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(logicalCore, &cpuset);
+
+    status = pthread_setaffinity_np(*thread, sizeof(cpu_set_t), &cpuset);
+    if (status != 0)
+    {
+        return CPA_STATUS_FAIL;
+    }
+    return CPA_STATUS_SUCCESS;
+}
+
 #ifdef DO_CRYPTO
 void sampleCyStartPolling(CpaInstanceHandle cyInstHandle)
 {
@@ -335,6 +380,9 @@ void sampleCyStartPolling(CpaInstanceHandle cyInstHandle)
     {
         /* Start thread to poll instance */
         sampleThreadCreate(&gPollingThread, sal_polling, cyInstHandle);
+        printf("Affinitizing cy thread: %ld\n", gPollingThread);
+        printf("to core: %d\n", 3);
+        utilCodeThreadBind(&gPollingThread, 3);
     }
 }
 #endif
@@ -395,12 +443,12 @@ static void sal_dc_polling(CpaInstanceHandle dcInstHandle)
     while (gPollingDc)
     {
         if(icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
-            // printf("Num Dc Resps: %d\n", numDcResps_g);
         }
     }
 
     sampleThreadExit();
 }
+
 
 /*
  * This function checks the instance info. If the instance is
@@ -417,6 +465,9 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
         /* Start thread to poll instance */
         printf("Starting DC Polling\n");
         sampleThreadCreate(&gPollingThreadDc, sal_dc_polling, dcInstHandle);
+        printf("Affinitizing dc thread: %ld\n", gPollingThreadDc);
+        printf("to core: %d\n", 2);
+        utilCodeThreadBind(&gPollingThreadDc, 2);
     }
 }
 

@@ -450,27 +450,12 @@ static void createTestBufferLists(CpaBufferList ***testBufferLists,
     *testBufferLists = srcBufferLists;
 }
 
-static void symCallback(void *pCallbackTag,
+void symCallback(void *pCallbackTag,
                         CpaStatus status,
                         const CpaCySymOp operationType,
                         void *pOpData,
                         CpaBufferList *pDstBuffer,
-                        CpaBoolean verifyResult)
-{
-    if ((Cpa16U) (numHashResps_g + 1) < (Cpa16U)numHashResps_g){
-        if(hashStartTime_g.tv_sec > 0){
-            struct timespec curTime;
-            clock_gettime(CLOCK_MONOTONIC, &curTime);
-            uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
-                (hashStartTime_g.tv_sec * 1000000000 + hashStartTime_g.tv_nsec);
-            printf("Hash-BW(MB/s): %ld\n", (numHashResps_g * bufSize_g) / (ns/1000));
-        }
-        clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
-
-    }
-    numHashResps_g++;
-
-}
+                        CpaBoolean verifyResult);
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     Cpa8U* hwDigest, Cpa32U size){
@@ -696,6 +681,13 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numFragments);
     int buf_idx = 0;
 
+    /* Affinitize Requestor */
+    pthread_t self = pthread_self();
+    status = utilCodeThreadBind(self, 4);
+    if(status != CPA_STATUS_SUCCESS){
+        PRINT_ERR("Error in binding thread\n");
+        return CPA_STATUS_FAIL;
+    }
     while(1){
         Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
         pOpData->pDigestResult = pDigestBuffer;
