@@ -88,6 +88,7 @@ extern Cpa16U numBufs_g;
 extern Cpa16U nResps_g;
 extern Cpa16U numDcResps_g;
 extern Cpa32U bufSize_g;
+extern struct timespec startTime_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -143,6 +144,13 @@ int requestCtr = 0;
     })
 
 static void dcChainFreeBufferList(CpaBufferList **testBufferList);
+
+static void symCallback(void *pCallbackTag,
+                        CpaStatus status,
+                        const CpaCySymOp operationType,
+                        void *pOpData,
+                        CpaBufferList *pDstBuffer,
+                        CpaBoolean verifyResult);
 
 /* Calculate software digest */
 static inline CpaStatus calSWDigest(Cpa8U *msg,
@@ -455,9 +463,20 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    nResps_g++;
+    if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
+        if(startTime_g.tv_sec > 0){
+            struct timespec curTime;
+            clock_gettime(CLOCK_MONOTONIC, &curTime);
+            uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+                (startTime_g.tv_sec * 1000000000 + startTime_g.tv_nsec);
+            printf("BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
+        }
+        clock_gettime(CLOCK_MONOTONIC, &startTime_g);
 
+    }
+    numDcResps_g++;
 }
+
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     Cpa8U* hwDigest, Cpa32U size){

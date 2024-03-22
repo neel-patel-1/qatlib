@@ -194,6 +194,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
     numDcResps_g++;
 }
 
+
 #ifdef DO_CRYPTO
 static void sal_polling(CpaInstanceHandle cyInstHandle)
 {
