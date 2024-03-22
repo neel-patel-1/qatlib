@@ -124,7 +124,7 @@ int main(int argc, const char **argv)
     /* Legacy DC Chaining Sample Code */
     int rpsTest = 1;
     if(rpsTest){
-        requestGen();
+        requestGen(8192,64, 128);
     } else{
         if( useSw )
             stat = syncSWChainedOpPerf();

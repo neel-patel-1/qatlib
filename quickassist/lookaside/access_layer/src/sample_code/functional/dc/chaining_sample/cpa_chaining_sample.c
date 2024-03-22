@@ -81,6 +81,11 @@
 #include <immintrin.h>
 
 extern int gDebugParam;
+extern Cpa32U fragmentSize_g;
+extern CpaBufferList **pSrcBufferList_g;
+extern CpaBufferList **pDstBufferList_g;
+extern Cpa16U numBufs_g;
+extern Cpa16U nResps_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -243,14 +248,7 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
  * complete variable to indicate it has been called.
  */
 //<snippet name="dcCallback">
-static void dcCallback(void *pCallbackTag, CpaStatus status)
-{
-    // if (NULL != pCallbackTag)
-    // {
-    //     /* indicate that the function has been called */
-    //     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    // }
-}
+
 //</snippet>
 
 /* Build dc chain buffer lists */
@@ -455,12 +453,7 @@ static void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    ts[requestCtr] = sampleCoderdtsc();
-    requestCtr++;
-    if(pCallbackTag != NULL){
-        requestCtr=0;
-        COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    }
+    nResps_g++;
 
 }
 
@@ -491,11 +484,8 @@ CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     return CPA_STATUS_SUCCESS;
 
 }
-CpaStatus requestGen(void){
-    int fragmentSize=8*1024;
-    int numFragments = 64;
 
-    // #define fragmentSize 1024 * 16
+CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     Cpa32U sessionCtxSize = 0;
     CpaInstanceHandle cyInstHandle = NULL;
     CpaCySymSessionCtx sessionCtx = NULL;
@@ -543,16 +533,14 @@ CpaStatus requestGen(void){
     struct timespec *userHashPollStart, *userHashPollEnd,
         *userDCPollStart, *userDCPollEnd;
 
-    sampleDcGetInstance(&dcInstHandle);
     sampleCyGetInstance(&cyInstHandle);
 
-    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
 
     status = cpaCyStartInstance(cyInstHandle);
     status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
     status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
 
-    sampleCyStartPolling(cyInstHandle);
+
     sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
     sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
     sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
@@ -560,6 +548,8 @@ CpaStatus requestGen(void){
     sessionSetupData.hashSetupData.digestResultLenInBytes = SHA256_DIGEST_LENGTH;
     sessionSetupData.digestIsAppended = CPA_FALSE;
     sessionSetupData.verifyDigest = CPA_FALSE;
+
+    fragmentSize_g = fragmentSize;
 
     status = cpaCySymSessionCtxGetSize(
         cyInstHandle, &sessionSetupData, &sessionCtxSize);
@@ -600,7 +590,6 @@ CpaStatus requestGen(void){
     }
     status = cpaDcStartInstance(
         dcInstHandle, numInterBuffLists, bufferInterArray);
-    sampleDcStartPolling(dcInstHandle);
     sd.compLevel = CPA_DC_L1;
     sd.compType = CPA_DC_DEFLATE;
     sd.huffType = CPA_DC_HT_STATIC;
@@ -614,21 +603,7 @@ CpaStatus requestGen(void){
     FAIL_ON_CPA_FAIL(status);
     status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
     bool do_sync = false;
-    if(do_sync){
-        status = cpaDcInitSession(
-            dcInstHandle,
-            sessionHdl, /* session memory */
-            &sd,        /* session setup data */
-            NULL, /* pContexBuffer not required for stateless operations */
-            NULL); /* callback function */
-    } else {
-        status = cpaDcInitSession(
-            dcInstHandle,
-            sessionHdl, /* session memory */
-            &sd,        /* session setup data */
-            NULL, /* pContexBuffer not required for stateless operations */
-            dcCallback); /* callback function */
-    }
+
 
     status =
         cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
@@ -694,83 +669,33 @@ CpaStatus requestGen(void){
     for(int i=0; i<numFragments;i++){
         populateBufferList(&srcBufferLists[i], 1, fragmentSize, bufferMetaSize);
     }
+    pDstBufferList_g = dstBufferLists;
+    pSrcBufferList_g = srcBufferLists;
+    numBufs_g = numBuffers;
+    // sampleDcStartPolling(dcInstHandle);
+    sampleCyStartPolling(cyInstHandle);
 
     /* Run Tests */
-    #define MIN_TESTS 1
-    uint64_t exeTimes[MIN_TESTS];
+    uint64_t exeTimes[testIter];
     PHYS_CONTIG_ALLOC(&ts, sizeof(uint64_t) * numFragments);
-    printf("iteration,NumFragments,bufSize,hashNanos\n");
-    for (int testCtr = 0; testCtr < MIN_TESTS; testCtr++){
-        for(int i=0; i<numFragments;i++){
-            for(int j=0; j<srcBufferLists[i]->pBuffers->dataLenInBytes; j+=64){
-                _mm_clflush((srcBufferLists[i]->pBuffers->pData)+j);
-            }
-        }
+    int buf_idx = 0;
 
-        memset(ts, 0, sizeof(uint64_t) * numFragments);
+    while(1){
+        Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
+        pOpData->pDigestResult = pDigestBuffer;
+        status = cpaCySymPerformOp(
+            cyInstHandle,
+            NULL, /* data sent as is to the callback function*/
+            pOpData,           /* operational data struct */
+            srcBufferLists[buf_idx],       /* source buffer list */
+            dstBufferLists[buf_idx],       /* same src & dst for an in-place operation*/
+            NULL); /*Don't verify*/
 
-        COMPLETION_INIT((&complete));
-        for (int i=0; i<numFragments; i++){
 
-            // FAIL_ON(fread(pSrcBuffer, 1, fragmentSize, file) != fragmentSize, "Error in reading file\n");
-            Cpa8U *pDigestBuffer = (srcBufferLists[i]->pBuffers->pData) + fragmentSize;
-            pOpData->pDigestResult = pDigestBuffer;
-            if(i < numFragments - 1){
-                status = cpaCySymPerformOp(
-                    cyInstHandle,
-                    NULL, /* data sent as is to the callback function*/
-                    pOpData,           /* operational data struct */
-                    srcBufferLists[i],       /* source buffer list */
-                    dstBufferLists[i],       /* same src & dst for an in-place operation*/
-                    NULL); /*Don't verify*/
-                }
-
-            else{
-                status = cpaCySymPerformOp(
-                cyInstHandle,
-                (void *)&complete, /* data sent as is to the callback function*/
-                pOpData,           /* operational data struct */
-                srcBufferLists[i],       /* source buffer list */
-                srcBufferLists[i],       /* same src & dst for an in-place operation*/
-                NULL); /*Don't verify*/
-            }
-        }
-        // for(int i=0; i<numFragments; i++){
-        //     status = cpaDcCompressData2(
-        //         dcInstHandle,
-        //         sessionHdl,
-        //         pBufferListSrc,     /* source buffer list */
-        //         pBufferListDst,     /* destination buffer list */
-        //         &opData,            /* Operational data */
-        //         &dcResults,         /* results structure */
-        //         NULL);
-        // }
-        COMPLETION_WAIT((&complete),1000000);
-        COMPLETION_DESTROY((&complete));
-        _mm_mfence();
-        uint64_t hashCycles = ts[numFragments-1] - ts[0];
-        uint64_t hashNanos = hashCycles / 2;
-        if(ts[numFragments-1] == 0){
-            for(int i=0; i<numFragments; i++){
-                printf("%ld,", ts[i]);
-            }
-            printf("\n");
-            return CPA_STATUS_FAIL;
-        }
-
-        printf("%d,%d,%d,%ld,%ld\n",
-        testCtr, numFragments,fragmentSize,hashNanos, numFragments*fragmentSize/hashNanos);
+        buf_idx = (buf_idx + 1) % numFragments;
     }
 
-    /* Validate Destination Buffers */
-    CpaCySymHashAlgorithm hashAlg = CPA_CY_SYM_HASH_SHA256;
-    for(int i=0; i<numFragments; i++){
-        calSWDigest(srcBufferLists[i]->pBuffers->pData, fragmentSize, dstBufferLists[i]->pBuffers->pData, SHA256_DIGEST_LENGTH, hashAlg);
-        if(memcmp((srcBufferLists[i]->pBuffers->pData + fragmentSize), dstBufferLists[i]->pBuffers->pData, SHA256_DIGEST_LENGTH) != 0){
-            PRINT_ERR("Hashes do not match\n");
-            return CPA_STATUS_FAIL;
-        }
-    }
+
 
     PHYS_CONTIG_FREE(pSrcBuffer);
     OS_FREE(pBufferList);

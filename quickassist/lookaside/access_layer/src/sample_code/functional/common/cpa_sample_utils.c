@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  ***************************************************************************/
 
@@ -93,6 +93,14 @@ static volatile int gPollingCy = 0;
 
 static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
+
+Cpa16U nResps_g = 0;
+Cpa16U numBufs_g = 0;
+
+CpaBufferList **pSrcBufferList_g = NULL;
+CpaBufferList **pDstBufferList_g = NULL;
+
+Cpa32U fragmentSize_g = 0;
 
 #ifdef SC_ENABLE_DYNAMIC_COMPRESSION
 CpaDcHuffType huffmanType_g = CPA_DC_HT_FULL_DYNAMIC;
@@ -163,14 +171,103 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
  * This function polls a crypto instance.
  *
  */
+
+static void dcCallback(void *pCallbackTag, CpaStatus status)
+{
+    // if (NULL != pCallbackTag)
+    // {
+    //     /* indicate that the function has been called */
+    //     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
+    // }
+}
+
 #ifdef DO_CRYPTO
 static void sal_polling(CpaInstanceHandle cyInstHandle)
 {
+    CpaInstanceHandle dcInstHandle = NULL;
+    CpaDcSessionHandle sessionHdl = NULL;
+    CpaDcSessionSetupData sd = {0};
+    CpaDcStats dcStats = {0};
+    CpaDcInstanceCapabilities cap = {0};
+    CpaBufferList **bufferInterArray = NULL;
+    Cpa32U buffMetaSize = 0;
+    Cpa16U numInterBuffLists = 0;
+    Cpa16U bufferNum = 0;
+    Cpa32U sess_size = 0;
+    Cpa32U ctx_size = 0;
+    CpaStatus status;
+    sampleDcGetInstance(&dcInstHandle);
+
+    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
+
+    status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+    printf("Buffer Meta Size: %d\n", buffMetaSize);
+    status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                    &numInterBuffLists);
+    printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
+
+    if (numInterBuffLists > 0){
+        status = PHYS_CONTIG_ALLOC(
+                &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
+        for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+        {
+            status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                            sizeof(CpaBufferList));
+            status = PHYS_CONTIG_ALLOC(
+                        &bufferInterArray[bufferNum]->pPrivateMetaData,
+                        buffMetaSize);
+            status =
+                        PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                                        sizeof(CpaFlatBuffer));
+            status = PHYS_CONTIG_ALLOC(
+                        &bufferInterArray[bufferNum]->pBuffers->pData,
+                        2 * fragmentSize_g);
+            bufferInterArray[bufferNum]->numBuffers = 1;
+                    bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+                        2 * fragmentSize_g;
+        }
+    }
+    status = cpaDcStartInstance(
+        dcInstHandle, numInterBuffLists, bufferInterArray);
+    sd.compLevel = CPA_DC_L1;
+    sd.compType = CPA_DC_DEFLATE;
+    sd.huffType = CPA_DC_HT_STATIC;
+    sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+    sd.sessDirection = CPA_DC_DIR_COMPRESS;
+    sd.sessState = CPA_DC_STATELESS;
+    sd.checksum = CPA_DC_CRC32;
+
+    status = cpaDcInitSession(
+        dcInstHandle,
+        sessionHdl, /* session memory */
+        &sd,        /* session setup data */
+        NULL, /* pContexBuffer not required for stateless operations */
+        dcCallback); /* callback function */
+
+
     gPollingCy = 1;
+    int jRq = 0;
+    CpaDcRqResults dcResults;
+    CpaDcOpData opData = {};
+    INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
     while (gPollingCy)
     {
-        icp_sal_CyPollInstance(cyInstHandle, 0);
-        OS_SLEEP(10);
+        if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
+            printf("Got Response\n");
+            for(int i=0; i<nResps_g; i++){
+                status = cpaDcCompressData2(
+                    dcInstHandle,
+                    sessionHdl,
+                    pSrcBufferList_g[jRq+i],     /* source buffer list */
+                    pDstBufferList_g[jRq+i],     /* destination buffer list */
+                    &opData,            /* Operational data */
+                    &dcResults,         /* results structure */
+                    NULL);
+            }
+            jRq = (jRq + nResps_g) % numBufs_g;
+            printf("Forwarded %d requests\n", nResps_g);
+        }
+        nResps_g = 0;
     }
 
     sampleThreadExit();
