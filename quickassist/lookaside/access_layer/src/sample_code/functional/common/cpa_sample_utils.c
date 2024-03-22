@@ -74,6 +74,7 @@
 #include "cpa_sample_utils.h"
 #include "cpa_dc.h"
 #include "icp_sal_poll.h"
+#include <time.h>
 
 /*
  * Maximum number of instances to query from the API
@@ -105,7 +106,7 @@ CpaBufferList **pDstBufferList_g = NULL;
 
 Cpa32U fragmentSize_g = 0;
 
-time_t startTime_g = 0;
+struct timespec startTime_g = {0};
 
 #ifdef SC_ENABLE_DYNAMIC_COMPRESSION
 CpaDcHuffType huffmanType_g = CPA_DC_HT_FULL_DYNAMIC;
@@ -180,8 +181,15 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
-        printf("BW: %ld\n", (numDcResps_g * bufSize_g) / ((time(NULL) - startTime_g)));
-        startTime_g = time(NULL);
+        if(startTime_g.tv_sec > 0){
+            struct timespec curTime;
+            clock_gettime(CLOCK_MONOTONIC, &curTime);
+            uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+                (startTime_g.tv_sec * 1000000000 + startTime_g.tv_nsec);
+            printf("BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (ns/1000));
+        }
+        clock_gettime(CLOCK_MONOTONIC, &startTime_g);
+
     }
     numDcResps_g++;
 }
