@@ -46,7 +46,6 @@ COMMON_SAMPLE_CFLAGS = -D USER_SPACE \
 		       -DDO_CRYPTO \
 		       -DINCLUDE_COMPRESSION \
 		       -DSC_CHAINING_ENABLED \
-					 -g \
 		       -Wno-deprecated-declarations
 
 COMMON_SAMPLE_INCLUDES = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance/framework \
