@@ -98,11 +98,14 @@ Cpa16U numDcResps_g = 0;
 
 Cpa16U nResps_g = 0;
 Cpa16U numBufs_g = 0;
+Cpa32U bufSize_g = 0;
 
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
 
 Cpa32U fragmentSize_g = 0;
+
+time_t startTime_g = 0;
 
 #ifdef SC_ENABLE_DYNAMIC_COMPRESSION
 CpaDcHuffType huffmanType_g = CPA_DC_HT_FULL_DYNAMIC;
@@ -176,6 +179,10 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
+    if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
+        printf("BW: %ld\n", (numDcResps_g * bufSize_g) / ((time(NULL) - startTime_g)));
+        startTime_g = time(NULL);
+    }
     numDcResps_g++;
 }
 
@@ -272,7 +279,6 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     NULL);
             }
             jRq = (jRq + nResps_g) % numBufs_g;
-            printf("Forwarded %d requests\n", jRq);
             fflush(NULL);
             // printf("Forwarded %d requests\n", nResps_g);
         }
@@ -358,7 +364,7 @@ static void sal_dc_polling(CpaInstanceHandle dcInstHandle)
     while (gPollingDc)
     {
         if(icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
-            printf("Num Dc Resps: %d\n", numDcResps_g);
+            // printf("Num Dc Resps: %d\n", numDcResps_g);
         }
     }
 

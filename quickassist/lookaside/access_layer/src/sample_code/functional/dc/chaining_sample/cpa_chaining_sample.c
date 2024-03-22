@@ -87,6 +87,7 @@ extern CpaBufferList **pDstBufferList_g;
 extern Cpa16U numBufs_g;
 extern Cpa16U nResps_g;
 extern Cpa16U numDcResps_g;
+extern Cpa32U bufSize_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -551,6 +552,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     sessionSetupData.verifyDigest = CPA_FALSE;
 
     fragmentSize_g = fragmentSize;
+    bufSize_g = fragmentSize;
 
     status = cpaCySymSessionCtxGetSize(
         cyInstHandle, &sessionSetupData, &sessionCtxSize);
@@ -673,7 +675,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     pDstBufferList_g = dstBufferLists;
     pSrcBufferList_g = srcBufferLists;
     numBufs_g = numBuffers;
-    sampleDcStartPolling(dcInstHandle);
+
     sampleCyStartPolling(cyInstHandle);
 
     /* Run Tests */
