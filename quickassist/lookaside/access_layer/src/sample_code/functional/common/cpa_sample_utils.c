@@ -293,11 +293,11 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         dcInstHandle, numInterBuffLists, bufferInterArray);
     sd.compLevel = CPA_DC_L1;
     sd.compType = CPA_DC_DEFLATE;
-    sd.huffType = CPA_DC_HT_STATIC;
+    sd.huffType = CPA_DC_HT_FULL_DYNAMIC;
     sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
     sd.sessDirection = CPA_DC_DIR_COMPRESS;
     sd.sessState = CPA_DC_STATELESS;
-    sd.checksum = CPA_DC_CRC32;
+    sd.checksum = CPA_DC_NONE;
     if(status != CPA_STATUS_SUCCESS){
         printf("Failed to start DC Instance\n");
     }

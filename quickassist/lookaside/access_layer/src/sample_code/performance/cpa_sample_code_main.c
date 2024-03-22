@@ -1536,7 +1536,7 @@ max_band_decomp:
                     status = setupDcTest(CPA_DC_DEFLATE,
                                          CPA_DC_DIR_COMPRESS,
                                          SAMPLE_CODE_CPA_DC_L1,
-                                         CPA_DC_HT_STATIC,
+                                         CPA_DC_HT_FULL_DYNAMIC,
                                          CPA_DC_STATELESS,
                                          DEFAULT_COMPRESSION_WINDOW_SIZE,
                                          bufSize,
