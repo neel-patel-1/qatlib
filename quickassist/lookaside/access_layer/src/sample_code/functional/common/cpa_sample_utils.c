@@ -265,13 +265,15 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 status = cpaDcCompressData2(
                     dcInstHandle,
                     sessionHdl,
-                    pSrcBufferList_g[jRq+i],     /* source buffer list */
-                    pDstBufferList_g[jRq+i],     /* destination buffer list */
+                    pSrcBufferList_g[(jRq+i)%numBufs_g],     /* source buffer list */
+                    pDstBufferList_g[(jRq+i)%numBufs_g],     /* destination buffer list */
                     &opData,            /* Operational data */
                     &dcResults,         /* results structure */
                     NULL);
             }
             jRq = (jRq + nResps_g) % numBufs_g;
+            printf("Forwarded %d requests\n", jRq);
+            fflush(NULL);
             // printf("Forwarded %d requests\n", nResps_g);
         }
         nResps_g = 0;
