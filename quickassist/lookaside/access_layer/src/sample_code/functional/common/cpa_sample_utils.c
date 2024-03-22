@@ -94,6 +94,8 @@ static volatile int gPollingCy = 0;
 static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
 
+Cpa16U numDcResps_g = 0;
+
 Cpa16U nResps_g = 0;
 Cpa16U numBufs_g = 0;
 
@@ -174,11 +176,7 @@ void symSessionWaitForInflightReq(CpaCySymSessionCtx pSessionCtx)
 
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
-    // if (NULL != pCallbackTag)
-    // {
-    //     /* indicate that the function has been called */
-    //     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
-    // }
+    numDcResps_g++;
 }
 
 #ifdef DO_CRYPTO
@@ -236,6 +234,12 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     sd.sessDirection = CPA_DC_DIR_COMPRESS;
     sd.sessState = CPA_DC_STATELESS;
     sd.checksum = CPA_DC_CRC32;
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start DC Instance\n");
+    }
+
+    status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+    status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
 
     status = cpaDcInitSession(
         dcInstHandle,
@@ -243,7 +247,10 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         &sd,        /* session setup data */
         NULL, /* pContexBuffer not required for stateless operations */
         dcCallback); /* callback function */
-
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start DC Session: %d\n"  , status);
+    }
+    sampleDcStartPolling(dcInstHandle);
 
     gPollingCy = 1;
     int jRq = 0;
@@ -253,7 +260,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     while (gPollingCy)
     {
         if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
-            printf("Got Response\n");
+            // printf("Got Cy Response\n");
             for(int i=0; i<nResps_g; i++){
                 status = cpaDcCompressData2(
                     dcInstHandle,
@@ -265,7 +272,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     NULL);
             }
             jRq = (jRq + nResps_g) % numBufs_g;
-            printf("Forwarded %d requests\n", nResps_g);
+            // printf("Forwarded %d requests\n", nResps_g);
         }
         nResps_g = 0;
     }
@@ -348,8 +355,9 @@ static void sal_dc_polling(CpaInstanceHandle dcInstHandle)
     gPollingDc = 1;
     while (gPollingDc)
     {
-        icp_sal_DcPollInstance(dcInstHandle, 0);
-        OS_SLEEP(10);
+        if(icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
+            printf("Num Dc Resps: %d\n", numDcResps_g);
+        }
     }
 
     sampleThreadExit();
@@ -368,6 +376,7 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
     if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
     {
         /* Start thread to poll instance */
+        printf("Starting DC Polling\n");
         sampleThreadCreate(&gPollingThreadDc, sal_dc_polling, dcInstHandle);
     }
 }

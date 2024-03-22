@@ -86,6 +86,7 @@ extern CpaBufferList **pSrcBufferList_g;
 extern CpaBufferList **pDstBufferList_g;
 extern Cpa16U numBufs_g;
 extern Cpa16U nResps_g;
+extern Cpa16U numDcResps_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -672,7 +673,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     pDstBufferList_g = dstBufferLists;
     pSrcBufferList_g = srcBufferLists;
     numBufs_g = numBuffers;
-    // sampleDcStartPolling(dcInstHandle);
+    sampleDcStartPolling(dcInstHandle);
     sampleCyStartPolling(cyInstHandle);
 
     /* Run Tests */
