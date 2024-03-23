@@ -104,6 +104,8 @@ volatile Cpa16U numDcResps_g = 0;
 volatile Cpa16U numHashResps_g = 0;
 volatile Cpa16U lastHashResp_idx = 0;
 
+volatile int test_complete = 0;
+
 Cpa16U numBufs_g = 0;
 Cpa32U bufSize_g = 0;
 
@@ -114,6 +116,8 @@ Cpa32U fragmentSize_g = 0;
 
 struct timespec dcStartTime_g = {0};
 struct timespec hashStartTime_g = {0};
+
+Cpa16U numSamples_g = 0;
 
 #ifdef SC_ENABLE_DYNAMIC_COMPRESSION
 CpaDcHuffType huffmanType_g = CPA_DC_HT_FULL_DYNAMIC;
@@ -249,7 +253,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
         batch_complete = 1;
     }
     numDcResps_g++;
-    if(testIter > 10){
+    if(testIter > numSamples_g){
         dc_Poll_g = 0;
     }
 
@@ -392,8 +396,9 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 while(!batch_complete){ }
                 cur = 0;
             }
+            test_complete = 1;
+            testIter = 0;
             // printf("Caught up to responses\n");
-            printeHashBWAndUpdateLastHashTimeStamp();
         // }
     // }
 

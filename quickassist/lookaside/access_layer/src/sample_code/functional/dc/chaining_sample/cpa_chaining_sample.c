@@ -87,6 +87,9 @@ extern CpaBufferList **pDstBufferList_g;
 extern Cpa16U numBufs_g;
 extern Cpa32U bufSize_g;
 extern struct timespec hashStartTime_g;
+extern volatile int test_complete;
+extern int dc_Poll_g;
+extern Cpa16U numSamples_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -525,6 +528,8 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     CpaDcRqResults dcResults;
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
+    numSamples_g = testIter;
+
     struct timespec *hashUserspacePerformOpStart, *hashUserspacePerformOpEnd,
         *dcUserspacePerformOpEnd, *dcUserspacePerformOpStart;
     struct timespec *userHashPollStart, *userHashPollEnd,
@@ -685,7 +690,8 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
         PRINT_ERR("Error in binding thread\n");
         return CPA_STATUS_FAIL;
     }
-    while(1){
+    test_complete = 0;
+    while(!test_complete){
         // Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
         // pOpData->pDigestResult = pDigestBuffer;
         // status = cpaCySymPerformOp(
@@ -698,7 +704,10 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
 
 
         // buf_idx = (buf_idx + 1) % numFragments;
+
     }
+    test_complete = 0;
+    printf("Test complete\n");
 
 
 
