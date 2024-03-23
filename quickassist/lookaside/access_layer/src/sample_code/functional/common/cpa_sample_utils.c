@@ -100,7 +100,7 @@ volatile int batch_complete = 0;
 volatile int dc_Poll_g = 0;
 int testIter = 0;
 
-volatile Cpa16U numDcResps_g = 0;
+volatile Cpa16U numEncResps_g = 0;
 volatile Cpa16U numHashResps_g = 0;
 volatile Cpa16U lastHashResp_idx = 0;
 
@@ -203,7 +203,7 @@ void printeHashBWAndUpdateLastHashTimeStamp(void)
     }
 }
 
-void printeDCBWAndUpdateLastDCTimeStamp(void)
+void printEncBWAndUpdateLastEncTimeStamp(void)
 {
     if(dcStartTime_g.tv_nsec == 0){
         clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
@@ -217,7 +217,7 @@ void printeDCBWAndUpdateLastDCTimeStamp(void)
         if(us == 0){
             return;
         }
-        printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (us));
+        printf("DC-BW(MB/s): %ld\n", (numEncResps_g * bufSize_g) / (us));
         clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     }
 }
@@ -251,17 +251,17 @@ void symCallback(void *pCallbackTag,
  *
  */
 
-static void dcCallback(void *pCallbackTag, CpaStatus status)
+static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
-        printeDCBWAndUpdateLastDCTimeStamp();
+    if ((Cpa16U) (numEncResps_g + 1) < (Cpa16U)numEncResps_g){
+        printEncBWAndUpdateLastEncTimeStamp();
         testIter++;
 
     }
     if(pCallbackTag != NULL){
         batch_complete = 1;
     }
-    numDcResps_g++;
+    numEncResps_g++;
     if(testIter > numSamples_g){
         dc_Poll_g = 0;
     }
@@ -336,7 +336,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         sessionHdl, /* session memory */
         &sd,        /* session setup data */
         NULL, /* pContexBuffer not required for stateless operations */
-        dcCallback); /* callback function */
+        encCallback); /* callback function */
     if(status != CPA_STATUS_SUCCESS){
         printf("Failed to start DC Session: %d\n"  , status);
     }
@@ -452,7 +452,7 @@ static void sal_polling_enc(CpaInstanceHandle dummyHdl /*not used*/)
          * If the instance is polled start the polling thread. Note that
          * how the polling is done is implementation-dependent.
          */
-        sampleCyStartPolling(cyInstHandle);
+        sampleDcStartPolling(cyInstHandle);
 
         /* populate symmetric session data structure */
         sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
@@ -501,7 +501,7 @@ static void sal_polling_enc(CpaInstanceHandle dummyHdl /*not used*/)
         /* Initialize the session */
 
         status = cpaCySymInitSession(
-            cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
+            cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
     }
 
 
