@@ -365,8 +365,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     status = cpaDcCompressData2(
                         dcInstHandle,
                         sessionHdl,
-                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                        pSrcBufferList_g[cur],     /* source buffer list */
+                        pDstBufferList_g[cur],     /* destination buffer list */
                         &opData,            /* Operational data */
                         &dcResults,         /* results structure */
                         NULL);
@@ -375,8 +375,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 status = cpaDcCompressData2(
                         dcInstHandle,
                         sessionHdl,
-                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                        pSrcBufferList_g[cur],     /* source buffer list */
+                        pDstBufferList_g[cur],     /* destination buffer list */
                         &opData,            /* Operational data */
                         &dcResults,         /* results structure */
                         (void *)1);
