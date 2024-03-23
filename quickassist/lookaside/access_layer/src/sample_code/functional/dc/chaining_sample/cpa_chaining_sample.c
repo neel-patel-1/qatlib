@@ -686,18 +686,18 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
         return CPA_STATUS_FAIL;
     }
     while(1){
-        Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
-        pOpData->pDigestResult = pDigestBuffer;
-        status = cpaCySymPerformOp(
-            cyInstHandle,
-            NULL, /* data sent as is to the callback function*/
-            pOpData,           /* operational data struct */
-            srcBufferLists[buf_idx],       /* source buffer list */
-            dstBufferLists[buf_idx],       /* same src & dst for an in-place operation*/
-            NULL); /*Don't verify*/
+        // Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
+        // pOpData->pDigestResult = pDigestBuffer;
+        // status = cpaCySymPerformOp(
+        //     cyInstHandle,
+        //     NULL, /* data sent as is to the callback function*/
+        //     pOpData,           /* operational data struct */
+        //     srcBufferLists[buf_idx],       /* source buffer list */
+        //     dstBufferLists[buf_idx],       /* same src & dst for an in-place operation*/
+        //     NULL); /*Don't verify*/
 
 
-        buf_idx = (buf_idx + 1) % numFragments;
+        // buf_idx = (buf_idx + 1) % numFragments;
     }
 
 
