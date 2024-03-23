@@ -220,9 +220,9 @@ void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    if ((Cpa16U) (numHashResps_g + 1) < numHashResps_g ){
-        printeHashBWAndUpdateLastHashTimeStamp();
-    }
+    // if ((Cpa16U) (numHashResps_g + 1) < numHashResps_g ){
+    //     printeHashBWAndUpdateLastHashTimeStamp();
+    // }
     numHashResps_g++;
 
 
@@ -314,18 +314,21 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     if(status != CPA_STATUS_SUCCESS){
         printf("Failed to start DC Session: %d\n"  , status);
     }
-    sampleDcStartPolling(dcInstHandle);
+    // sampleDcStartPolling(dcInstHandle);
 
     gPollingCy = 1;
     CpaDcRqResults dcResults;
     CpaDcOpData opData = {};
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
-    clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+    // clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     while (gPollingCy)
     {
         int cur=0;
         if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
+            if((Cpa16U) (numHashResps_g + 1) == 0){
+                printeHashBWAndUpdateLastHashTimeStamp();
+            }
             /* what if all numBufs_g got callback'd? L
 
             while( cur < numHashResps_g)   but use cur % numBufs_g  for bufs approach
@@ -339,36 +342,36 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     comp(cur%num_bufs)
             */
 
-#define unlikely(x) __builtin_expect(!!(x), 0)
-           if(unlikely(cur > numHashResps_g)){
+// #define unlikely(x) __builtin_expect(!!(x), 0)
+//            if(unlikely(cur > numHashResps_g)){
 
-                while (cur < UINT16_MAX){
-                    status = cpaDcCompressData2(
-                        dcInstHandle,
-                        sessionHdl,
-                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
-                        &opData,            /* Operational data */
-                        &dcResults,         /* results structure */
-                        NULL);
-                    cur= (cur + 1);
-                }
-            }
-            while( cur < numHashResps_g ){
-                status = cpaDcCompressData2(
-                    dcInstHandle,
-                    sessionHdl,
-                    pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                    pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
-                    &opData,            /* Operational data */
-                    &dcResults,         /* results structure */
-                    NULL);
-                cur= (cur + 1);
-            }
+//                 while (cur < UINT16_MAX){
+//                     status = cpaDcCompressData2(
+//                         dcInstHandle,
+//                         sessionHdl,
+//                         pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+//                         pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+//                         &opData,            /* Operational data */
+//                         &dcResults,         /* results structure */
+//                         NULL);
+//                     cur= (cur + 1);
+//                 }
+//             }
+//             while( cur < numHashResps_g ){
+//                 status = cpaDcCompressData2(
+//                     dcInstHandle,
+//                     sessionHdl,
+//                     pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+//                     pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+//                     &opData,            /* Operational data */
+//                     &dcResults,         /* results structure */
+//                     NULL);
+//                 cur= (cur + 1);
+//             }
             // printf("Caught up to responses\n");
-            printeHashBWAndUpdateLastHashTimeStamp();
         }
     }
+    printeHashBWAndUpdateLastHashTimeStamp();
 
     sampleThreadExit();
 }
