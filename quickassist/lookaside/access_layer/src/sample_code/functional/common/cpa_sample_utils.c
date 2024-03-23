@@ -229,10 +229,19 @@ void symCallback(void *pCallbackTag,
                         CpaBufferList *pDstBuffer,
                         CpaBoolean verifyResult)
 {
-    if ((Cpa16U) (numHashResps_g + 1) < numHashResps_g ){
+
+    if ((Cpa16U) (numHashResps_g + 1) < (Cpa16U)numHashResps_g){
         printeHashBWAndUpdateLastHashTimeStamp();
+        testIter++;
+
+    }
+    if(pCallbackTag != NULL){
+        batch_complete = 1;
     }
     numHashResps_g++;
+    if(testIter > numSamples_g){
+        dc_Poll_g = 0;
+    }
 
 
 }
@@ -405,6 +414,127 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     sampleThreadExit();
 }
 #endif
+
+static Cpa8U sampleCipherKey[] = {
+    0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
+    0xD7, 0x1B, 0xA4, 0xCA, 0xEC, 0xBD, 0x15, 0xE2, 0x52, 0x6A, 0x21, 0x0B,
+    0x41, 0x4C, 0x41, 0x4E, 0xA1, 0xAA, 0x01, 0x3F};
+
+static void sal_polling_enc(CpaInstanceHandle dummyHdl /*not used*/)
+{
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    Cpa32U sessionCtxSize = 0;
+    CpaInstanceHandle cyInstHandle = NULL;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymStats64 symStats = {0};
+
+    sampleCyGetInstance(&cyInstHandle);
+    if (cyInstHandle == NULL)
+    {
+        return CPA_STATUS_FAIL;
+    }
+
+    /* Start Cryptographic component */
+
+    status = cpaCyStartInstance(cyInstHandle);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * If the instance is polled start the polling thread. Note that
+         * how the polling is done is implementation-dependent.
+         */
+        sampleCyStartPolling(cyInstHandle);
+
+        /* populate symmetric session data structure */
+        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+        //<snippet name="initSession">
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_ALGORITHM_CHAINING;
+        sessionSetupData.algChainOrder =
+            CPA_CY_SYM_ALG_CHAIN_ORDER_CIPHER_THEN_HASH;
+
+        sessionSetupData.cipherSetupData.cipherAlgorithm =
+            CPA_CY_SYM_CIPHER_AES_CBC;
+        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+            sizeof(sampleCipherKey);
+        sessionSetupData.cipherSetupData.cipherDirection =
+            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+
+        sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA512;
+        sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_AUTH;
+        #define LAC_HASH_SHA512_DIGEST_SIZE 64
+        sessionSetupData.hashSetupData.digestResultLenInBytes = LAC_HASH_SHA512_DIGEST_SIZE;
+        sessionSetupData.hashSetupData.authModeSetupData.authKey =
+            sampleCipherKey;
+        sessionSetupData.hashSetupData.authModeSetupData.authKeyLenInBytes =
+            sizeof(sampleCipherKey);
+
+        /* The resulting MAC is to be placed immediately after the ciphertext */
+        sessionSetupData.digestIsAppended = CPA_TRUE;
+        sessionSetupData.verifyDigest = CPA_FALSE;
+        //</snippet>
+
+        /* Determine size of session context to allocate */
+
+        status = cpaCySymSessionCtxGetSize(
+            cyInstHandle, &sessionSetupData, &sessionCtxSize);
+
+
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Allocate session context */
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Initialize the session */
+
+        status = cpaCySymInitSession(
+            cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
+    }
+
+
+    gPollingCy = 1;
+    int cur=0;
+    dc_Poll_g = 1;
+    while(dc_Poll_g){
+        batch_complete = 0;
+        while( cur < numBufs_g - 1){
+            status = cpaCySymPerformOp(
+                cyInstHandle,
+                sessionCtx,
+                pSrcBufferList_g[cur],     /* source buffer list */
+                pDstBufferList_g[cur],     /* destination buffer list */
+                NULL,            /* Operational data */
+                NULL);         /* results structure */
+            cur= (cur + 1);
+        }
+        status = cpaCySymPerformOp(
+                cyInstHandle,
+                sessionCtx,
+                pSrcBufferList_g[cur],     /* source buffer list */
+                pDstBufferList_g[cur],     /* destination buffer list */
+                NULL,            /* Operational data */
+                NULL);         /* results structure */
+        while(!batch_complete){ }
+        cur = 0;
+    }
+    test_complete = 1;
+    testIter = 0;
+    sampleThreadExit();
+
+}
 /*
  * This function checks the instance info. If the instance is
  * required to be polled then it starts a polling thread.
