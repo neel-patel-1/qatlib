@@ -95,6 +95,8 @@ static volatile int gPollingCy = 0;
 static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
 
+volatile int batch_complete = 0;
+
 volatile Cpa16U numDcResps_g = 0;
 volatile Cpa16U numHashResps_g = 0;
 volatile Cpa16U lastHashResp_idx = 0;
@@ -239,6 +241,9 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
         printeDCBWAndUpdateLastDCTimeStamp();
 
     }
+    if(pCallbackTag != NULL){
+        batch_complete = 1;
+    }
     numDcResps_g++;
 }
 
@@ -354,16 +359,29 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             //         cur= (cur + 1);
             //     }
             // }
-            while( 1 ){
+            while(1){
+                batch_complete = 0;
+                while( cur < numBufs_g - 1){
+                    status = cpaDcCompressData2(
+                        dcInstHandle,
+                        sessionHdl,
+                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                        &opData,            /* Operational data */
+                        &dcResults,         /* results structure */
+                        NULL);
+                    cur= (cur + 1);
+                }
                 status = cpaDcCompressData2(
-                    dcInstHandle,
-                    sessionHdl,
-                    pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                    pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
-                    &opData,            /* Operational data */
-                    &dcResults,         /* results structure */
-                    NULL);
-                cur= (cur + 1);
+                        dcInstHandle,
+                        sessionHdl,
+                        pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                        pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                        &opData,            /* Operational data */
+                        &dcResults,         /* results structure */
+                        (void *)1);
+                while(!batch_complete){ }
+                cur = 0;
             }
             // printf("Caught up to responses\n");
             printeHashBWAndUpdateLastHashTimeStamp();
