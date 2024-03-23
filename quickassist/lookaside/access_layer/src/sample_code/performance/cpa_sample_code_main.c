@@ -1532,7 +1532,7 @@ max_band_decomp:
                     //     retStatus = CPA_STATUS_FAIL;
                     // }
                 }
-                for(int bufSize=1024; bufSize<=1024*1024; bufSize*=2){
+                for(int bufSize=1024; bufSize<=256*1024; bufSize*=2){
                     status = setupDcTest(CPA_DC_DEFLATE,
                                          CPA_DC_DIR_COMPRESS,
                                          SAMPLE_CODE_CPA_DC_L1,
@@ -1541,7 +1541,7 @@ max_band_decomp:
                                          DEFAULT_COMPRESSION_WINDOW_SIZE,
                                          bufSize,
                                          sampleCorpus,
-                                         SYNC,
+                                         ASYNC,
                                          dcLoops);
                     if (CPA_STATUS_SUCCESS != status)
                     {
