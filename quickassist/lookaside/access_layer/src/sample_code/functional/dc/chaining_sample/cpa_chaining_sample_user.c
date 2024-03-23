@@ -124,7 +124,11 @@ int main(int argc, const char **argv)
     /* Legacy DC Chaining Sample Code */
     int rpsTest = 1;
     if(rpsTest){
-        requestGen(8192,64, 128);
+        printf("256KB Fragmentation BW\n");
+        int pSize = 256 * 1024;
+        for(int i=1024; i<=pSize; i*=2){
+            requestGen(i,pSize / i, 128);
+        }
     } else{
         if( useSw )
             stat = syncSWChainedOpPerf();
