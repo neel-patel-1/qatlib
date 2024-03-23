@@ -797,7 +797,7 @@ int main(int argc, char *argv[])
      **************************************************************************/
     if ((SYMMETRIC_CODE & runTests) == SYMMETRIC_CODE)
     {
-        cipherDirection_g = CPA_CY_SYM_CIPHER_DIRECTION_DECRYPT;
+        cipherDirection_g = CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
         /*AES128-CBC TEST*/
         // for (lv_count = 0; lv_count < numPacketSizes; lv_count++)
         // {
@@ -822,19 +822,51 @@ int main(int argc, char *argv[])
         // }
 
         /*AES256-CBC TEST*/
+        // for (lv_count = 0; lv_count < numPacketSizes; lv_count++)
+        // {
+        //     status = setupCipherTest(CPA_CY_SYM_CIPHER_AES_CBC,
+        //                              KEY_SIZE_256_IN_BYTES,
+        //                              CPA_CY_PRIORITY_NORMAL,
+        //                              ASYNC,
+        //                              packetSizes[lv_count],
+        //                              DEFAULT_CPA_FLAT_BUFFERS_PER_LIST,
+        //                              cyNumBuffers,
+        //                              cySymLoops);
+        //     if (CPA_STATUS_SUCCESS != status)
+        //     {
+        //         PRINT_ERR("Error calling setupCipherTest\n");
+        //         return CPA_STATUS_FAIL;
+        //     }
+        //     status = createStartandWaitForCompletionCrypto(SYM);
+        //     if (CPA_STATUS_SUCCESS != status)
+        //     {
+        //         retStatus = CPA_STATUS_FAIL;
+        //     }
+        // }
+
+
+
+        /*AES256-CBC HMAC-SHA512 test*/
+        printf("SYNC");
         for (lv_count = 0; lv_count < numPacketSizes; lv_count++)
         {
-            status = setupCipherTest(CPA_CY_SYM_CIPHER_AES_CBC,
-                                     KEY_SIZE_256_IN_BYTES,
-                                     CPA_CY_PRIORITY_NORMAL,
-                                     ASYNC,
-                                     packetSizes[lv_count],
-                                     DEFAULT_CPA_FLAT_BUFFERS_PER_LIST,
-                                     cyNumBuffers,
-                                     cySymLoops);
+            status =
+                setupAlgChainTest(CPA_CY_SYM_CIPHER_AES_CBC,
+                                  KEY_SIZE_256_IN_BYTES,
+                                  CPA_CY_SYM_HASH_SHA512,
+                                  CPA_CY_SYM_HASH_MODE_AUTH,
+                                  SHA512_AUTH_KEY_LENGTH_IN_BYTES,
+                                  CPA_CY_SYM_ALG_CHAIN_ORDER_CIPHER_THEN_HASH,
+                                  CPA_CY_PRIORITY_NORMAL,
+                                  SYNC,
+                                  packetSizes[lv_count],
+                                  DEFAULT_CPA_FLAT_BUFFERS_PER_LIST,
+                                  cyNumBuffers,
+                                  cySymLoops);
+
             if (CPA_STATUS_SUCCESS != status)
             {
-                PRINT_ERR("Error calling setupCipherTest\n");
+                PRINT_ERR("Error calling setupAlgChainTest\n");
                 return CPA_STATUS_FAIL;
             }
             status = createStartandWaitForCompletionCrypto(SYM);
@@ -842,11 +874,8 @@ int main(int argc, char *argv[])
             {
                 retStatus = CPA_STATUS_FAIL;
             }
-        }
-
-        return 0;
-
-        /*AES256-CBC HMAC-SHA512 test*/
+        } /*End of test*/
+        printf("ASYNC");
         for (lv_count = 0; lv_count < numPacketSizes; lv_count++)
         {
             status =
@@ -874,6 +903,7 @@ int main(int argc, char *argv[])
                 retStatus = CPA_STATUS_FAIL;
             }
         } /*End of test*/
+        return 0;
 
         /*AES256-CBC AES-XCBC-MAC test*/
         for (lv_count = 0; lv_count < numPacketSizes; lv_count++)

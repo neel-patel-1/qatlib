@@ -133,8 +133,15 @@ extern Cpa32U packageIdCount_g;
 //                         BUFFER_SIZE_4096,
 //                         PACKET_IMIX};
 Cpa32U packetSizes[] = {
-                        (1 * 1024 * 1024),
-                        (2 * 1024 * 1024),
+    BUFFER_SIZE_1024,
+                        BUFFER_SIZE_2048,
+                        BUFFER_SIZE_4096,
+                        BUFFER_SIZE_8192,
+                        BUFFER_SIZE_16384,
+                        BUFFER_SIZE_32768,
+                        BUFFER_SIZE_65536,
+                        BUFFER_SIZE_131072,
+                        BUFFER_SIZE_262144
 
                         };
 
