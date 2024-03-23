@@ -560,10 +560,10 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
 
     status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
-    printf("Buffer Meta Size: %d\n", buffMetaSize);
+    // printf("Buffer Meta Size: %d\n", buffMetaSize);
     status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
                                                     &numInterBuffLists);
-    printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
+    // printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
 
     if (numInterBuffLists > 0){
         status = PHYS_CONTIG_ALLOC(
@@ -595,9 +595,9 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     sd.sessDirection = CPA_DC_DIR_COMPRESS;
     sd.sessState = CPA_DC_STATELESS;
     sd.checksum = CPA_DC_CRC32;
-    printf("Buffer Size: %d, Fragment Size: %d\n", bufferSize, fragmentSize);
+    // printf("Buffer Size: %d, Fragment Size: %d\n", bufferSize, fragmentSize);
     status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
-    printf("Session Size: %d\n", sess_size);
+    // printf("Session Size: %d\n", sess_size);
     FAIL_ON_CPA_FAIL(status);
     status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
     bool do_sync = false;

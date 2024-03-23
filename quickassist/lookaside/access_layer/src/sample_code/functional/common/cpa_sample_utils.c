@@ -97,6 +97,9 @@ static volatile int gPollingDc = 0;
 
 volatile int batch_complete = 0;
 
+volatile int dc_Poll_g = 0;
+int testIter = 0;
+
 volatile Cpa16U numDcResps_g = 0;
 volatile Cpa16U numHashResps_g = 0;
 volatile Cpa16U lastHashResp_idx = 0;
@@ -239,12 +242,17 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
         printeDCBWAndUpdateLastDCTimeStamp();
+        testIter++;
 
     }
     if(pCallbackTag != NULL){
         batch_complete = 1;
     }
     numDcResps_g++;
+    if(testIter > 10){
+        dc_Poll_g = 0;
+    }
+
 }
 
 #ifdef DO_CRYPTO
@@ -268,10 +276,10 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     status = cpaDcQueryCapabilities(dcInstHandle, &cap);
 
     status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
-    printf("Buffer Meta Size: %d\n", buffMetaSize);
+    // printf("Buffer Meta Size: %d\n", buffMetaSize);
     status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
                                                     &numInterBuffLists);
-    printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
+    // printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
 
     if (numInterBuffLists > 0){
         status = PHYS_CONTIG_ALLOC(
@@ -359,7 +367,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             //         cur= (cur + 1);
             //     }
             // }
-            while(1){
+            dc_Poll_g = 1;
+            while(dc_Poll_g){
                 batch_complete = 0;
                 while( cur < numBufs_g - 1){
                     status = cpaDcCompressData2(
