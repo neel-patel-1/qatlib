@@ -669,7 +669,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     }
     pDstBufferList_g = dstBufferLists;
     pSrcBufferList_g = srcBufferLists;
-    numBufs_g = numBuffers;
+    numBufs_g = numFragments;
 
     sampleCyStartPolling(cyInstHandle);
 
