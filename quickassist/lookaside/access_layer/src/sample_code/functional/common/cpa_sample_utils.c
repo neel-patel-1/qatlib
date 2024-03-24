@@ -107,7 +107,7 @@ volatile Cpa16U lastHashResp_idx = 0;
 
 volatile int test_complete = 0;
 
-Cpa16U numBufs_g = 0;
+volatile Cpa16U numBufs_g = 0;
 Cpa32U bufSize_g = 0;
 
 CpaBufferList **pSrcBufferList_g = NULL;
@@ -266,7 +266,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
 
     numDcResps_g++;
-    // printf(" numDcResps_g:%d\n", numDcResps_g);
+    printf(" numDcResps_g:%d\n", numDcResps_g);
 }
 
 
@@ -284,8 +284,8 @@ static Cpa8U sampleCipherIv[] = {
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     numEncResps_g++;
-    // cyInstEddsaEncResps_g:%d\n", numEncResps_g);
-    if(numEncResps_g == numBufs_g){
+    printf("numEncResps_g:%d\n", numEncResps_g);
+    if(numEncResps_g >= numBufs_g){
         batch_complete = 1;
         // printf("bathc complete\n");
     }
@@ -426,7 +426,7 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     }
 }
 
-Cpa16U compFwdSubmitted = 0;
+volatile Cpa16U compFwdSubmitted = 0;
 static void ogDcPoller(CpaInstanceHandle dcInstHandle)
 {
     CpaStatus status = CPA_STATUS_FAIL;
@@ -518,6 +518,7 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
                             pDstBufferList_g[compFwdSubmitted],     /* destination buffer list */
                             NULL);
                 compFwdSubmitted++;
+                printf("compFwdSubmitted:%d\n", compFwdSubmitted);
             }
         }
 
@@ -613,7 +614,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
-
+    numSamples_g=1;
     struct timespec offTSSt[numSamples_g], offTSEt[numSamples_g];
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         batch_complete = 0;
