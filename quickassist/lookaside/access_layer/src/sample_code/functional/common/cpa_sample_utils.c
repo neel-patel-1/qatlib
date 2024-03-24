@@ -379,9 +379,34 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
         status = cpaCySymInitSession(
             cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
     }
+    int cur=0;
     while(dcRequestGen_g){ /* While the requestor thread is running */
         if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
             printf("Got compressed, fwding to enc\n");
+            int bufIdx = cur % numBufs_g;
+            if(__builtin_expect(!!(cur > numDcResps_g),0)){
+                while (cur < UINT16_MAX){
+                    status = cpaCySymPerformOp(
+                        cyInstHandle,
+                        sessionCtx,
+                        pSrcBufferList_g[bufIdx],     /* source buffer list */
+                        pDstBufferList_g[bufIdx],     /* destination buffer list */
+                        NULL,            /* Operational data */
+                        NULL);         /* results structure */
+                    cur=(cur + 1);
+                }
+            }
+            while( cur < numDcResps_g ){
+                status = cpaCySymPerformOp(
+                    cyInstHandle,
+                    sessionCtx,
+                    pSrcBufferList_g[bufIdx],     /* source buffer list */
+                    pDstBufferList_g[bufIdx],     /* destination buffer list */
+                    NULL,            /* Operational data */
+                    NULL);         /* results structure */
+                cur= (cur + 1);
+            }
+            printEncBWAndUpdateLastEncTimeStamp();
         }
     }
 }
