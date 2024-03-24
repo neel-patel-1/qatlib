@@ -667,8 +667,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             status = cpaDcCompressData2(
                 dcInstHandle,
                 sessionHdl,
-                sampleData,     /* source buffer list */
-                pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                pBufferListSrc,     /* source buffer list */
+                pBufferListDst,     /* destination buffer list */
                 &opData,            /* Operational data */
                 &dcResults,         /* results structure */
                 NULL);
@@ -679,6 +679,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             pDstBufferList_g[cur%numBufs_g]->pBuffers->dataLenInBytes, dcResults.produced, dcResults.consumed);
         if(retryCount == MAX_RETRIES){
             printf("Retry Count exceeded\n");
+            exit(-1);
         }
         retryCount = 0;
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
