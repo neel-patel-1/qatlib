@@ -88,7 +88,6 @@ extern Cpa16U numBufs_g;
 extern Cpa32U bufSize_g;
 extern struct timespec hashStartTime_g;
 extern volatile int test_complete;
-extern int dc_Poll_g;
 extern Cpa16U numSamples_g;
 
 struct timespec *userDescStart;

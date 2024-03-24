@@ -97,7 +97,7 @@ static volatile int gPollingDc = 0;
 
 volatile int batch_complete = 0;
 
-volatile int dc_Poll_g = 0;
+volatile int dcRequestGen_g = 0;
 int testIter = 0;
 
 volatile Cpa16U numDcResps_g = 0;
@@ -246,17 +246,119 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
         printeDCBWAndUpdateLastDCTimeStamp();
-        testIter++;
 
     }
     if(pCallbackTag != NULL){
         batch_complete = 1;
     }
     numDcResps_g++;
+
+}
+
+volatile Cpa16U numEncResps_g = 0;
+static Cpa8U sampleCipherKey[] = {
+    0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
+    0xD7, 0x1B, 0xA4, 0xCA, 0xEC, 0xBD, 0x15, 0xE2, 0x52, 0x6A, 0x21, 0x0B,
+    0x41, 0x4C, 0x41, 0x4E, 0xA1, 0xAA, 0x01, 0x3F};
+
+static void encCallback(void *pCallbackTag, CpaStatus status)
+{
+    if ((Cpa16U) (numEncResps_g + 1) < (Cpa16U)numEncResps_g){
+        printEncBWAndUpdateLastEncTimeStamp();
+        testIter++;
+
+    }
+    if(pCallbackTag != NULL){
+        batch_complete = 1;
+    }
+    numEncResps_g++;
     if(testIter > numSamples_g){
-        dc_Poll_g = 0;
+        dcRequestGen_g = 0; /* Test complete stop initial requestor */
     }
 
+}
+static void comp_enc_fwder(){
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    Cpa32U sessionCtxSize = 0;
+    CpaInstanceHandle cyInstHandle = NULL;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymStats64 symStats = {0};
+
+    sampleCyGetInstance(&cyInstHandle);
+    if (cyInstHandle == NULL)
+    {
+        return CPA_STATUS_FAIL;
+    }
+
+    /* Start Cryptographic component */
+
+    status = cpaCyStartInstance(cyInstHandle);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * If the instance is polled start the polling thread. Note that
+         * how the polling is done is implementation-dependent.
+         */
+        sampleDcStartPolling(cyInstHandle);
+
+        /* populate symmetric session data structure */
+        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+        //<snippet name="initSession">
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_ALGORITHM_CHAINING;
+        sessionSetupData.algChainOrder =
+            CPA_CY_SYM_ALG_CHAIN_ORDER_CIPHER_THEN_HASH;
+
+        sessionSetupData.cipherSetupData.cipherAlgorithm =
+            CPA_CY_SYM_CIPHER_AES_CBC;
+        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+            sizeof(sampleCipherKey);
+        sessionSetupData.cipherSetupData.cipherDirection =
+            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+
+        sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA512;
+        sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_AUTH;
+        #define LAC_HASH_SHA512_DIGEST_SIZE 64
+        sessionSetupData.hashSetupData.digestResultLenInBytes = LAC_HASH_SHA512_DIGEST_SIZE;
+        sessionSetupData.hashSetupData.authModeSetupData.authKey =
+            sampleCipherKey;
+        sessionSetupData.hashSetupData.authModeSetupData.authKeyLenInBytes =
+            sizeof(sampleCipherKey);
+
+        /* The resulting MAC is to be placed immediately after the ciphertext */
+        sessionSetupData.digestIsAppended = CPA_TRUE;
+        sessionSetupData.verifyDigest = CPA_FALSE;
+        //</snippet>
+
+        /* Determine size of session context to allocate */
+
+        status = cpaCySymSessionCtxGetSize(
+            cyInstHandle, &sessionSetupData, &sessionCtxSize);
+
+
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Allocate session context */
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Initialize the session */
+
+        status = cpaCySymInitSession(
+            cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
+    }
 }
 
 #ifdef DO_CRYPTO
@@ -371,8 +473,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             //         cur= (cur + 1);
             //     }
             // }
-            dc_Poll_g = 1;
-            while(dc_Poll_g){
+            dcRequestGen_g = 1;
+            while(dcRequestGen_g){
                 batch_complete = 0;
                 while( cur < numBufs_g - 1){
                     status = cpaDcCompressData2(
