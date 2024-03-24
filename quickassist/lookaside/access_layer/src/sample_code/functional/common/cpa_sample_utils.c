@@ -101,6 +101,7 @@ volatile int dcRequestGen_g = 0;
 int testIter = 0;
 
 volatile Cpa16U numDcResps_g = 0;
+volatile Cpa16U numEncResps_g = 0;
 volatile Cpa16U numHashResps_g = 0;
 volatile Cpa16U lastHashResp_idx = 0;
 
@@ -203,6 +204,25 @@ void printeHashBWAndUpdateLastHashTimeStamp(void)
     }
 }
 
+void printEncBWAndUpdateLastEncTimeStamp(void)
+{
+    if(dcStartTime_g.tv_nsec == 0){
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+        return;
+    } else {
+        struct timespec curTime;
+        clock_gettime(CLOCK_MONOTONIC, &curTime);
+        uint64_t ns = curTime.tv_sec * 1000000000 + curTime.tv_nsec -
+            (dcStartTime_g.tv_sec * 1000000000 + dcStartTime_g.tv_nsec);
+        uint64_t us = ns/1000;
+        if(us == 0){
+            return;
+        }
+        printf("DC-BW(MB/s): %ld\n", (numEncResps_g * bufSize_g) / (us));
+        clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
+    }
+}
+
 void printeDCBWAndUpdateLastDCTimeStamp(void)
 {
     if(dcStartTime_g.tv_nsec == 0){
@@ -255,7 +275,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 
 }
 
-volatile Cpa16U numEncResps_g = 0;
+
 static Cpa8U sampleCipherKey[] = {
     0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
     0xD7, 0x1B, 0xA4, 0xCA, 0xEC, 0xBD, 0x15, 0xE2, 0x52, 0x6A, 0x21, 0x0B,
@@ -277,7 +297,7 @@ static void encCallback(void *pCallbackTag, CpaStatus status)
     }
 
 }
-static void comp_enc_fwder(){
+static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     CpaStatus status = CPA_STATUS_FAIL;
     CpaCySymSessionCtx sessionCtx = NULL;
     Cpa32U sessionCtxSize = 0;
@@ -358,6 +378,11 @@ static void comp_enc_fwder(){
 
         status = cpaCySymInitSession(
             cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
+    }
+    while(dcRequestGen_g){ /* While the requestor thread is running */
+        if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
+            printf("Got compressed, fwding to enc\n");
+        }
     }
 }
 
@@ -622,7 +647,7 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
     {
         /* Start thread to poll instance */
         printf("Starting DC Polling\n");
-        sampleThreadCreate(&gPollingThreadDc, sal_dc_polling, dcInstHandle);
+        sampleThreadCreate(&gPollingThreadDc, comp_enc_fwder, dcInstHandle);
         printf("Affinitizing dc thread: %ld\n", gPollingThreadDc);
         printf("to core: %d\n", 2);
         utilCodeThreadBind(&gPollingThreadDc, 2);
