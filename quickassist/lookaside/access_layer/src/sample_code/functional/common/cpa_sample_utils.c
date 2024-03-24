@@ -269,7 +269,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 
     }
     numDcResps_g++;
-
+    // printf(" numDcResps_g:%d\n", numDcResps_g);
 }
 
 
@@ -287,8 +287,8 @@ static Cpa8U sampleCipherIv[] = {
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numEncResps_g) == ITER_THRESH){
-        printEncBWAndUpdateLastEncTimeStamp();
-        testIter++;
+        // printEncBWAndUpdateLastEncTimeStamp();
+        // testIter++;
 
     }
     if(pCallbackTag != NULL){
@@ -296,7 +296,7 @@ static void encCallback(void *pCallbackTag, CpaStatus status)
     }
     numEncResps_g++;
     if(testIter > numSamples_g){
-        dcRequestGen_g = 0; /* Test complete stop initial requestor */
+        // dcRequestGen_g = 0; /* Test complete stop initial requestor */
     }
 
 }
@@ -526,65 +526,44 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
-    // while (gPollingCy)
-    // {
-        int cur=0;
-    //     if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
-            /* what if all numBufs_g got callback'd? L
 
-            while( cur < numHashResps_g)   but use cur % numBufs_g  for bufs approach
-                - need to check if numHashResps_g overflow'd (cur > numHashReps_g):
-                if(unlikely(cur > numHashResps_g)){
-                    while (cur < MAX_CPA16U){
-                        comp(cur%num_bufs)
-                    }
-                }
-                while( cur < numHashResps_g)
-                    comp(cur%num_bufs)
-            */
+    Cpa16U cur=0;
 
-// #define unlikely(x) __builtin_expect(!!(x), 0)
-//            if(unlikely(cur > numHashResps_g)){
+    dcRequestGen_g = 1;
+    void *param = NULL;
+    int retryCount = 0;
+    #define MAX_RETRIES 3
+    while(dcRequestGen_g){
+        batch_complete = 0;
+        if( (cur % numBufs_g) == (numBufs_g - 1) ){
+            param = (void *)(1);
+        }
+        else {
+            param = NULL;
+        }
 
-            //     while (cur < UINT16_MAX){
-            //         status = cpaDcCompressData2(
-            //             dcInstHandle,
-            //             sessionHdl,
-            //             pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-            //             pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
-            //             &opData,            /* Operational data */
-            //             &dcResults,         /* results structure */
-            //             NULL);
-            //         cur= (cur + 1);
-            //     }
-            // }
-            dcRequestGen_g = 1;
-            while(dcRequestGen_g){
-                batch_complete = 0;
-                while( cur < numBufs_g - 1){
-                    status = cpaDcCompressData2(
-                        dcInstHandle,
-                        sessionHdl,
-                        pSrcBufferList_g[cur],     /* source buffer list */
-                        pDstBufferList_g[cur],     /* destination buffer list */
-                        &opData,            /* Operational data */
-                        &dcResults,         /* results structure */
-                        NULL);
-                    cur= (cur + 1);
-                }
-                status = cpaDcCompressData2(
-                        dcInstHandle,
-                        sessionHdl,
-                        pSrcBufferList_g[cur],     /* source buffer list */
-                        pDstBufferList_g[cur],     /* destination buffer list */
-                        &opData,            /* Operational data */
-                        &dcResults,         /* results structure */
-                        (void *)1);
-                while(!batch_complete){ }
-                cur = 0;
-            }
-            test_complete = 1;
-            testIter = 0;
+        do {
+            status = cpaDcCompressData2(
+                dcInstHandle,
+                sessionHdl,
+                pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                &opData,            /* Operational data */
+                &dcResults,         /* results structure */
+                NULL);
+            printf("submitted %d\n", cur);
+            retryCount++;
+        } while(status == CPA_STATUS_RETRY && retryCount < MAX_RETRIES);
+        retryCount = 0;
+        if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+            printf("Failed to compress data:%d\n", status);
+            exit(-1);
+        }
+        cur= (cur + 1);
+        // printf("cur:%d\n", cur);
+    }
+    test_complete = 1;
+    testIter = 0;
             // printf("Caught up to responses\n");
         // }
     // }
