@@ -266,7 +266,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
 
     numDcResps_g++;
-    printf(" numDcResps_g:%d\n", numDcResps_g);
+    // printf(" numDcResps_g:%d\n", numDcResps_g);
 }
 
 
@@ -284,10 +284,10 @@ static Cpa8U sampleCipherIv[] = {
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     numEncResps_g++;
-    printf("numEncResps_g:%d\n", numEncResps_g);
+    // cyInstEddsaEncResps_g:%d\n", numEncResps_g);
     if(numEncResps_g == numBufs_g){
         batch_complete = 1;
-        printf("bathc complete\n");
+        // printf("bathc complete\n");
     }
 
 }
@@ -558,7 +558,6 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     // printf("Buffer Meta Size: %d\n", buffMetaSize);
     status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
                                                     &numInterBuffLists);
-    // printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
 
     if (numInterBuffLists > 0){
         status = PHYS_CONTIG_ALLOC(
@@ -615,18 +614,18 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
 
-    struct timespec offloadTime[numSamples_g];
+    struct timespec offTSSt[numSamples_g], offTSEt[numSamples_g];
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         batch_complete = 0;
-        clock_gettime(CLOCK_MONOTONIC, &offloadTime[nTsts]);
+        clock_gettime(CLOCK_MONOTONIC, &offTSSt[nTsts]);
         for(int cur=0; cur < numBufs_g; cur++){
 
             retry:
                 status = cpaDcCompressData2(
                     dcInstHandle,
                     sessionHdl,
-                    pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                    pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                    pSrcBufferList_g[cur],     /* source buffer list */
+                    pDstBufferList_g[cur],     /* destination buffer list */
                     &opData,            /* Operational data */
                     &dcResults,         /* results structure */
                     NULL);
@@ -639,16 +638,16 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             }
         }
         while(!batch_complete){}
-        clock_gettime(CLOCK_MONOTONIC, &offloadTime[nTsts]);
-        Cpa64U nanos = (offloadTime[nTsts].tv_sec * 1000000000 + offloadTime[nTsts].tv_nsec) -
-            (offloadTime[nTsts-1].tv_sec * 1000000000 + offloadTime[nTsts-1].tv_nsec);
+        clock_gettime(CLOCK_MONOTONIC, &offTSEt[nTsts]);
+        Cpa64U nanos = (offTSEt[nTsts].tv_sec * 1000000000 + offTSEt[nTsts].tv_nsec) -
+            (offTSSt[nTsts].tv_sec * 1000000000 + offTSSt[nTsts].tv_nsec);
+        compFwdSubmitted = 0;
+        numDcResps_g = 0;
+        numEncResps_g = 0;
         printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
-        return 0;
     }
     test_complete = 1;
-    testIter = 0;
-            // printf("Caught up to responses\n");
-        // }
+
     // }
 
     sampleThreadExit();
