@@ -436,6 +436,15 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     }
 }
 
+static void ogDcPoller(CpaInstanceHandle dcInstHandle)
+{
+    while (1)
+    {
+        if(icp_sal_DcPollInstance(dcInstHandle, 0)){
+        }
+    }
+}
+
 static void enc_poller(CpaInstanceHandle cyInstHandle)
 {
 
@@ -691,7 +700,7 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
     {
         /* Start thread to poll instance */
         printf("Starting DC Polling\n");
-        sampleThreadCreate(&gPollingThreadDc, comp_enc_fwder, dcInstHandle);
+        sampleThreadCreate(&gPollingThreadDc, ogDcPoller, dcInstHandle);
         printf("Affinitizing dc thread: %ld\n", gPollingThreadDc);
         printf("to core: %d\n", 2);
         utilCodeThreadBind(&gPollingThreadDc, 2);
