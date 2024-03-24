@@ -249,9 +249,10 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
         testIter++;
         test_complete = 1;
     }
-    test_complete = 1;
+
     if(pCallbackTag != NULL){
         batch_complete = 1;
+        test_complete = 1;
     }
     numDcResps_g++;
     if(testIter > numSamples_g){
@@ -348,7 +349,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             dc_Poll_g = 1;
             // while(dc_Poll_g){
             //     batch_complete = 0;
-                // while( cur < numBufs_g - 1){
+                while( cur < numBufs_g - 1){
                     status = cpaDcCompressData2(
                         dcInstHandle,
                         sessionHdl,
@@ -358,15 +359,15 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                         &dcResults,         /* results structure */
                         NULL);
                     cur= (cur + 1);
-                // }
-                // status = cpaDcCompressData2(
-                //         dcInstHandle,
-                //         sessionHdl,
-                //         pSrcBufferList_g[cur],     /* source buffer list */
-                //         pDstBufferList_g[cur],     /* destination buffer list */
-                //         &opData,            /* Operational data */
-                //         &dcResults,         /* results structure */
-                //         (void *)1);
+                }
+                status = cpaDcCompressData2(
+                        dcInstHandle,
+                        sessionHdl,
+                        pSrcBufferList_g[cur],     /* source buffer list */
+                        pDstBufferList_g[cur],     /* destination buffer list */
+                        &opData,            /* Operational data */
+                        &dcResults,         /* results structure */
+                        (void *)1);
 
                 // cur = 0;
             // }

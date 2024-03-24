@@ -129,7 +129,7 @@ int main(int argc, const char **argv)
         int pSize = 256 * 1024;
         // for(int i=1024; i<=pSize; i*=2){
         //     printf("%d,%d\n", i, pSize / i);
-            requestGen(8192,1, 1);
+            requestGen(8192,100, 1);
         // }
     } else{
         if( useSw )
