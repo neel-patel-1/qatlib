@@ -554,6 +554,11 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             printf("submitted %d\n", cur);
             retryCount++;
         } while(status == CPA_STATUS_RETRY && retryCount < MAX_RETRIES);
+        printf("outspace:%d, produced: %d, consumed: %d\n",
+            pDstBufferList_g[cur%numBufs_g]->pBuffers->dataLenInBytes, dcResults.produced, dcResults.consumed);
+        if(retryCount == MAX_RETRIES){
+            printf("Retry Count exceeded\n");
+        }
         retryCount = 0;
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to compress data:%d\n", status);
