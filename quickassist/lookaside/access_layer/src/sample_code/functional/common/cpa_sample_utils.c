@@ -555,11 +555,13 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa8U *pDstBuffer = NULL;
     Cpa32U bufferSize = sizeof(sampleData);
     Cpa32U dstBufferSize = bufferSize;
+    CpaFlatBuffer *pFlatBuffer = NULL;
 
-
+    CpaDcHuffType huffType = CPA_DC_HT_STATIC;
     status =
         cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
-
+    status = cpaDcDeflateCompressBound(
+        dcInstHandle, huffType, bufferSize, &dstBufferSize);
     /* Allocate source buffer */
     if (CPA_STATUS_SUCCESS == status)
     {
@@ -586,6 +588,28 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     {
         status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
     }
+    /* copy source into buffer */
+    memcpy(pSrcBuffer, sampleData, sizeof(sampleData));
+
+    /* Build source bufferList */
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+
+    pBufferListSrc->pBuffers = pFlatBuffer;
+    pBufferListSrc->numBuffers = 1;
+    pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+
+    pFlatBuffer->dataLenInBytes = bufferSize;
+    pFlatBuffer->pData = pSrcBuffer;
+
+    /* Build destination bufferList */
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
+
+    pBufferListDst->pBuffers = pFlatBuffer;
+    pBufferListDst->numBuffers = 1;
+    pBufferListDst->pPrivateMetaData = pBufferMetaDst;
+
+    pFlatBuffer->dataLenInBytes = dstBufferSize;
+    pFlatBuffer->pData = pDstBuffer;
 
 
 
