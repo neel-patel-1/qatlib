@@ -264,12 +264,9 @@ void symCallback(void *pCallbackTag,
 
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
-    if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
-        printeDCBWAndUpdateLastDCTimeStamp();
 
-    }
     numDcResps_g++;
-    // printf(" numDcResps_g:%d\n", numDcResps_g);
+    printf(" numDcResps_g:%d\n", numDcResps_g);
 }
 
 
@@ -286,17 +283,11 @@ static Cpa8U sampleCipherIv[] = {
 #define ITER_THRESH UINT16_MAX
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    if ((Cpa16U) (numEncResps_g) == ITER_THRESH){
-        printEncBWAndUpdateLastEncTimeStamp();
-        // testIter++;
-
-    }
-    if(pCallbackTag != NULL){
-        batch_complete = 1;
-    }
     numEncResps_g++;
-    if(testIter > numSamples_g){
-        // dcRequestGen_g = 0; /* Test complete stop initial requestor */
+    printf("numEncResps_g:%d\n", numEncResps_g);
+    if(numEncResps_g == numBufs_g){
+        batch_complete = 1;
+        printf("bathc complete\n");
     }
 
 }
@@ -430,13 +421,12 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                 cur= (cur + 1);
                 bufIdx = cur % numBufs_g;
             }
-            // printf("cmp-fwd-idx:%d numDcResps_g:%d\n", cur, numDcResps_g);
-            // printEncBWAndUpdateLastEncTimeStamp();
+
         }
     }
 }
 
-
+Cpa16U compFwdSubmitted = 0;
 static void ogDcPoller(CpaInstanceHandle dcInstHandle)
 {
     CpaStatus status = CPA_STATUS_FAIL;
@@ -519,13 +509,16 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
     while (1)
     {
         if(icp_sal_DcPollInstance(dcInstHandle, 0)){
-            status = cpaCySymPerformOp(
-                        cyInstHandle,
-                        (void *)(1),
-                        pOpData,
-                        pSrcBufferList_g[0],     /* source buffer list */
-                        pDstBufferList_g[0],     /* destination buffer list */
-                        NULL);
+            while(compFwdSubmitted < numDcResps_g){
+                status = cpaCySymPerformOp(
+                            cyInstHandle,
+                            (void *)(1),
+                            pOpData,
+                            pSrcBufferList_g[compFwdSubmitted],     /* source buffer list */
+                            pDstBufferList_g[compFwdSubmitted],     /* destination buffer list */
+                            NULL);
+                compFwdSubmitted++;
+            }
         }
 
     }
@@ -534,7 +527,7 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
 static void enc_poller(CpaInstanceHandle cyInstHandle)
 {
 
-    while (dcRequestGen_g)
+    while (1)
     {
         if(icp_sal_CyPollInstance(cyInstHandle, 0)){
         }
@@ -622,40 +615,35 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
 
-    Cpa16U cur=0;
-
-    dcRequestGen_g = 1;
-    void *param = NULL;
-    int retryCount = 0;
-    #define MAX_RETRIES 3
-    while(dcRequestGen_g){
+    struct timespec offloadTime[numSamples_g];
+    for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         batch_complete = 0;
-        if( (cur % numBufs_g) == (numBufs_g - 1) ){
-            param = (void *)(1);
-        }
-        else {
-            param = NULL;
-        }
+        clock_gettime(CLOCK_MONOTONIC, &offloadTime[nTsts]);
+        for(int cur=0; cur < numBufs_g; cur++){
 
-        retry:
-            status = cpaDcCompressData2(
-                dcInstHandle,
-                sessionHdl,
-                pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-                pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
-                &opData,            /* Operational data */
-                &dcResults,         /* results structure */
-                NULL);
-            retryCount++;
-        if(status == CPA_STATUS_RETRY)
-            goto retry;
+            retry:
+                status = cpaDcCompressData2(
+                    dcInstHandle,
+                    sessionHdl,
+                    pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
+                    pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
+                    &opData,            /* Operational data */
+                    &dcResults,         /* results structure */
+                    NULL);
+            if(status == CPA_STATUS_RETRY)
+                goto retry;
 
-        if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
-            printf("Failed to compress data:%d\n", status);
-            exit(-1);
+            if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+                printf("Failed to compress data:%d\n", status);
+                exit(-1);
+            }
         }
-        cur= (cur + 1);
-        // printf("cur:%d\n", cur);
+        while(!batch_complete){}
+        clock_gettime(CLOCK_MONOTONIC, &offloadTime[nTsts]);
+        Cpa64U nanos = (offloadTime[nTsts].tv_sec * 1000000000 + offloadTime[nTsts].tv_nsec) -
+            (offloadTime[nTsts-1].tv_sec * 1000000000 + offloadTime[nTsts-1].tv_nsec);
+        printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
+        return 0;
     }
     test_complete = 1;
     testIter = 0;
