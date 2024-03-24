@@ -268,9 +268,6 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
         printeDCBWAndUpdateLastDCTimeStamp();
 
     }
-    if(pCallbackTag != NULL){
-        batch_complete = 1;
-    }
     numDcResps_g++;
 
 }
@@ -389,8 +386,39 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     while(dcRequestGen_g){ /* While the requestor thread is running */
         if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
             int bufIdx = cur % numBufs_g;
-            if(cur > numDcResps_g){
+            if(cur > numDcResps_g){ /*Can this happen if requestor waits for batch?*/
                 while (cur <= UINT16_MAX){
+                    if(bufIdx == numBufs_g - 1){
+                        status = cpaCySymPerformOp(
+                            cyInstHandle,
+                            (void *)(1),
+                            pOpData,
+                            pSrcBufferList_g[bufIdx],     /* source buffer list */
+                            pDstBufferList_g[bufIdx],     /* destination buffer list */
+                            NULL);
+                    } else {
+                        status = cpaCySymPerformOp(
+                            cyInstHandle,
+                            (NULL),
+                            pOpData,
+                            pSrcBufferList_g[bufIdx],     /* source buffer list */
+                            pDstBufferList_g[bufIdx],     /* destination buffer list */
+                            NULL);
+                    }
+                    cur=(cur + 1);
+                    bufIdx = cur % numBufs_g;
+                }
+            }
+            while( cur < numDcResps_g ){
+                if(bufIdx == numBufs_g - 1){
+                    status = cpaCySymPerformOp(
+                        cyInstHandle,
+                        (void *)(1),
+                        pOpData,
+                        pSrcBufferList_g[bufIdx],     /* source buffer list */
+                        pDstBufferList_g[bufIdx],     /* destination buffer list */
+                        NULL);
+                } else {
                     status = cpaCySymPerformOp(
                         cyInstHandle,
                         NULL,
@@ -398,22 +426,8 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                         pSrcBufferList_g[bufIdx],     /* source buffer list */
                         pDstBufferList_g[bufIdx],     /* destination buffer list */
                         NULL);
-                    cur=(cur + 1);
-                    bufIdx = cur % numBufs_g;
                 }
-            }
-            while( cur < numDcResps_g ){
-                status = cpaCySymPerformOp(
-                    cyInstHandle,
-                    NULL,
-                    pOpData,
-                    pSrcBufferList_g[bufIdx],     /* source buffer list */
-                    pDstBufferList_g[bufIdx],     /* destination buffer list */
-                    NULL);
                 cur= (cur + 1);
-                if(cur >= numBufs_g){
-                    break;
-                }
                 bufIdx = cur % numBufs_g;
             }
             // printf("cmp-fwd-idx:%d numDcResps_g:%d\n", cur, numDcResps_g);
