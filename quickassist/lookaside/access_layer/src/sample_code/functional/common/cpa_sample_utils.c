@@ -286,9 +286,10 @@ static Cpa8U sampleCipherIv[] = {
     0x7E, 0x9B, 0x4C, 0x1D, 0x82, 0x4A, 0xC5, 0xDF, 0x99, 0x4C, 0xA1, 0x44,
     0xAA, 0x8D, 0x37, 0x27};
 
+#define ITER_THRESH UINT16_MAX
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    if ((Cpa16U) (numEncResps_g + 1) < (Cpa16U)numEncResps_g){
+    if ((Cpa16U) (numEncResps_g) == ITER_THRESH){
         printEncBWAndUpdateLastEncTimeStamp();
         testIter++;
 
@@ -384,12 +385,12 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     pOpData->cryptoStartSrcOffsetInBytes = 0;
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
 
-    int cur=0;
+    Cpa16U cur=0;
     while(dcRequestGen_g){ /* While the requestor thread is running */
         if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
             int bufIdx = cur % numBufs_g;
-            if(__builtin_expect(!!(cur > numDcResps_g),0)){
-                while (cur < UINT16_MAX){
+            if(cur > numDcResps_g){
+                while (cur <= UINT16_MAX){
                     status = cpaCySymPerformOp(
                         cyInstHandle,
                         NULL,
@@ -399,7 +400,6 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                         NULL);
                     cur=(cur + 1);
                     bufIdx = cur % numBufs_g;
-
                 }
             }
             while( cur < numDcResps_g ){
@@ -411,12 +411,12 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                     pDstBufferList_g[bufIdx],     /* destination buffer list */
                     NULL);
                 cur= (cur + 1);
-                bufIdx = cur % numBufs_g;
-                if(status != CPA_STATUS_SUCCESS){
-                    printf("Failed to perform operation: %d\n", status);
-                    exit(-1);
+                if(cur >= numBufs_g){
+                    break;
                 }
+                bufIdx = cur % numBufs_g;
             }
+            // printf("cmp-fwd-idx:%d numDcResps_g:%d\n", cur, numDcResps_g);
             // printEncBWAndUpdateLastEncTimeStamp();
         }
     }
