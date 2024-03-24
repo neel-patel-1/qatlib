@@ -218,7 +218,7 @@ void printEncBWAndUpdateLastEncTimeStamp(void)
         if(us == 0){
             return;
         }
-        printf("DC-BW(MB/s): %ld\n", (numEncResps_g * bufSize_g) / (us));
+        printf("ENC-BW(MB/s): %ld\n", (numEncResps_g * bufSize_g) / (us));
         clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     }
 }
@@ -382,7 +382,6 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     int cur=0;
     while(dcRequestGen_g){ /* While the requestor thread is running */
         if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
-            printf("Got compressed, fwding to enc\n");
             int bufIdx = cur % numBufs_g;
             if(__builtin_expect(!!(cur > numDcResps_g),0)){
                 while (cur < UINT16_MAX){
@@ -406,7 +405,7 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                     NULL);         /* results structure */
                 cur= (cur + 1);
             }
-            printEncBWAndUpdateLastEncTimeStamp();
+            // printEncBWAndUpdateLastEncTimeStamp();
         }
     }
 }
