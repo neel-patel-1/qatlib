@@ -328,7 +328,7 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
          * If the instance is polled start the polling thread. Note that
          * how the polling is done is implementation-dependent.
          */
-        sampleDcStartPolling(cyInstHandle);
+
 
         /* populate symmetric session data structure */
         sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
@@ -379,6 +379,13 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
         status = cpaCySymInitSession(
             cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
     }
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start Cy Session\n");
+        exit(-1);
+    }
+    else{
+        sampleEncStartPolling(cyInstHandle);
+    }
     int cur=0;
     while(dcRequestGen_g){ /* While the requestor thread is running */
         if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
@@ -406,6 +413,18 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                 cur= (cur + 1);
             }
             // printEncBWAndUpdateLastEncTimeStamp();
+        }
+    }
+}
+
+static void enc_poller(CpaInstanceHandle cyInstHandle)
+{
+
+
+    while (dcRequestGen_g)
+    {
+        if(icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
+            printf("Polling Enc\n");
         }
     }
 }
@@ -675,6 +694,23 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
         printf("Affinitizing dc thread: %ld\n", gPollingThreadDc);
         printf("to core: %d\n", 2);
         utilCodeThreadBind(&gPollingThreadDc, 2);
+    }
+}
+
+void sampleEncStartPolling(CpaInstanceHandle cyInstHandle)
+{
+    CpaInstanceInfo2 info2 = {0};
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    status = cpaCyInstanceGetInfo2(cyInstHandle, &info2);
+    if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
+    {
+        /* Start thread to poll instance */
+        printf("Starting Enc Polling\n");
+        sampleThreadCreate(&gPollingThread, enc_poller, cyInstHandle);
+        printf("Affinitizing enc thread: %ld\n", gPollingThread);
+        printf("to core: %d\n", 1);
+        utilCodeThreadBind(&gPollingThread, 1);
     }
 }
 
