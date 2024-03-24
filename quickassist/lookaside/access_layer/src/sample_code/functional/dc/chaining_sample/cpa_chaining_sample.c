@@ -466,13 +466,13 @@ CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
 
 
     CpaStatus status;
-    status = PHYS_CONTIG_ALLOC(&swDigestBuffer, SHA256_DIGEST_LENGTH);
-    calSWDigest(orig, size,swDigestBuffer, SHA256_DIGEST_LENGTH, CPA_CY_SYM_HASH_SHA256);
-    if (memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0){
-        PRINT_ERR("Decompressed data does not match original\n");
-        return CPA_STATUS_FAIL;
+    // status = PHYS_CONTIG_ALLOC(&swDigestBuffer, SHA256_DIGEST_LENGTH);
+    // calSWDigest(orig, size,swDigestBuffer, SHA256_DIGEST_LENGTH, CPA_CY_SYM_HASH_SHA256);
+    // if (memcmp(swDigestBuffer, hwDigest, SHA256_DIGEST_LENGTH)!=0){
+    //     PRINT_ERR("Decompressed data does not match original\n");
+    //     return CPA_STATUS_FAIL;
 
-    }
+    // }
 
     status = inflate_init(&stream);
     status = PHYS_CONTIG_ALLOC(&pDecompBuffer, size);
@@ -691,20 +691,18 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
         return CPA_STATUS_FAIL;
     }
     test_complete = 0;
-    while(!test_complete){
-        // Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
-        // pOpData->pDigestResult = pDigestBuffer;
-        // status = cpaCySymPerformOp(
-        //     cyInstHandle,
-        //     NULL, /* data sent as is to the callback function*/
-        //     pOpData,           /* operational data struct */
-        //     srcBufferLists[buf_idx],       /* source buffer list */
-        //     dstBufferLists[buf_idx],       /* same src & dst for an in-place operation*/
-        //     NULL); /*Don't verify*/
+    while(!test_complete){ }
+    for(int i=0; i<numFragments; i++){
+        status = decompressAndVerify(srcBufferLists[i]->pBuffers->pData,
+            dstBufferLists[i]->pBuffers->pData, NULL, fragmentSize);
+        if(status != CPA_STATUS_SUCCESS){
+            PRINT_ERR("Decompression failed\n");
+            return CPA_STATUS_FAIL;
+        }
+        else{
+            PRINT_DBG("Decompression Successful\n");
 
-
-        // buf_idx = (buf_idx + 1) % numFragments;
-
+        }
     }
     test_complete = 0;
     printf("Test complete\n");

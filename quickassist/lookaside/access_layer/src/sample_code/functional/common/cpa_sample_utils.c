@@ -247,8 +247,9 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
         printeDCBWAndUpdateLastDCTimeStamp();
         testIter++;
-
+        test_complete = 1;
     }
+    test_complete = 1;
     if(pCallbackTag != NULL){
         batch_complete = 1;
     }
@@ -343,38 +344,11 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     // {
         int cur=0;
     //     if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
-            /* what if all numBufs_g got callback'd? L
 
-            while( cur < numHashResps_g)   but use cur % numBufs_g  for bufs approach
-                - need to check if numHashResps_g overflow'd (cur > numHashReps_g):
-                if(unlikely(cur > numHashResps_g)){
-                    while (cur < MAX_CPA16U){
-                        comp(cur%num_bufs)
-                    }
-                }
-                while( cur < numHashResps_g)
-                    comp(cur%num_bufs)
-            */
-
-// #define unlikely(x) __builtin_expect(!!(x), 0)
-//            if(unlikely(cur > numHashResps_g)){
-
-            //     while (cur < UINT16_MAX){
-            //         status = cpaDcCompressData2(
-            //             dcInstHandle,
-            //             sessionHdl,
-            //             pSrcBufferList_g[cur%numBufs_g],     /* source buffer list */
-            //             pDstBufferList_g[cur%numBufs_g],     /* destination buffer list */
-            //             &opData,            /* Operational data */
-            //             &dcResults,         /* results structure */
-            //             NULL);
-            //         cur= (cur + 1);
-            //     }
-            // }
             dc_Poll_g = 1;
-            while(dc_Poll_g){
-                batch_complete = 0;
-                while( cur < numBufs_g - 1){
+            // while(dc_Poll_g){
+            //     batch_complete = 0;
+                // while( cur < numBufs_g - 1){
                     status = cpaDcCompressData2(
                         dcInstHandle,
                         sessionHdl,
@@ -384,20 +358,20 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                         &dcResults,         /* results structure */
                         NULL);
                     cur= (cur + 1);
-                }
-                status = cpaDcCompressData2(
-                        dcInstHandle,
-                        sessionHdl,
-                        pSrcBufferList_g[cur],     /* source buffer list */
-                        pDstBufferList_g[cur],     /* destination buffer list */
-                        &opData,            /* Operational data */
-                        &dcResults,         /* results structure */
-                        (void *)1);
-                while(!batch_complete){ }
-                cur = 0;
-            }
-            test_complete = 1;
-            testIter = 0;
+                // }
+                // status = cpaDcCompressData2(
+                //         dcInstHandle,
+                //         sessionHdl,
+                //         pSrcBufferList_g[cur],     /* source buffer list */
+                //         pDstBufferList_g[cur],     /* destination buffer list */
+                //         &opData,            /* Operational data */
+                //         &dcResults,         /* results structure */
+                //         (void *)1);
+
+                // cur = 0;
+            // }
+            // test_complete = 1;
+            // testIter = 0;
             // printf("Caught up to responses\n");
         // }
     // }

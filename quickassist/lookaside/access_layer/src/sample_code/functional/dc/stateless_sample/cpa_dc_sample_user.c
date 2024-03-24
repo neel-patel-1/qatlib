@@ -104,7 +104,7 @@ int main(int argc, const char **argv)
         qaeMemDestroy();
         return (int)stat;
     }
-    startTest();
+    // startTest();
     if (CPA_STATUS_SUCCESS != stat)
     {
         PRINT_ERR("\nStateless Compression Sample Code App failed\n");
