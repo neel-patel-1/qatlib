@@ -281,6 +281,11 @@ static Cpa8U sampleCipherKey[] = {
     0xD7, 0x1B, 0xA4, 0xCA, 0xEC, 0xBD, 0x15, 0xE2, 0x52, 0x6A, 0x21, 0x0B,
     0x41, 0x4C, 0x41, 0x4E, 0xA1, 0xAA, 0x01, 0x3F};
 
+/* Initialization vector */
+static Cpa8U sampleCipherIv[] = {
+    0x7E, 0x9B, 0x4C, 0x1D, 0x82, 0x4A, 0xC5, 0xDF, 0x99, 0x4C, 0xA1, 0x44,
+    0xAA, 0x8D, 0x37, 0x27};
+
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numEncResps_g + 1) < (Cpa16U)numEncResps_g){
@@ -331,13 +336,8 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
          */
 
 
-        /* populate symmetric session data structure */
         sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-        //<snippet name="initSession">
-        sessionSetupData.symOperation = CPA_CY_SYM_OP_ALGORITHM_CHAINING;
-        sessionSetupData.algChainOrder =
-            CPA_CY_SYM_ALG_CHAIN_ORDER_CIPHER_THEN_HASH;
-
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
         sessionSetupData.cipherSetupData.cipherAlgorithm =
             CPA_CY_SYM_CIPHER_AES_CBC;
         sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
@@ -345,19 +345,6 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
             sizeof(sampleCipherKey);
         sessionSetupData.cipherSetupData.cipherDirection =
             CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
-
-        sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA512;
-        sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_AUTH;
-        #define LAC_HASH_SHA512_DIGEST_SIZE 64
-        sessionSetupData.hashSetupData.digestResultLenInBytes = LAC_HASH_SHA512_DIGEST_SIZE;
-        sessionSetupData.hashSetupData.authModeSetupData.authKey =
-            sampleCipherKey;
-        sessionSetupData.hashSetupData.authModeSetupData.authKeyLenInBytes =
-            sizeof(sampleCipherKey);
-
-        /* The resulting MAC is to be placed immediately after the ciphertext */
-        sessionSetupData.digestIsAppended = CPA_TRUE;
-        sessionSetupData.verifyDigest = CPA_FALSE;
         //</snippet>
 
         /* Determine size of session context to allocate */
@@ -387,6 +374,17 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     else{
         sampleEncStartPolling(cyInstHandle);
     }
+    CpaCySymOpData *pOpData;
+    Cpa8U *pIvBuffer = NULL;
+    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->sessionCtx = sessionCtx;
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->pIv = pIvBuffer;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+
     int cur=0;
     while(dcRequestGen_g){ /* While the requestor thread is running */
         if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
@@ -414,7 +412,10 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                     NULL);         /* results structure */
                 cur= (cur + 1);
                 bufIdx = cur % numBufs_g;
-                printf("Submitting\n");
+                if(status != CPA_STATUS_SUCCESS){
+                    printf("Failed to perform operation: %d\n", status);
+                    exit(-1);
+                }
             }
             // printEncBWAndUpdateLastEncTimeStamp();
         }
@@ -423,13 +424,10 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
 
 static void enc_poller(CpaInstanceHandle cyInstHandle)
 {
-    CpaStatus status = CPA_STATUS_FAIL;
 
     while (dcRequestGen_g)
     {
-        // printf("Polling\n");
-        if((status = icp_sal_CyPollInstance(cyInstHandle, 0)) != CPA_STATUS_SUCCESS){
-            printf("Polling En:%d\n", status);
+        if(icp_sal_CyPollInstance(cyInstHandle, 0)){
         }
     }
 }
