@@ -247,16 +247,15 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
     if ((Cpa16U) (numDcResps_g + 1) < (Cpa16U)numDcResps_g){
         printeDCBWAndUpdateLastDCTimeStamp();
         testIter++;
-        test_complete = 1;
     }
 
     if(pCallbackTag != NULL){
         batch_complete = 1;
-        test_complete = 1;
     }
     numDcResps_g++;
     if(testIter > numSamples_g){
         dc_Poll_g = 0;
+        test_complete = 1;
     }
 
 }
@@ -347,7 +346,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     //     if (icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
 
             dc_Poll_g = 1;
-            // while(dc_Poll_g){
+            while(dc_Poll_g){
             //     batch_complete = 0;
                 while( cur < numBufs_g - 1){
                     status = cpaDcCompressData2(
@@ -369,8 +368,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                         &dcResults,         /* results structure */
                         (void *)1);
 
-                // cur = 0;
-            // }
+                cur = 0;
+            }
             // test_complete = 1;
             // testIter = 0;
             // printf("Caught up to responses\n");

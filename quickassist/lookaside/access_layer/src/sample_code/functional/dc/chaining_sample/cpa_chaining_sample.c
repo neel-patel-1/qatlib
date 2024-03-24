@@ -696,12 +696,8 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
         status = decompressAndVerify(srcBufferLists[i]->pBuffers->pData,
             dstBufferLists[i]->pBuffers->pData, NULL, fragmentSize);
         if(status != CPA_STATUS_SUCCESS){
-            PRINT_ERR("Decompression failed\n");
+            PRINT_ERR("DECOMP failed\n");
             return CPA_STATUS_FAIL;
-        }
-        else{
-            PRINT_DBG("Decompression Successful\n");
-
         }
     }
     test_complete = 0;
