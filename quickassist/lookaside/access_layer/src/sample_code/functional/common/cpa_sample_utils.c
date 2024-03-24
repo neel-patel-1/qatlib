@@ -237,7 +237,7 @@ void printeDCBWAndUpdateLastDCTimeStamp(void)
         if(us == 0){
             return;
         }
-        printf("DC-BW(MB/s): %ld\n", (numDcResps_g * bufSize_g) / (us));
+        printf("DC-BW(MB/s)-CB: %ld\n", (numDcResps_g * bufSize_g) / (us));
         clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     }
 }
@@ -287,7 +287,7 @@ static Cpa8U sampleCipherIv[] = {
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     if ((Cpa16U) (numEncResps_g) == ITER_THRESH){
-        // printEncBWAndUpdateLastEncTimeStamp();
+        printEncBWAndUpdateLastEncTimeStamp();
         // testIter++;
 
     }
@@ -436,12 +436,98 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     }
 }
 
+
 static void ogDcPoller(CpaInstanceHandle dcInstHandle)
 {
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    Cpa32U sessionCtxSize = 0;
+    CpaInstanceHandle cyInstHandle = NULL;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymStats64 symStats = {0};
+
+    sampleCyGetInstance(&cyInstHandle);
+
+    status = cpaCyStartInstance(cyInstHandle);
+    if (cyInstHandle == NULL)
+    {
+        return CPA_STATUS_FAIL;
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * If the instance is polled start the polling thread. Note that
+         * how the polling is done is implementation-dependent.
+         */
+
+
+        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+        sessionSetupData.cipherSetupData.cipherAlgorithm =
+            CPA_CY_SYM_CIPHER_AES_CBC;
+        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+            sizeof(sampleCipherKey);
+        sessionSetupData.cipherSetupData.cipherDirection =
+            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+        //</snippet>
+
+        /* Determine size of session context to allocate */
+
+        status = cpaCySymSessionCtxGetSize(
+            cyInstHandle, &sessionSetupData, &sessionCtxSize);
+
+
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Allocate session context */
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Initialize the session */
+
+        status = cpaCySymInitSession(
+            cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
+    }
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start Cy Session\n");
+        exit(-1);
+    }
+    sampleEncStartPolling(cyInstHandle);
+    CpaCySymOpData *pOpData;
+    Cpa8U *pIvBuffer = NULL;
+    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->sessionCtx = sessionCtx;
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->pIv = pIvBuffer;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+    Cpa16U cur=0;
     while (1)
     {
         if(icp_sal_DcPollInstance(dcInstHandle, 0)){
+            status = cpaCySymPerformOp(
+                        cyInstHandle,
+                        (void *)(1),
+                        pOpData,
+                        pSrcBufferList_g[0],     /* source buffer list */
+                        pDstBufferList_g[0],     /* destination buffer list */
+                        NULL);
         }
+
     }
 }
 
@@ -560,7 +646,6 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 &opData,            /* Operational data */
                 &dcResults,         /* results structure */
                 NULL);
-            printf("submitted %d\n", cur);
             retryCount++;
         if(status == CPA_STATUS_RETRY)
             goto retry;
