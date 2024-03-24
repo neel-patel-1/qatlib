@@ -295,6 +295,7 @@ static void encCallback(void *pCallbackTag, CpaStatus status)
     if(testIter > numSamples_g){
         dcRequestGen_g = 0; /* Test complete stop initial requestor */
     }
+    printf("Enc Callback\n");
 
 }
 static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
@@ -400,6 +401,7 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                         NULL,            /* Operational data */
                         NULL);         /* results structure */
                     cur=(cur + 1);
+                    bufIdx = cur % numBufs_g;
                 }
             }
             while( cur < numDcResps_g ){
@@ -411,6 +413,8 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                     NULL,            /* Operational data */
                     NULL);         /* results structure */
                 cur= (cur + 1);
+                bufIdx = cur % numBufs_g;
+                printf("Submitting\n");
             }
             // printEncBWAndUpdateLastEncTimeStamp();
         }
@@ -419,12 +423,13 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
 
 static void enc_poller(CpaInstanceHandle cyInstHandle)
 {
-
+    CpaStatus status = CPA_STATUS_FAIL;
 
     while (dcRequestGen_g)
     {
-        if(icp_sal_CyPollInstance(cyInstHandle, 0) == CPA_STATUS_SUCCESS){
-            printf("Polling Enc\n");
+        // printf("Polling\n");
+        if((status = icp_sal_CyPollInstance(cyInstHandle, 0)) != CPA_STATUS_SUCCESS){
+            printf("Polling En:%d\n", status);
         }
     }
 }
