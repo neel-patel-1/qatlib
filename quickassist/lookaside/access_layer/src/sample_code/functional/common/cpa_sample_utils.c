@@ -300,7 +300,6 @@ static void encCallback(void *pCallbackTag, CpaStatus status)
     if(testIter > numSamples_g){
         dcRequestGen_g = 0; /* Test complete stop initial requestor */
     }
-    printf("Enc Callback\n");
 
 }
 static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
@@ -393,23 +392,24 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
                 while (cur < UINT16_MAX){
                     status = cpaCySymPerformOp(
                         cyInstHandle,
-                        sessionCtx,
+                        NULL,
+                        pOpData,
                         pSrcBufferList_g[bufIdx],     /* source buffer list */
                         pDstBufferList_g[bufIdx],     /* destination buffer list */
-                        NULL,            /* Operational data */
-                        NULL);         /* results structure */
+                        NULL);
                     cur=(cur + 1);
                     bufIdx = cur % numBufs_g;
+
                 }
             }
             while( cur < numDcResps_g ){
                 status = cpaCySymPerformOp(
                     cyInstHandle,
-                    sessionCtx,
+                    NULL,
+                    pOpData,
                     pSrcBufferList_g[bufIdx],     /* source buffer list */
                     pDstBufferList_g[bufIdx],     /* destination buffer list */
-                    NULL,            /* Operational data */
-                    NULL);         /* results structure */
+                    NULL);
                 cur= (cur + 1);
                 bufIdx = cur % numBufs_g;
                 if(status != CPA_STATUS_SUCCESS){
