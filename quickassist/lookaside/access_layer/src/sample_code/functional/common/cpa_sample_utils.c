@@ -96,6 +96,7 @@ static sampleThread gPollingThreadDc;
 static volatile int gPollingDc = 0;
 
 volatile int batch_complete = 0;
+volatile int enc_poller_started = 0;
 
 volatile int dcRequestGen_g = 0;
 int testIter = 0;
@@ -257,17 +258,7 @@ void symCallback(void *pCallbackTag,
 
 }
 
-/*
- * This function polls a crypto instance.
- *
- */
 
-static void dcCallback(void *pCallbackTag, CpaStatus status)
-{
-
-    numDcResps_g++;
-    printf(" numDcResps_g:%d\n", numDcResps_g);
-}
 
 
 static Cpa8U sampleCipherKey[] = {
@@ -284,18 +275,37 @@ static Cpa8U sampleCipherIv[] = {
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     numEncResps_g++;
-    printf("numEncResps_g:%d\n", numEncResps_g);
+    // printf("numEncResps_g:%d\n", numEncResps_g);
     if(numEncResps_g >= numBufs_g){
         batch_complete = 1;
         // printf("bathc complete\n");
     }
 
 }
+CpaInstanceHandle cyInstHandle = NULL;
+CpaCySymOpData *pOpData;
+struct encChainArg{
+    Cpa16U bufIdx;
+};
+
+static void dcCallback(void *pCallbackTag, CpaStatus status)
+{
+    struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
+    Cpa16U bufIdx = arg->bufIdx;
+    printf("Submitting request to enc for pkt: %d\n", bufIdx);
+    status = cpaCySymPerformOp(
+            cyInstHandle,
+            (void *)arg,
+            pOpData,
+            pSrcBufferList_g[bufIdx],     /* source buffer list */
+            pDstBufferList_g[bufIdx],     /* destination buffer list */
+            NULL);
+}
 static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     CpaStatus status = CPA_STATUS_FAIL;
     CpaCySymSessionCtx sessionCtx = NULL;
     Cpa32U sessionCtxSize = 0;
-    CpaInstanceHandle cyInstHandle = NULL;
+
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaCySymStats64 symStats = {0};
 
@@ -361,8 +371,9 @@ static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
     }
     else{
         sampleEncStartPolling(cyInstHandle);
+
     }
-    CpaCySymOpData *pOpData;
+
     Cpa8U *pIvBuffer = NULL;
     status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
     status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
@@ -508,20 +519,7 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
     Cpa16U cur=0;
     while (1)
     {
-        if(icp_sal_DcPollInstance(dcInstHandle, 0)){
-            while(compFwdSubmitted < numDcResps_g){
-                status = cpaCySymPerformOp(
-                            cyInstHandle,
-                            (void *)(1),
-                            pOpData,
-                            pSrcBufferList_g[compFwdSubmitted],     /* source buffer list */
-                            pDstBufferList_g[compFwdSubmitted],     /* destination buffer list */
-                            NULL);
-                compFwdSubmitted++;
-                printf("compFwdSubmitted:%d\n", compFwdSubmitted);
-            }
-        }
-
+        icp_sal_DcPollInstance(dcInstHandle, 0);
     }
 }
 
@@ -616,11 +614,15 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     numSamples_g=1;
     struct timespec offTSSt[numSamples_g], offTSEt[numSamples_g];
+    struct encChainArg *arg=NULL;
+
+    while(!enc_poller_started ){}
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         batch_complete = 0;
         clock_gettime(CLOCK_MONOTONIC, &offTSSt[nTsts]);
         for(int cur=0; cur < numBufs_g; cur++){
-
+            status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
+            arg->bufIdx = cur;
             retry:
                 status = cpaDcCompressData2(
                     dcInstHandle,
@@ -629,7 +631,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                     pDstBufferList_g[cur],     /* destination buffer list */
                     &opData,            /* Operational data */
                     &dcResults,         /* results structure */
-                    NULL);
+                    (void *)arg);       /* callback tag */
             if(status == CPA_STATUS_RETRY)
                 goto retry;
 
@@ -790,6 +792,7 @@ void sampleEncStartPolling(CpaInstanceHandle cyInstHandle)
         printf("Affinitizing enc thread: %ld\n", gPollingThread);
         printf("to core: %d\n", 1);
         utilCodeThreadBind(&gPollingThread, 1);
+        enc_poller_started = 1;
     }
 }
 

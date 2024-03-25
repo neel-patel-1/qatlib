@@ -4,38 +4,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -45,7 +45,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -57,8 +57,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  *
  ***************************************************************************/
@@ -79,7 +79,7 @@
 #if CY_API_VERSION_AT_LEAST(2, 3)
 
 extern int gDebugParam;
-CpaInstanceHandle cyInstHandle; /* Instance handle used in point multiply */
+CpaInstanceHandle eddsaCyInstHandle; /* Instance handle used in point multiply */
 
 /* Order of Edwards 25519 curve */
 static Cpa8U order[32] = {0xED, 0xD3, 0xF5, 0x5C, 0x1A, 0x63, 0x12, 0x58,
@@ -271,7 +271,7 @@ static CpaStatus pointMuliplication(Cpa8U *pPointX,
     {
         PRINT_DBG("cpaCyEcMontEdwdsPointMultiply\n");
         status = cpaCyEcMontEdwdsPointMultiply(
-            cyInstHandle, NULL, NULL, pOpData, &multiplyStatus, pGenX, pGenY);
+            eddsaCyInstHandle, NULL, NULL, pOpData, &multiplyStatus, pGenX, pGenY);
     }
 
     if (CPA_STATUS_SUCCESS != status)
@@ -707,17 +707,17 @@ CpaStatus ecMontEdwdsDsaSample(void)
     CpaStatus status = CPA_STATUS_FAIL;
 
     /* Get instance handle */
-    sampleCyGetInstance(&cyInstHandle);
-    if (cyInstHandle == NULL)
+    sampleCyGetInstance(&eddsaCyInstHandle);
+    if (eddsaCyInstHandle == NULL)
         return CPA_STATUS_FAIL;
 
     /* Start Cryptographic component */
-    status = cpaCyStartInstance(cyInstHandle);
+    status = cpaCyStartInstance(eddsaCyInstHandle);
 
     /* Set address translation */
     if (CPA_STATUS_SUCCESS == status)
     {
-        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+        status = cpaCySetAddressTranslation(eddsaCyInstHandle, sampleVirtToPhys);
         if (CPA_STATUS_SUCCESS != status)
         {
             PRINT_ERR("Error set address translation\n");
@@ -726,7 +726,7 @@ CpaStatus ecMontEdwdsDsaSample(void)
     }
 
     /* Start polling thread */
-    sampleCyStartPolling(cyInstHandle);
+    sampleCyStartPolling(eddsaCyInstHandle);
 
     /* Perform sign and verify */
     status = ecMontEdwdsDsaPerform();
@@ -735,7 +735,7 @@ CpaStatus ecMontEdwdsDsaSample(void)
     sampleCyStopPolling();
 
     /* Stop Cryptographic component */
-    cpaCyStopInstance(cyInstHandle);
+    cpaCyStopInstance(eddsaCyInstHandle);
 
     return status;
 }
