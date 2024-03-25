@@ -277,14 +277,10 @@ struct encChainArg{
 };
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    // printf("numEncResps_g:%d\n", numEncResps_g);
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     if(arg->bufIdx == (numBufs_g-1)){
         batch_complete = 1;
-    } else {
-        printf("Received Enc Response for pkt: %d\n", arg->bufIdx);
     }
-    printf("numEncResps_g:%d\n", numEncResps_g);
 
 }
 CpaInstanceHandle cyInstHandle = NULL;
@@ -296,11 +292,11 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U bufIdx = arg->bufIdx;
-    printf("Submitting request to enc for pkt: %d\n", bufIdx);
-    if(cyInstHandle == NULL){
-        printf("Cy Instance Handle is NULL\n");
-        exit(-1);
-    }
+    // printf("Submitting request to enc for pkt: %d\n", bufIdx);
+    // if(cyInstHandle == NULL){
+    //     printf("Cy Instance Handle is NULL\n");
+    //     exit(-1);
+    // }
     status = cpaCySymPerformOp(
             cyInstHandle,
             (void *)arg,
@@ -414,9 +410,7 @@ static void enc_poller(CpaInstanceHandle cyInstHandle)
     CpaStatus status = CPA_STATUS_FAIL;
     while (1)
     {
-        if((status = icp_sal_CyPollInstance(cyInstHandle, 0)) == CPA_STATUS_SUCCESS){
-            printf("enc response\n");
-        }
+        status = icp_sal_CyPollInstance(cyInstHandle, 0);
     }
 }
 
@@ -499,14 +493,13 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
-    numSamples_g=1;
-    struct timespec offTSSt[numSamples_g], offTSEt[numSamples_g];
+    struct timespec offTSSt, offTSEt;
     struct encChainArg *arg=NULL;
 
     while(!enc_poller_started ){}
+    clock_gettime(CLOCK_MONOTONIC, &offTSSt);
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         batch_complete = 0;
-        clock_gettime(CLOCK_MONOTONIC, &offTSSt[nTsts]);
         for(int cur=0; cur < numBufs_g; cur++){
             status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
             arg->bufIdx = cur;
@@ -528,12 +521,23 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             }
         }
         while(!batch_complete){}
-        clock_gettime(CLOCK_MONOTONIC, &offTSEt[nTsts]);
-        Cpa64U nanos = (offTSEt[nTsts].tv_sec * 1000000000 + offTSEt[nTsts].tv_nsec) -
-            (offTSSt[nTsts].tv_sec * 1000000000 + offTSSt[nTsts].tv_nsec);
 
-        printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
+
     }
+    clock_gettime(CLOCK_MONOTONIC, &offTSEt);
+    Cpa64U nanos = (offTSEt.tv_sec * 1000000000 + offTSEt.tv_nsec) -
+        (offTSSt.tv_sec * 1000000000 + offTSSt.tv_nsec);
+
+    printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
+    Cpa64U us = nanos/1000;
+    if(us == 0){
+        printf("insufficient runtime\n");
+        return;
+    } else {
+        printf("BW(MB/s): %ld\n", (numSamples_g * bufSize_g * numBufs_g) / (us));
+
+    }
+
     started_cy_inst = 0;
     test_complete = 1;
 
