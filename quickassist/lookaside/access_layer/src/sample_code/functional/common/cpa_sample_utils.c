@@ -292,23 +292,26 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U bufIdx = arg->bufIdx;
+    if(arg->bufIdx == (numBufs_g-1)){
+        batch_complete = 1;
+    }
     // printf("Submitting request to enc for pkt: %d\n", bufIdx);
     // if(cyInstHandle == NULL){
     //     printf("Cy Instance Handle is NULL\n");
     //     exit(-1);
     // }
-    status = cpaCySymPerformOp(
-            cyInstHandle,
-            (void *)arg,
-            pOpData,
-            pSrcBufferList_g[bufIdx],     /* source buffer list */
-            pDstBufferList_g[bufIdx],     /* destination buffer list */
-            NULL);
-    if(status != CPA_STATUS_SUCCESS){
-        printf("Failed to submit request to enc for pkt: %d\n", bufIdx);
-        printf("Status: %d\n", status);
-        exit(-1);
-    }
+    // status = cpaCySymPerformOp(
+    //         cyInstHandle,
+    //         (void *)arg,
+    //         pOpData,
+    //         pSrcBufferList_g[bufIdx],     /* source buffer list */
+    //         pDstBufferList_g[bufIdx],     /* destination buffer list */
+    //         NULL);
+    // if(status != CPA_STATUS_SUCCESS){
+    //     printf("Failed to submit request to enc for pkt: %d\n", bufIdx);
+    //     printf("Status: %d\n", status);
+    //     exit(-1);
+    // }
 }
 
 volatile Cpa16U compFwdSubmitted = 0;
