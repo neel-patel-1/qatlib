@@ -497,7 +497,6 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     dcCompApiEndTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
     encApiEndTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
 
-    numSamples_g = 1;
     gPollingCy = 1;
     CpaDcRqResults dcResults;
     CpaDcOpData opData = {};
