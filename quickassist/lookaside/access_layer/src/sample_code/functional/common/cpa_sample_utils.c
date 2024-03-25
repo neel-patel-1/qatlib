@@ -417,80 +417,92 @@ static void enc_poller(CpaInstanceHandle cyInstHandle)
 #ifdef DO_CRYPTO
 static void sal_polling(CpaInstanceHandle cyInstHandle)
 {
-    CpaInstanceHandle dcInstHandle = NULL;
-    CpaDcSessionHandle sessionHdl = NULL;
-    CpaDcSessionSetupData sd = {0};
-    CpaDcStats dcStats = {0};
-    CpaDcInstanceCapabilities cap = {0};
-    CpaBufferList **bufferInterArray = NULL;
-    Cpa32U buffMetaSize = 0;
-    Cpa16U numInterBuffLists = 0;
-    Cpa16U bufferNum = 0;
-    Cpa32U sess_size = 0;
-    Cpa32U ctx_size = 0;
-    CpaStatus status;
-    sampleDcGetInstance(&dcInstHandle);
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    Cpa32U sessionCtxSize = 0;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymStats64 symStats = {0};
 
-
-    status = cpaDcQueryCapabilities(dcInstHandle, &cap);
-
-    status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
-    // printf("Buffer Meta Size: %d\n", buffMetaSize);
-    status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
-                                                    &numInterBuffLists);
-
-    if (numInterBuffLists > 0){
-        status = PHYS_CONTIG_ALLOC(
-                &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
-        for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
-        {
-            status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
-                                            sizeof(CpaBufferList));
-            status = PHYS_CONTIG_ALLOC(
-                        &bufferInterArray[bufferNum]->pPrivateMetaData,
-                        buffMetaSize);
-            status =
-                        PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
-                                        sizeof(CpaFlatBuffer));
-            status = PHYS_CONTIG_ALLOC(
-                        &bufferInterArray[bufferNum]->pBuffers->pData,
-                        2 * fragmentSize_g);
-            bufferInterArray[bufferNum]->numBuffers = 1;
-                    bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
-                        2 * fragmentSize_g;
-        }
+    sampleCyGetInstance(&cyInstHandle);
+    printf("getting cy instance\n");
+    if(cyInstHandle == NULL){
+        printf("Failed to get Cy Instance\n");
+        exit(-1);
     }
-    status = cpaDcStartInstance(
-        dcInstHandle, numInterBuffLists, bufferInterArray);
-    sd.compLevel = CPA_DC_L1;
-    sd.compType = CPA_DC_DEFLATE;
-    sd.huffType = CPA_DC_HT_STATIC;
-    sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
-    sd.sessDirection = CPA_DC_DIR_COMPRESS;
-    sd.sessState = CPA_DC_STATELESS;
-    sd.checksum = CPA_DC_CRC32;
+
+    status = cpaCyStartInstance(cyInstHandle);
+    if (cyInstHandle == NULL)
+    {
+        printf("Failed to get Cy Instance\n");
+        return CPA_STATUS_FAIL;
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * If the instance is polled start the polling thread. Note that
+         * how the polling is done is implementation-dependent.
+         */
+
+
+        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+        sessionSetupData.cipherSetupData.cipherAlgorithm =
+            CPA_CY_SYM_CIPHER_AES_CBC;
+        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+            sizeof(sampleCipherKey);
+        sessionSetupData.cipherSetupData.cipherDirection =
+            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+        //</snippet>
+
+        /* Determine size of session context to allocate */
+
+        status = cpaCySymSessionCtxGetSize(
+            cyInstHandle, &sessionSetupData, &sessionCtxSize);
+
+
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Allocate session context */
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Initialize the session */
+
+        status = cpaCySymInitSession(
+            cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
+    } else{
+        printf("Failed to initialize Cy Session\n");
+        exit(-1);
+    }
     if(status != CPA_STATUS_SUCCESS){
-        printf("Failed to start DC Instance\n");
+        printf("Failed to start Cy Session\n");
+        exit(-1);
     }
+    started_cy_inst=1;
+    sampleEncStartPolling(cyInstHandle);
+    Cpa8U *pIvBuffer = NULL;
+    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->sessionCtx = sessionCtx;
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->pIv = pIvBuffer;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
 
-    status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
-    status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
-
-    status = cpaDcInitSession(
-        dcInstHandle,
-        sessionHdl, /* session memory */
-        &sd,        /* session setup data */
-        NULL, /* pContexBuffer not required for stateless operations */
-        dcCallback); /* callback function */
-    if(status != CPA_STATUS_SUCCESS){
-        printf("Failed to start DC Session: %d\n"  , status);
-    }
-    sampleDcStartPolling(dcInstHandle);
-
-    gPollingCy = 1;
-    CpaDcRqResults dcResults;
-    CpaDcOpData opData = {};
-    INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+    Cpa16U cur=0;
     clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     struct timespec offTSSt, offTSEt;
@@ -504,14 +516,22 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
             arg->bufIdx = cur;
             retry:
-                status = cpaDcCompressData2(
-                    dcInstHandle,
-                    sessionHdl,
-                    pSrcBufferList_g[cur],     /* source buffer list */
-                    pDstBufferList_g[cur],     /* destination buffer list */
-                    &opData,            /* Operational data */
-                    &dcResults,         /* results structure */
-                    (void *)arg);       /* callback tag */
+                // status = cpaDcCompressData2(
+                //     dcInstHandle,
+                //     sessionHdl,
+                //     pSrcBufferList_g[cur],     /* source buffer list */
+                //     pDstBufferList_g[cur],     /* destination buffer list */
+                //     &opData,            /* Operational data */
+                //     &dcResults,         /* results structure */
+                //     (void *)arg);       /* callback tag */
+
+            status = cpaCySymPerformOp(
+                cyInstHandle,
+                (void *)arg,
+                pOpData,
+                pSrcBufferList_g[cur],     /* source buffer list */
+                pDstBufferList_g[cur],     /* destination buffer list */
+                NULL);
             if(status == CPA_STATUS_RETRY)
                 goto retry;
 
