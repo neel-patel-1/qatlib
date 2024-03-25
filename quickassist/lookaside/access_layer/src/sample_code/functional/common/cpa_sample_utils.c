@@ -505,6 +505,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     struct timespec offTSSt, offTSEt;
     struct encChainArg *arg=NULL;
+    numSamples_g = 1;
     printf("Num Samples: %d\n", numSamples_g);
     while(!enc_poller_started ){}
     clock_gettime(CLOCK_MONOTONIC, &offTSSt);
@@ -538,9 +539,10 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     }
     for(int i=0; i<numBufs_g; i++){
         printf(
-            "IDX: %d DCCompApiCallStart Time: %ld DCCompApiCallReturn Time: %ld ",
-            "DCRespRcv Time: %ld EncApiCallStart Time: %ld EncApiCallReturn Time: %ld ",
+            "IDX: %d DCCompApiCallStart Time: %ld DCCompApiCallReturn Time: %ld "
+            "DCRespRcv Time: %ld EncApiCallStart Time: %ld EncApiCallReturn Time: %ld "
             "EncRespRcv Time: %ld\n",
+        i,
         (dcCompApiStartTimes[i].tv_sec * 1000000000 + dcCompApiStartTimes[i].tv_nsec),
         (dcCompApiEndTimes[i].tv_sec * 1000000000 + dcCompApiEndTimes[i].tv_nsec),
         (dcRespRcvTimes[i].tv_sec * 1000000000 + dcRespRcvTimes[i].tv_nsec),
