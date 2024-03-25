@@ -275,9 +275,12 @@ static Cpa8U sampleCipherIv[] = {
 struct encChainArg{
     Cpa16U bufIdx;
 };
+struct timespec *encRespRcvTimes;
+struct timespec *dcRespRcvTimes;
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
+    clock_gettime(CLOCK_MONOTONIC, &encRespRcvTimes[arg->bufIdx]);
     if(arg->bufIdx == (numBufs_g-1)){
         batch_complete = 1;
     }
@@ -292,11 +295,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U bufIdx = arg->bufIdx;
-    // printf("Submitting request to enc for pkt: %d\n", bufIdx);
-    // if(cyInstHandle == NULL){
-    //     printf("Cy Instance Handle is NULL\n");
-    //     exit(-1);
-    // }
+    clock_gettime(CLOCK_MONOTONIC, &dcRespRcvTimes[arg->bufIdx]);
     status = cpaCySymPerformOp(
             cyInstHandle,
             (void *)arg,
@@ -487,6 +486,9 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     }
     sampleDcStartPolling(dcInstHandle);
 
+    encRespRcvTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
+    dcRespRcvTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
+    numSamples_g = 1;
     gPollingCy = 1;
     CpaDcRqResults dcResults;
     CpaDcOpData opData = {};
@@ -523,6 +525,11 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         while(!batch_complete){}
 
 
+    }
+    for(int i=0; i<numBufs_g; i++){
+        printf("IDX:%d DCRespRcv Time: %ld, EncRespRcv Time: %ld\n", i,
+        (dcRespRcvTimes[i].tv_sec * 1000000000 + dcRespRcvTimes[i].tv_nsec),
+            (encRespRcvTimes[i].tv_sec * 1000000000 + encRespRcvTimes[i].tv_nsec));
     }
     clock_gettime(CLOCK_MONOTONIC, &offTSEt);
     Cpa64U nanos = (offTSEt.tv_sec * 1000000000 + offTSEt.tv_nsec) -
