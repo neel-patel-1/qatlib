@@ -277,6 +277,10 @@ struct encChainArg{
 };
 struct timespec *encRespRcvTimes;
 struct timespec *dcRespRcvTimes;
+struct timespec *dcCompApiStartTimes;
+struct timespec *dcCompApiEndTimes;
+struct timespec *encApiEndTimes;
+
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
@@ -303,6 +307,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
             pSrcBufferList_g[bufIdx],     /* source buffer list */
             pDstBufferList_g[bufIdx],     /* destination buffer list */
             NULL);
+    clock_gettime(CLOCK_MONOTONIC, &encApiEndTimes[arg->bufIdx]);
     if(status != CPA_STATUS_SUCCESS){
         printf("Failed to submit request to enc for pkt: %d\n", bufIdx);
         printf("Status: %d\n", status);
@@ -488,6 +493,10 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
 
     encRespRcvTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
     dcRespRcvTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
+    dcCompApiStartTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
+    dcCompApiEndTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
+    encApiEndTimes = (struct timespec *)malloc(sizeof(struct timespec) * numBufs_g);
+
     numSamples_g = 1;
     gPollingCy = 1;
     CpaDcRqResults dcResults;
@@ -505,6 +514,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         for(int cur=0; cur < numBufs_g; cur++){
             status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
             arg->bufIdx = cur;
+            clock_gettime(CLOCK_MONOTONIC, &dcCompApiStartTimes[cur]);
             retry:
                 status = cpaDcCompressData2(
                     dcInstHandle,
@@ -521,15 +531,23 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 printf("Failed to compress data:%d\n", status);
                 exit(-1);
             }
+            clock_gettime(CLOCK_MONOTONIC, &dcCompApiEndTimes[cur]);
         }
         while(!batch_complete){}
 
 
     }
     for(int i=0; i<numBufs_g; i++){
-        printf("IDX:%d DCRespRcv Time: %ld, EncRespRcv Time: %ld\n", i,
+        printf(
+            "IDX: %d DCCompApiCallStart Time: %ld DCCompApiCallReturn Time: %ld ",
+            "DCRespRcv Time: %ld EncApiCallStart Time: %ld EncApiCallReturn Time: %ld ",
+            "EncRespRcv Time: %ld\n",
+        (dcCompApiStartTimes[i].tv_sec * 1000000000 + dcCompApiStartTimes[i].tv_nsec),
+        (dcCompApiEndTimes[i].tv_sec * 1000000000 + dcCompApiEndTimes[i].tv_nsec),
         (dcRespRcvTimes[i].tv_sec * 1000000000 + dcRespRcvTimes[i].tv_nsec),
-            (encRespRcvTimes[i].tv_sec * 1000000000 + encRespRcvTimes[i].tv_nsec));
+        (dcRespRcvTimes[i].tv_sec * 1000000000 + dcRespRcvTimes[i].tv_nsec),
+        (encApiEndTimes[i].tv_sec * 1000000000 + encApiEndTimes[i].tv_nsec),
+        (encRespRcvTimes[i].tv_sec * 1000000000 + encRespRcvTimes[i].tv_nsec));
     }
     clock_gettime(CLOCK_MONOTONIC, &offTSEt);
     Cpa64U nanos = (offTSEt.tv_sec * 1000000000 + offTSEt.tv_nsec) -
