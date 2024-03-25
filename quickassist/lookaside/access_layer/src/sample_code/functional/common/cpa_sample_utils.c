@@ -272,27 +272,36 @@ static Cpa8U sampleCipherIv[] = {
     0xAA, 0x8D, 0x37, 0x27};
 
 #define ITER_THRESH UINT16_MAX
+struct encChainArg{
+    Cpa16U bufIdx;
+};
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    numEncResps_g++;
     // printf("numEncResps_g:%d\n", numEncResps_g);
-    if(numEncResps_g >= numBufs_g){
+    struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
+    if(arg->bufIdx == (numBufs_g-1)){
         batch_complete = 1;
-        // printf("bathc complete\n");
+    } else {
+        printf("Received Enc Response for pkt: %d\n", arg->bufIdx);
     }
+    printf("numEncResps_g:%d\n", numEncResps_g);
 
 }
 CpaInstanceHandle cyInstHandle = NULL;
 CpaCySymOpData *pOpData;
-struct encChainArg{
-    Cpa16U bufIdx;
-};
+volatile int started_cy_inst = 0;
+
 
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U bufIdx = arg->bufIdx;
     printf("Submitting request to enc for pkt: %d\n", bufIdx);
+    while(!started_cy_inst){}
+    if(cyInstHandle == NULL){
+        printf("Cy Instance Handle is NULL\n");
+        exit(-1);
+    }
     status = cpaCySymPerformOp(
             cyInstHandle,
             (void *)arg,
@@ -300,140 +309,10 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
             pSrcBufferList_g[bufIdx],     /* source buffer list */
             pDstBufferList_g[bufIdx],     /* destination buffer list */
             NULL);
-}
-static void comp_enc_fwder(CpaInstanceHandle dcInstHandle){
-    CpaStatus status = CPA_STATUS_FAIL;
-    CpaCySymSessionCtx sessionCtx = NULL;
-    Cpa32U sessionCtxSize = 0;
-
-    CpaCySymSessionSetupData sessionSetupData = {0};
-    CpaCySymStats64 symStats = {0};
-
-    sampleCyGetInstance(&cyInstHandle);
-    if (cyInstHandle == NULL)
-    {
-        return CPA_STATUS_FAIL;
-    }
-
-    /* Start Cryptographic component */
-
-    status = cpaCyStartInstance(cyInstHandle);
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /*
-         * Set the address translation function for the instance
-         */
-        status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /*
-         * If the instance is polled start the polling thread. Note that
-         * how the polling is done is implementation-dependent.
-         */
-
-
-        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-        sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
-        sessionSetupData.cipherSetupData.cipherAlgorithm =
-            CPA_CY_SYM_CIPHER_AES_CBC;
-        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
-        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
-            sizeof(sampleCipherKey);
-        sessionSetupData.cipherSetupData.cipherDirection =
-            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
-        //</snippet>
-
-        /* Determine size of session context to allocate */
-
-        status = cpaCySymSessionCtxGetSize(
-            cyInstHandle, &sessionSetupData, &sessionCtxSize);
-
-
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Allocate session context */
-        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Initialize the session */
-
-        status = cpaCySymInitSession(
-            cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
-    }
     if(status != CPA_STATUS_SUCCESS){
-        printf("Failed to start Cy Session\n");
+        printf("Failed to submit request to enc for pkt: %d\n", bufIdx);
+        printf("Status: %d\n", status);
         exit(-1);
-    }
-    else{
-        sampleEncStartPolling(cyInstHandle);
-
-    }
-
-    Cpa8U *pIvBuffer = NULL;
-    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
-    pOpData->sessionCtx = sessionCtx;
-    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-    pOpData->pIv = pIvBuffer;
-    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-    pOpData->cryptoStartSrcOffsetInBytes = 0;
-    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
-
-    Cpa16U cur=0;
-    while(dcRequestGen_g){ /* While the requestor thread is running */
-        if (icp_sal_DcPollInstance(dcInstHandle, 0) == CPA_STATUS_SUCCESS){
-            int bufIdx = cur % numBufs_g;
-            if(cur > numDcResps_g){ /*Can this happen if requestor waits for batch?*/
-                while (cur <= UINT16_MAX){
-                    if(bufIdx == numBufs_g - 1){
-                        status = cpaCySymPerformOp(
-                            cyInstHandle,
-                            (void *)(1),
-                            pOpData,
-                            pSrcBufferList_g[bufIdx],     /* source buffer list */
-                            pDstBufferList_g[bufIdx],     /* destination buffer list */
-                            NULL);
-                    } else {
-                        status = cpaCySymPerformOp(
-                            cyInstHandle,
-                            (NULL),
-                            pOpData,
-                            pSrcBufferList_g[bufIdx],     /* source buffer list */
-                            pDstBufferList_g[bufIdx],     /* destination buffer list */
-                            NULL);
-                    }
-                    cur=(cur + 1);
-                    bufIdx = cur % numBufs_g;
-                }
-            }
-            while( cur < numDcResps_g ){
-                if(bufIdx == numBufs_g - 1){
-                    status = cpaCySymPerformOp(
-                        cyInstHandle,
-                        (void *)(1),
-                        pOpData,
-                        pSrcBufferList_g[bufIdx],     /* source buffer list */
-                        pDstBufferList_g[bufIdx],     /* destination buffer list */
-                        NULL);
-                } else {
-                    status = cpaCySymPerformOp(
-                        cyInstHandle,
-                        NULL,
-                        pOpData,
-                        pSrcBufferList_g[bufIdx],     /* source buffer list */
-                        pDstBufferList_g[bufIdx],     /* destination buffer list */
-                        NULL);
-                }
-                cur= (cur + 1);
-                bufIdx = cur % numBufs_g;
-            }
-
-        }
     }
 }
 
@@ -443,15 +322,20 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
     CpaStatus status = CPA_STATUS_FAIL;
     CpaCySymSessionCtx sessionCtx = NULL;
     Cpa32U sessionCtxSize = 0;
-    CpaInstanceHandle cyInstHandle = NULL;
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaCySymStats64 symStats = {0};
 
     sampleCyGetInstance(&cyInstHandle);
+    printf("getting cy instance\n");
+    if(cyInstHandle == NULL){
+        printf("Failed to get Cy Instance\n");
+        exit(-1);
+    }
 
     status = cpaCyStartInstance(cyInstHandle);
     if (cyInstHandle == NULL)
     {
+        printf("Failed to get Cy Instance\n");
         return CPA_STATUS_FAIL;
     }
 
@@ -500,13 +384,16 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
 
         status = cpaCySymInitSession(
             cyInstHandle, encCallback, &sessionSetupData, sessionCtx);
+    } else{
+        printf("Failed to initialize Cy Session\n");
+        exit(-1);
     }
     if(status != CPA_STATUS_SUCCESS){
         printf("Failed to start Cy Session\n");
         exit(-1);
     }
+    started_cy_inst=1;
     sampleEncStartPolling(cyInstHandle);
-    CpaCySymOpData *pOpData;
     Cpa8U *pIvBuffer = NULL;
     status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
     status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
@@ -525,10 +412,11 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
 
 static void enc_poller(CpaInstanceHandle cyInstHandle)
 {
-
+    CpaStatus status = CPA_STATUS_FAIL;
     while (1)
     {
-        if(icp_sal_CyPollInstance(cyInstHandle, 0)){
+        if((status = icp_sal_CyPollInstance(cyInstHandle, 0)) == CPA_STATUS_SUCCESS){
+            printf("enc response\n");
         }
     }
 }
@@ -777,11 +665,15 @@ void sampleDcStartPolling(CpaInstanceHandle dcInstHandle)
         utilCodeThreadBind(&gPollingThreadDc, 2);
     }
 }
-
 void sampleEncStartPolling(CpaInstanceHandle cyInstHandle)
 {
     CpaInstanceInfo2 info2 = {0};
     CpaStatus status = CPA_STATUS_SUCCESS;
+
+    while (!started_cy_inst)
+    {
+        OS_SLEEP(1);
+    }
 
     status = cpaCyInstanceGetInfo2(cyInstHandle, &info2);
     if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
