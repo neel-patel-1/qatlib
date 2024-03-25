@@ -297,7 +297,6 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U bufIdx = arg->bufIdx;
     printf("Submitting request to enc for pkt: %d\n", bufIdx);
-    while(!started_cy_inst){}
     if(cyInstHandle == NULL){
         printf("Cy Instance Handle is NULL\n");
         exit(-1);
@@ -532,11 +531,10 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         clock_gettime(CLOCK_MONOTONIC, &offTSEt[nTsts]);
         Cpa64U nanos = (offTSEt[nTsts].tv_sec * 1000000000 + offTSEt[nTsts].tv_nsec) -
             (offTSSt[nTsts].tv_sec * 1000000000 + offTSSt[nTsts].tv_nsec);
-        compFwdSubmitted = 0;
-        numDcResps_g = 0;
-        numEncResps_g = 0;
+
         printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
     }
+    started_cy_inst = 0;
     test_complete = 1;
 
     // }
