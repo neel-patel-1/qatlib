@@ -495,7 +495,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
     struct timespec offTSSt, offTSEt;
     struct encChainArg *arg=NULL;
-
+    printf("Num Samples: %d\n", numSamples_g);
     while(!enc_poller_started ){}
     clock_gettime(CLOCK_MONOTONIC, &offTSSt);
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
