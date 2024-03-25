@@ -126,10 +126,10 @@ int main(int argc, const char **argv)
     if(rpsTest){
         printf("256KB Fragmentation BW\n");
         printf("FragmentSize,NumFragments\n");
-        int pSize = 256 * 1024;
+        int pSize = 1024 * 1024;
         for(int i=1024; i<=pSize; i*=2){
             printf("%d %d\n", i, pSize / i);
-            requestGen(i,pSize / i, 100);
+            requestGen(i,pSize / i, 7000);
         }
     } else{
         if( useSw )
