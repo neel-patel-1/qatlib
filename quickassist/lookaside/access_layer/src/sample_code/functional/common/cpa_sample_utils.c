@@ -275,10 +275,11 @@ static Cpa8U sampleCipherIv[] = {
 struct encChainArg{
     Cpa16U bufIdx;
 };
-struct timespec tsSt, tsEnd;
+struct timespec tsSt, tsEnd, tsIdxs[1000];
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    clock_gettime(CLOCK_MONOTONIC, &tsEnd);
+    Cpa16U tsIdx = ((struct encChainArg *)pCallbackTag)->bufIdx;
+    clock_gettime(CLOCK_MONOTONIC, &tsIdxs[tsIdx]);
 
 }
 CpaInstanceHandle cyInstHandle = NULL;
