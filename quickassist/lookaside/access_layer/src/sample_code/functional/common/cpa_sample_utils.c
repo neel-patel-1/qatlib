@@ -280,6 +280,7 @@ struct timespec tsSt, tsEnd, *tsIdxs, *tsStIdxs;
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     Cpa16U tsIdx = ((struct encChainArg *)pCallbackTag)->bufIdx;
+    // printf("Completed request for pkt: %d\n", tsIdx);
     clock_gettime(CLOCK_MONOTONIC, &tsIdxs[tsIdx]);
     if(tsIdx == numBuffers_encPolling-1){
         batch_complete = 1;
@@ -520,8 +521,8 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         for(int cur=0; cur < numBuffers; cur++){
             status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
             arg->bufIdx = cur;
-            retry:
             clock_gettime(CLOCK_MONOTONIC, &tsStIdxs[cur]);
+            retry:
             status = cpaCySymPerformOp(
                 cyInstHandle,
                 (void *)arg,
@@ -529,16 +530,24 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 pSrcBufferList_g[cur],     /* source buffer list */
                 pDstBufferList_g[cur],     /* destination buffer list */
                 NULL);
-            clock_gettime(CLOCK_MONOTONIC, &apiEnd[cur]);
             if(status == CPA_STATUS_RETRY)
                 goto retry;
+            clock_gettime(CLOCK_MONOTONIC, &apiEnd[cur]);
+
 
         }
         while(!batch_complete){}
         for(int i=0; i<numBufs_g; i++){
             Cpa64U nanos = (tsIdxs[i].tv_sec * 1000000000 + tsIdxs[i].tv_nsec) -
                 (tsStIdxs[i].tv_sec * 1000000000 + tsStIdxs[i].tv_nsec);
-            sumNanos += nanos;
+            // printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
+            if(nanos < 0){
+                printf("Negative time\n");
+                continue;
+            } else {
+                sumNanos += nanos;
+            }
+
             Cpa64U apiNanos = (apiEnd[i].tv_sec * 1000000000 + apiEnd[i].tv_nsec) -
                 (tsStIdxs[i].tv_sec * 1000000000 + tsStIdxs[i].tv_nsec);
             apiTotalNanos += apiNanos;
@@ -548,7 +557,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     }
     printf("Avg Async DC-Enc-E2E-Offload Time on %d buffers: %ld\n", numBufs_g, sumNanos/numBufs_g/numSamples_g);
     // clock_gettime(CLOCK_MONOTONIC, &offTSEt);
-    printf("Avg Serial Enc-API Call Time on %d buffers: %ld\n", numBufs_g, apiTotalNanos/numBufs_g/numSamples_g);
+    printf("Avg Async Enc-API Call Time on %d buffers: %ld\n", numBufs_g, apiTotalNanos/numBufs_g/numSamples_g);
 
 
     // printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
