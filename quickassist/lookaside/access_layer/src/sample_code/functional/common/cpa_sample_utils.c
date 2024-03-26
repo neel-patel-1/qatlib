@@ -518,6 +518,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     status = PHYS_CONTIG_ALLOC(&tsStIdxs, 1001 * sizeof(struct timespec));
     uint64_t sumNanos = 0, apiTotalNanos=0;
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
+        batch_complete = 0;
         for(int cur=0; cur < numBuffers; cur++){
             status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
             arg->bufIdx = cur;
