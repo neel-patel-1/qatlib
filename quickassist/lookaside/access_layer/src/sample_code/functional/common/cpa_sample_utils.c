@@ -503,11 +503,11 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa16U cur=0;
     // clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     // clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
-    struct timespec offTSSt, offTSEt;
+    struct timespec offTSSt, offTSEt, apiEnd;
     struct encChainArg *arg=NULL;
     printf("Num Samples: %d\n", numSamples_g);
     // while(!enc_poller_started ){}
-    uint64_t sumNanos = 0;
+    uint64_t sumNanos = 0, apiTotalNanos=0;
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         // batch_complete = 0;
         for(int cur=0; cur < numBufs_g; cur++){
@@ -530,6 +530,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 pSrcBufferList_g[cur],     /* source buffer list */
                 pDstBufferList_g[cur],     /* destination buffer list */
                 NULL);
+            clock_gettime(CLOCK_MONOTONIC, &apiEnd);
             if(status == CPA_STATUS_RETRY)
                 goto retry;
             while(icp_sal_CyPollInstance(cyInstHandle, 0) != CPA_STATUS_SUCCESS){}
@@ -537,12 +538,14 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
 
             Cpa64U nanos = (tsEnd.tv_sec * 1000000000 + tsEnd.tv_nsec) -
             (tsSt.tv_sec * 1000000000 + tsSt.tv_nsec);
+            Cpa64U apiNanos = (apiEnd.tv_sec * 1000000000 + apiEnd.tv_nsec) -
+            (tsSt.tv_sec * 1000000000 + tsSt.tv_nsec);
             // if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             //     printf("Failed to compress data:%d\n", status);
             //     exit(-1);
             // }
             sumNanos += nanos;
-
+            apiTotalNanos += apiNanos;
         }
         // while(!batch_complete){}
 
@@ -550,6 +553,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     }
     printf("Avg Serial DC-Enc-E2E-Offload Time: %ld\n", sumNanos/numBufs_g/numSamples_g);
     // clock_gettime(CLOCK_MONOTONIC, &offTSEt);
+    printf("Avg Serial Enc-API Call Time: %ld\n", apiTotalNanos/numBufs_g/numSamples_g);
 
 
     // printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
