@@ -109,6 +109,7 @@ volatile Cpa16U lastHashResp_idx = 0;
 volatile int test_complete = 0;
 
 volatile Cpa16U numBufs_g = 0;
+Cpa16U numBuffers, numBuffers_encPolling;
 Cpa32U bufSize_g = 0;
 
 CpaBufferList **pSrcBufferList_g = NULL;
@@ -275,11 +276,14 @@ static Cpa8U sampleCipherIv[] = {
 struct encChainArg{
     Cpa16U bufIdx;
 };
-struct timespec tsSt, tsEnd, tsIdxs[1000];
+struct timespec tsSt, tsEnd, *tsIdxs, *tsStIdxs;
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     Cpa16U tsIdx = ((struct encChainArg *)pCallbackTag)->bufIdx;
     clock_gettime(CLOCK_MONOTONIC, &tsIdxs[tsIdx]);
+    if(tsIdx == numBuffers_encPolling-1){
+        batch_complete = 1;
+    }
 
 }
 CpaInstanceHandle cyInstHandle = NULL;
@@ -490,7 +494,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
         exit(-1);
     }
     started_cy_inst=1;
-    // sampleEncStartPolling(cyInstHandle);
+    sampleEncStartPolling(cyInstHandle);
     Cpa8U *pIvBuffer = NULL;
     status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
     status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
@@ -504,26 +508,20 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa16U cur=0;
     // clock_gettime(CLOCK_MONOTONIC, &hashStartTime_g);
     // clock_gettime(CLOCK_MONOTONIC, &dcStartTime_g);
-    struct timespec offTSSt, offTSEt, apiEnd;
+    struct timespec offTSSt, offTSEt, apiEnd[numBufs_g];
     struct encChainArg *arg=NULL;
     printf("Num Samples: %d\n", numSamples_g);
-    // while(!enc_poller_started ){}
+    while(!enc_poller_started ){}
+    numBuffers = numBufs_g;
+    status = PHYS_CONTIG_ALLOC(&tsIdxs, numBufs_g * sizeof(struct timespec));
+    status = PHYS_CONTIG_ALLOC(&tsStIdxs, 1001 * sizeof(struct timespec));
     uint64_t sumNanos = 0, apiTotalNanos=0;
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
-        // batch_complete = 0;
-        for(int cur=0; cur < numBufs_g; cur++){
+        for(int cur=0; cur < numBuffers; cur++){
             status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct encChainArg));
             arg->bufIdx = cur;
             retry:
-                // status = cpaDcCompressData2(
-                //     dcInstHandle,
-                //     sessionHdl,
-                //     pSrcBufferList_g[cur],     /* source buffer list */
-                //     pDstBufferList_g[cur],     /* destination buffer list */
-                //     &opData,            /* Operational data */
-                //     &dcResults,         /* results structure */
-                //     (void *)arg);       /* callback tag */
-            clock_gettime(CLOCK_MONOTONIC, &tsSt);
+            clock_gettime(CLOCK_MONOTONIC, &tsStIdxs[cur]);
             status = cpaCySymPerformOp(
                 cyInstHandle,
                 (void *)arg,
@@ -531,30 +529,26 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 pSrcBufferList_g[cur],     /* source buffer list */
                 pDstBufferList_g[cur],     /* destination buffer list */
                 NULL);
-            clock_gettime(CLOCK_MONOTONIC, &apiEnd);
+            clock_gettime(CLOCK_MONOTONIC, &apiEnd[cur]);
             if(status == CPA_STATUS_RETRY)
                 goto retry;
-            while(icp_sal_CyPollInstance(cyInstHandle, 0) != CPA_STATUS_SUCCESS){}
-            // clock_gettime(CLOCK_MONOTONIC, &offTSEt);
 
-            Cpa64U nanos = (tsEnd.tv_sec * 1000000000 + tsEnd.tv_nsec) -
-            (tsSt.tv_sec * 1000000000 + tsSt.tv_nsec);
-            Cpa64U apiNanos = (apiEnd.tv_sec * 1000000000 + apiEnd.tv_nsec) -
-            (tsSt.tv_sec * 1000000000 + tsSt.tv_nsec);
-            // if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
-            //     printf("Failed to compress data:%d\n", status);
-            //     exit(-1);
-            // }
+        }
+        while(!batch_complete){}
+        for(int i=0; i<numBufs_g; i++){
+            Cpa64U nanos = (tsIdxs[i].tv_sec * 1000000000 + tsIdxs[i].tv_nsec) -
+                (tsStIdxs[i].tv_sec * 1000000000 + tsStIdxs[i].tv_nsec);
             sumNanos += nanos;
+            Cpa64U apiNanos = (apiEnd[i].tv_sec * 1000000000 + apiEnd[i].tv_nsec) -
+                (tsStIdxs[i].tv_sec * 1000000000 + tsStIdxs[i].tv_nsec);
             apiTotalNanos += apiNanos;
         }
-        // while(!batch_complete){}
 
 
     }
-    printf("Avg Serial DC-Enc-E2E-Offload Time: %ld\n", sumNanos/numBufs_g/numSamples_g);
+    printf("Avg Async DC-Enc-E2E-Offload Time on %d buffers: %ld\n", numBufs_g, sumNanos/numBufs_g/numSamples_g);
     // clock_gettime(CLOCK_MONOTONIC, &offTSEt);
-    printf("Avg Serial Enc-API Call Time: %ld\n", apiTotalNanos/numBufs_g/numSamples_g);
+    printf("Avg Serial Enc-API Call Time on %d buffers: %ld\n", numBufs_g, apiTotalNanos/numBufs_g/numSamples_g);
 
 
     // printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
@@ -715,6 +709,7 @@ void sampleEncStartPolling(CpaInstanceHandle cyInstHandle)
         printf("Affinitizing enc thread: %ld\n", gPollingThread);
         printf("to core: %d\n", 1);
         utilCodeThreadBind(&gPollingThread, 1);
+        numBuffers_encPolling = numBufs_g;
         enc_poller_started = 1;
     }
 }
