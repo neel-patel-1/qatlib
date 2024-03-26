@@ -275,12 +275,10 @@ static Cpa8U sampleCipherIv[] = {
 struct encChainArg{
     Cpa16U bufIdx;
 };
+struct timespec tsSt, tsEnd;
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
-    struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
-    if(arg->bufIdx == (numBufs_g-1)){
-        batch_complete = 1;
-    }
+    clock_gettime(CLOCK_MONOTONIC, &tsEnd);
 
 }
 CpaInstanceHandle cyInstHandle = NULL;
@@ -509,7 +507,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     struct encChainArg *arg=NULL;
     printf("Num Samples: %d\n", numSamples_g);
     // while(!enc_poller_started ){}
-
+    uint64_t sumNanos = 0;
     for(int nTsts=0 ; nTsts < numSamples_g; nTsts++){
         // batch_complete = 0;
         for(int cur=0; cur < numBufs_g; cur++){
@@ -524,7 +522,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
                 //     &opData,            /* Operational data */
                 //     &dcResults,         /* results structure */
                 //     (void *)arg);       /* callback tag */
-            clock_gettime(CLOCK_MONOTONIC, &offTSSt);
+            clock_gettime(CLOCK_MONOTONIC, &tsSt);
             status = cpaCySymPerformOp(
                 cyInstHandle,
                 (void *)arg,
@@ -535,20 +533,22 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
             if(status == CPA_STATUS_RETRY)
                 goto retry;
             while(icp_sal_CyPollInstance(cyInstHandle, 0) != CPA_STATUS_SUCCESS){}
-            clock_gettime(CLOCK_MONOTONIC, &offTSEt);
+            // clock_gettime(CLOCK_MONOTONIC, &offTSEt);
 
-            Cpa64U nanos = (offTSEt.tv_sec * 1000000000 + offTSEt.tv_nsec) -
-            (offTSSt.tv_sec * 1000000000 + offTSSt.tv_nsec);
+            Cpa64U nanos = (tsEnd.tv_sec * 1000000000 + tsEnd.tv_nsec) -
+            (tsSt.tv_sec * 1000000000 + tsSt.tv_nsec);
             // if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             //     printf("Failed to compress data:%d\n", status);
             //     exit(-1);
             // }
-            printf("DC-Enc-E2E-Offload Time: %ld\n", nanos);
+            sumNanos += nanos;
+
         }
         // while(!batch_complete){}
 
 
     }
+    printf("Avg Serial DC-Enc-E2E-Offload Time: %ld\n", sumNanos/numBufs_g/numSamples_g);
     // clock_gettime(CLOCK_MONOTONIC, &offTSEt);
 
 
