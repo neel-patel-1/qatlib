@@ -77,6 +77,9 @@
 #include <time.h>
 
 #include "accel_test.h"
+#include "iaa.h"
+
+
 /*
  * Maximum number of instances to query from the API
  */
@@ -434,6 +437,16 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa32U sess_size = 0;
     Cpa32U ctx_size = 0;
     CpaStatus status;
+
+    // alloc ctx:
+    // https://vscode.dev/github/neel-patel-1/idxd-config/blob/accel-chain/test/accel_test.c#L215
+
+    struct acctest_context *iaa = acctest_init(0x1); // Blocks on Page Fault
+    if( 0 != acctest_alloc(iaa, 1, -1, -1) ){
+        printf("Failed to allocate iaa context\n");
+        exit(-1);
+    }
+
     sampleDcGetInstance(&dcInstHandle);
 
 
