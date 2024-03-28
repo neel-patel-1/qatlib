@@ -66,7 +66,7 @@ COMMON_SAMPLE_INCLUDES = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 ACCEL_TEST_SRCS = \
 	$(srcdir)/../idxd-config/test/accel_test.c \
 LIBACCFG_LIB =\
-       ../idxd-config/accfg/lib/libaccel-config.la
+       $(srcdir)/../idxd-config/accfg/lib/libaccel-config.la
 
 COMMON_SAMPLE_LDFLAGS = -lpthread -lcrypto -lz -lc lib@LIBUSDMNAME@.la lib@LIBQATNAME@.la
 
@@ -188,6 +188,7 @@ chaining_sample_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_chaining_sample_utils.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample_user.c \
 	$(srcdir)/../idxd-config/test/accel_test.c \
+	$(srcdir)/../idxd-config/test/libaccfg.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample.c
 chaining_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample \
