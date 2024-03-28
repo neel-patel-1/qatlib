@@ -76,6 +76,7 @@
 #include "icp_sal_poll.h"
 #include <time.h>
 
+#include "accel_test.h"
 /*
  * Maximum number of instances to query from the API
  */
@@ -434,6 +435,17 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     Cpa32U ctx_size = 0;
     CpaStatus status;
     sampleDcGetInstance(&dcInstHandle);
+
+    int rc;
+    int tflags = 0x1, dev_id = -1, wq_type = 1, wq_id = -1;
+    struct acctest_context *iaa = acctest_init(tflags);
+	printf("acctest_init(%d) = %p\n", tflags, iaa);
+	iaa->dev_type = ACCFG_DEVICE_IAX;
+
+	if (!iaa)
+		return -ENOMEM;
+
+	rc = acctest_alloc(iaa, wq_type, dev_id, wq_id);
 
 
     status = cpaDcQueryCapabilities(dcInstHandle, &cap);
