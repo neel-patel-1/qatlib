@@ -195,7 +195,7 @@ chaining_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS)
-chaining_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) libcpa_sample_code_s.la $(LIBACCFG_LIB)
+chaining_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la
 
 noinst_PROGRAMS += dc_stateless_multi_op_sample
 dc_stateless_multi_op_sample_SOURCES = \
