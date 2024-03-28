@@ -189,6 +189,7 @@ chaining_sample_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample_user.c \
 	$(srcdir)/../idxd-config/test/accel_test.c \
 	$(srcdir)/../idxd-config/test/libaccfg.c \
+	$(srcdir)/idxd/test/core.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample.c
 chaining_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample \
