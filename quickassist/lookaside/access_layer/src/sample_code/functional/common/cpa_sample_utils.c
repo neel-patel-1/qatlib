@@ -287,31 +287,16 @@ CpaInstanceHandle cyInstHandle = NULL;
 CpaCySymOpData *pOpData;
 volatile int started_cy_inst = 0;
 
-
+int processed = 0;
 static void dcCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U bufIdx = arg->bufIdx;
+    processed ++ ;
     if(arg->bufIdx == (numBufs_g-1)){
         batch_complete = 1;
     }
-    // printf("Submitting request to enc for pkt: %d\n", bufIdx);
-    // if(cyInstHandle == NULL){
-    //     printf("Cy Instance Handle is NULL\n");
-    //     exit(-1);
-    // }
-    // status = cpaCySymPerformOp(
-    //         cyInstHandle,
-    //         (void *)arg,
-    //         pOpData,
-    //         pSrcBufferList_g[bufIdx],     /* source buffer list */
-    //         pDstBufferList_g[bufIdx],     /* destination buffer list */
-    //         NULL);
-    // if(status != CPA_STATUS_SUCCESS){
-    //     printf("Failed to submit request to enc for pkt: %d\n", bufIdx);
-    //     printf("Status: %d\n", status);
-    //     exit(-1);
-    // }
+
 }
 
 volatile Cpa16U compFwdSubmitted = 0;
@@ -402,7 +387,7 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
     pOpData->cryptoStartSrcOffsetInBytes = 0;
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
     Cpa16U cur=0;
-    while (1)
+    while (processed < numSamples_g * numBufs_g)
     {
         icp_sal_DcPollInstance(dcInstHandle, 0);
     }
@@ -543,6 +528,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
 
     started_cy_inst = 0;
     test_complete = 1;
+    processed = 0;
 
     // }
 
