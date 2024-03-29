@@ -441,11 +441,26 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
     // alloc ctx:
     // https://vscode.dev/github/neel-patel-1/idxd-config/blob/accel-chain/test/accel_test.c#L215
 
-    struct acctest_context *iaa = acctest_init(0x1); // Blocks on Page Fault
+    struct acctest_context *iaa = acctest_init(0x1);
+    // Blocks on Page Fault
+
+    int rc;
+    int dev_id = -1;
+    int wq_id = -1;
+    int wq_type = 1;
     if( 0 != acctest_alloc(iaa, 1, -1, -1) ){
         printf("Failed to allocate iaa context\n");
         exit(-1);
     }
+    char *kvsData = (char *)malloc(4096);
+    if(kvsData == NULL){
+        printf("Failed to allocate kvsData\n");
+        exit(-1);
+    }
+
+    rc = acctest_alloc(iaa, wq_type, dev_id, wq_id);
+
+
 
     sampleDcGetInstance(&dcInstHandle);
 
