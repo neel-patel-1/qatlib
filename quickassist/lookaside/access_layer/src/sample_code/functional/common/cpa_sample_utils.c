@@ -275,13 +275,15 @@ static Cpa8U sampleCipherIv[] = {
 struct encChainArg{
     Cpa16U bufIdx;
 };
+int processed = 0;
+
 static void encCallback(void *pCallbackTag, CpaStatus status)
 {
     struct encChainArg *arg = (struct encChainArg *)pCallbackTag;
+    processed++;
     if(arg->bufIdx == (numBufs_g-1)){
         batch_complete = 1;
     }
-
 }
 CpaInstanceHandle cyInstHandle = NULL;
 CpaCySymOpData *pOpData;
@@ -309,6 +311,7 @@ static void dcCallback(void *pCallbackTag, CpaStatus status)
         printf("Status: %d\n", status);
         exit(-1);
     }
+
 }
 
 volatile Cpa16U compFwdSubmitted = 0;
@@ -404,14 +407,14 @@ static void ogDcPoller(CpaInstanceHandle dcInstHandle)
         icp_sal_DcPollInstance(dcInstHandle, 0);
     }
 }
-
 static void enc_poller(CpaInstanceHandle cyInstHandle)
 {
     CpaStatus status = CPA_STATUS_FAIL;
-    while (1)
+    while (processed < (numSamples_g * numBufs_g))
     {
         status = icp_sal_CyPollInstance(cyInstHandle, 0);
     }
+    printf("Processed: %d\n", processed);
 }
 
 #ifdef DO_CRYPTO
@@ -560,6 +563,7 @@ static void sal_polling(CpaInstanceHandle cyInstHandle)
 
     started_cy_inst = 0;
     test_complete = 1;
+    processed = 0;
 
     // }
 
