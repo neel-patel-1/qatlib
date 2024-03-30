@@ -154,7 +154,6 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
     if(arg->bufIdx == (numBufs_g-1)){
-        printf("cb: %d complete\n", mId);
         complete = 1;
     }
 }
@@ -514,11 +513,7 @@ static void pollingThread(void * info)
     printf("Poller %d started\n", idx);
     while (gPollingCys[idx])
     {
-        // printf("Polling cy inst %d at address: %p\n", idx, cyInstHandle);
         CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
-        if(status == CPA_STATUS_SUCCESS){
-            gPollingCys[idx] = 0;
-        }
 
         if(  status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", status);
@@ -581,24 +576,19 @@ static void singleCoreRequestTransformPoller(){
         arg->mIdx = axIdx;
         arg->bufIdx = bufIdx;
         pOpData->sessionCtx = sessionCtxs_g[axIdx];
-        printf("Submitting request %d to cy inst %d\n", bufIdx, axIdx);
-        status = cpaCySymPerformOp(
+retry:  status = cpaCySymPerformOp(
             cyInst_g[axIdx],
             (void *)arg,
             pOpData,
             pSrcBufferList_g[bufIdx],     /* source buffer list */
             pDstBufferList_g[bufIdx],     /* destination buffer list */
             NULL);
-        if(status != CPA_STATUS_SUCCESS){
-            printf("Failed to submit request: %d\n", status);
-            exit(-1);
+        if(status == CPA_STATUS_RETRY){
+            goto retry;
         }
         bufIdx = (bufIdx + 1) % numBufs_g;
-        while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
     }
-    printf("Requests Submitted\n");
     while(!complete){
-
     }
 }
 
@@ -616,15 +606,23 @@ static void startExp(){
     CpaStatus status;
     complete = 0;
     spawnSingleAx(1);
-    // startPollingAllAx();
+    startPollingAllAx();
 
+    int numIterations = 10;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    singleCoreRequestTransformPoller();
+    for(int i=0; i<numIterations; i++){
+        singleCoreRequestTransformPoller();
+    }
     clock_gettime(CLOCK_MONOTONIC, &end);
 
 
+    uint64_t nanos =
+        (end.tv_sec - start.tv_sec) * 1000000000 +
+        (end.tv_nsec - start.tv_nsec);
+    uint64_t avg = nanos / numIterations;
     printf("Single Core Request Transform Time: %ld\n",
-        (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
+        avg);
+
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
         symSessionWaitForInflightReq(sessionCtxs_g[i]);
