@@ -380,6 +380,8 @@ static void spawnSingleAx(int numAxs){
         {
             /* Allocate session context */
             status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+            printf("Address of sessionctx %p\n", sessionCtx);
+            printf("Address of sessionCtxs_g %p\n", sessionCtxs_g[i]);
         }
 
         if (CPA_STATUS_SUCCESS == status)
