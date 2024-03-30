@@ -608,7 +608,7 @@ static void startExp(){
     spawnSingleAx(1);
     startPollingAllAx();
 
-    int numIterations = 10;
+    int numIterations = 10000;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         singleCoreRequestTransformPoller();
@@ -620,8 +620,15 @@ static void startExp(){
         (end.tv_sec - start.tv_sec) * 1000000000 +
         (end.tv_nsec - start.tv_nsec);
     uint64_t avg = nanos / numIterations;
-    printf("Single Core Request Transform Time: %ld\n",
-        avg);
+    uint64_t us = avg / 1000;
+    if (us == 0)
+    {
+        printf("BW(MB/s): %lu\n", 0);
+    }
+    else
+    {
+        printf("BW(MB/s): %lu\n", numBufs_g * bufSize_g / us);
+    }
 
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
@@ -633,7 +640,6 @@ static void startExp(){
         }
     }
     printf("Test Complete\n");
-    exit(0);
 }
 
 
