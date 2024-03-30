@@ -117,6 +117,14 @@ static Cpa8U sampleCipherIv[] = {
 // Repeatedly encrypt for balanced chain
 int numAxs_g;
 CpaInstanceHandle *cyHandles_g;
+CpaCySymSessionCtx *sessionCtxs_g;
+
+// Round Robin Policy
+int lastIdx = 0;
+enum Policy{
+    RR
+};
+enum Policy policy = RR;
 
 // Synchronize between host and
 volatile int complete;
@@ -127,9 +135,11 @@ struct cbArg{
 static void interCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
+    Cpa16U bufIdx = arg->bufIdx;
     if(arg->bufIdx == (numBufs_g-1)){
         printf("cb: %d complete\n", mId);
     }
+    printf("cb: %d buf: %d\n", mId);
 }
 static void endCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
@@ -177,17 +187,17 @@ static void spawnAxs(int numAxs){
             printf("Failed to get session size\n");
             exit(-1);
         }
-        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+        status = PHYS_CONTIG_ALLOC(&sessionCtxs_g[i], sessionCtxSize);
         if( status != CPA_STATUS_SUCCESS){
             printf("Failed to allocate session context\n");
             exit(-1);
         }
         if(i<numAxs-1){
             status = cpaCySymInitSession(
-                cyHandles_g[i], interCallback, &sessionSetupData, sessionCtx);
+                cyHandles_g[i], interCallback, &sessionSetupData, &sessionCtxs_g[i]);
         } else {
             status = cpaCySymInitSession(
-                cyHandles_g[i], endCallback, &sessionSetupData, sessionCtx);
+                cyHandles_g[i], endCallback, &sessionSetupData, &sessionCtxs_g[i]);
         }
         if( status != CPA_STATUS_SUCCESS){
             printf("Failed to init session\n");
@@ -197,9 +207,84 @@ static void spawnAxs(int numAxs){
     numAxs_g = numAxs;
 }
 
+/*
+ At chained offload startup
+ how long should a host core go on making requests
+ before it starts checking for responses?
+
+ Which axs should be polled?
+ We know which ones still have in flight requests
+ Config (1):
+    Shared variable synchronization
+    Is this realistic?
+    We are somewhere between the library layer and application layer
+    We can keep track of whatever book-keeping is necessary
+
+The benefit of the SPT is that it transparently solves the problem
+of determining when to poll from the main event loop in the code.
+
+The question we answer in this section is how the runtime or application
+can integrate the SPT into the processing loop to prevent
+By spawning a polling instance and scheduling it on the SPT thread,
+a
+*/
+
+/*
+
+*/
+
+static inline CpaInstanceHandle getNextRequestHandleRR(){
+    int nextIdx = (lastIdx + 1) % numAxs_g;
+    CpaInstanceHandle instHandle = cyHandles_g[nextIdx];
+    return instHandle;
+}
+
+static inline CpaInstanceHandle getNextRequestHandle(){
+    switch(policy){
+        case RR:
+            return getNextRequestHandleRR();
+        default:
+            return getNextRequestHandleRR();
+    }
+}
+
 static void singleCoreRequestTransformPoller(){
+    int rqB4Poll = 10 < numBufs_g ? 10 : numBufs_g;
+    int bufIdx = 0;
+    CpaStatus status;
+    Cpa8U *pIvBuffer = NULL;
+    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+    CpaCySymOpData *pOpData = NULL;
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->pIv = pIvBuffer;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+    struct cbArg *arg=NULL;
+
+
     while(!complete){
-        printf("Single req poll\n");
+        for(int i=0; i<rqB4Poll; i++){
+            status = OS_MALLOC(&arg, sizeof(struct cbArg));
+            CpaInstanceHandle cyInstHandle =
+                getNextRequestHandle();
+            int axIdx = lastIdx; /* getNextRequestHandle Updated */
+            arg->mIdx = axIdx;
+            arg->bufIdx = bufIdx;
+            pOpData->sessionCtx = sessionCtxs_g[axIdx];
+            status = cpaCySymPerformOp(
+                cyInstHandle,
+                (void *)arg,
+                pOpData,
+                pSrcBufferList_g[bufIdx],     /* source buffer list */
+                pDstBufferList_g[bufIdx],     /* destination buffer list */
+                NULL);
+            bufIdx = (bufIdx + 1) % numBufs_g;
+        }
+        for(int i=0; i<numAxs_g; i++){
+            status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
+        }
     }
 }
 
