@@ -237,7 +237,6 @@ static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
 
     pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
     pBuffList->pBuffers = pFlatBuff;
-    printf("Allocating medata of size %d\n", pBuffList->pPrivateMetaData);
     while (curBuff < numBuffers)
     {
         if (0 != bufferSize)
@@ -318,82 +317,80 @@ static void spawnSingleAx(int numAxs){
     }
 
     for(int i=0; i<numAxs; i++){
-    CpaInstanceHandle singleCyInstHandle = cyHandles_g[i];
-    CpaCySymSessionCtx sessionCtx = sessionCtxs_g[i];
-    Cpa32U sessionCtxSize = 0;
-    CpaCySymSessionSetupData sessionSetupData = {0};
-    CpaCySymStats64 symStats = {0};
+        CpaInstanceHandle singleCyInstHandle = cyHandles_g[i];
+        CpaCySymSessionCtx sessionCtx = sessionCtxs_g[i];
+        Cpa32U sessionCtxSize = 0;
+        CpaCySymSessionSetupData sessionSetupData = {0};
+        CpaCySymStats64 symStats = {0};
 
-    printf("Configuring cy inst at address: %p\n", singleCyInstHandle);
-    if(singleCyInstHandle == NULL){
-        printf("Failed to get Cy Instance\n");
-        exit(-1);
-    }
-
-    status = cpaCyStartInstance(singleCyInstHandle);
-    if (singleCyInstHandle == NULL)
-    {
-        printf("Failed to get Cy Instance\n");
-        return CPA_STATUS_FAIL;
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /*
-         * Set the address translation function for the instance
-         */
-        status = cpaCySetAddressTranslation(singleCyInstHandle, sampleVirtToPhys);
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /*
-         * If the instance is polled start the polling thread. Note that
-         * how the polling is done is implementation-dependent.
-         */
-
-
-        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-        sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
-        sessionSetupData.cipherSetupData.cipherAlgorithm =
-            CPA_CY_SYM_CIPHER_AES_CBC;
-        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
-        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
-            sizeof(sampleCipherKey);
-        sessionSetupData.cipherSetupData.cipherDirection =
-            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
-        //</snippet>
-
-        /* Determine size of session context to allocate */
-
-        status = cpaCySymSessionCtxGetSize(
-            singleCyInstHandle, &sessionSetupData, &sessionCtxSize);
-
-
-    }
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Allocate session context */
-        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Initialize the session */
-        if( i >= numAxs - 1){
-            status = cpaCySymInitSession(
-                singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
-        } else {
-            status = cpaCySymInitSession(
-                singleCyInstHandle, interCallback, &sessionSetupData, sessionCtx);
-        }
-    } else{
-        printf("Failed to initialize Cy Session\n");
-        exit(-1);
-    }
-        if(status != CPA_STATUS_SUCCESS){
-            printf("Failed to start Cy Session\n");
+        printf("Configuring cy inst at address: %p\n", singleCyInstHandle);
+        if(singleCyInstHandle == NULL){
+            printf("Failed to get Cy Instance\n");
             exit(-1);
         }
+
+        status = cpaCyStartInstance(singleCyInstHandle);
+        if (status != CPA_STATUS_SUCCESS)
+        {
+            printf("Failed to start Cy Instance\n");
+            return CPA_STATUS_FAIL;
+        }
+
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /*
+            * Set the address translation function for the instance
+            */
+            status = cpaCySetAddressTranslation(singleCyInstHandle, sampleVirtToPhys);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /*
+            * If the instance is polled start the polling thread. Note that
+            * how the polling is done is implementation-dependent.
+            */
+
+
+            sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+            sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+            sessionSetupData.cipherSetupData.cipherAlgorithm =
+                CPA_CY_SYM_CIPHER_AES_CBC;
+            sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+            sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+                sizeof(sampleCipherKey);
+            sessionSetupData.cipherSetupData.cipherDirection =
+                CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+            //</snippet>
+
+            /* Determine size of session context to allocate */
+
+            status = cpaCySymSessionCtxGetSize(
+                singleCyInstHandle, &sessionSetupData, &sessionCtxSize);
+
+
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Allocate session context */
+            status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+        }
+
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Initialize the session */
+            if( i >= numAxs - 1){
+                status = cpaCySymInitSession(
+                    singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
+            } else {
+                status = cpaCySymInitSession(
+                    singleCyInstHandle, interCallback, &sessionSetupData, sessionCtx);
+            }
+        }
+        if (CPA_STATUS_SUCCESS != status){
+            printf("Failed to initialize Cy Session\n");
+            exit(-1);
+        }
+
         if(pSrcBufferList_g == NULL){
             Cpa32U bufferMetaSize = 0;
             Cpa8U *pBufferMeta = NULL;
@@ -438,6 +435,7 @@ static void spawnSingleAx(int numAxs){
         pOpData->cryptoStartSrcOffsetInBytes = 0;
         pOpData->sessionCtx = sessionCtxs_g[i];
         pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+        printf("%d\n", pOpData->messageLenToCipherInBytes);
         status = cpaCySymPerformOp(
             cyHandles_g[i],
             (void *)i,
@@ -1058,20 +1056,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
 
 
         /* */
-    CpaBufferList **srcBufferLists = NULL;
-    CpaBufferList **dstBufferLists = NULL;
-    PHYS_CONTIG_ALLOC(&srcBufferLists, numFragments * sizeof(CpaBufferList *));
-    PHYS_CONTIG_ALLOC(&dstBufferLists, numFragments * sizeof(CpaBufferList *));
 
-    for(int i=0; i<numFragments;i++){
-        dcChainBuildBufferList(&srcBufferLists[i], 1, fragmentSize, bufferMetaSize);
-        dcChainBuildBufferList(&dstBufferLists[i], 1, fragmentSize, bufferMetaSize);
-    }
-    for(int i=0; i<numFragments;i++){
-        populateBufferList(&srcBufferLists[i], 1, fragmentSize, bufferMetaSize);
-    }
-    pDstBufferList_g = dstBufferLists;
-    pSrcBufferList_g = srcBufferLists;
     numBufs_g = numFragments;
 
     // sampleCyStartPolling(cyInstHandle);
