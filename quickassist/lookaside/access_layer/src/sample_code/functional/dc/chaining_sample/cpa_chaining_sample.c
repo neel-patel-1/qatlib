@@ -159,6 +159,141 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
     }
 }
 
+static void dcChainFreeBufferList(CpaBufferList **testBufferList)
+{
+    CpaBufferList *pBuffList = *testBufferList;
+    CpaFlatBuffer *pFlatBuff = NULL;
+    Cpa32U curBuff = 0;
+
+    if (NULL == pBuffList)
+    {
+        PRINT_ERR("testBufferList is NULL\n");
+        return;
+    }
+
+    pFlatBuff = pBuffList->pBuffers;
+    while (curBuff < pBuffList->numBuffers)
+    {
+        if (NULL != pFlatBuff->pData)
+        {
+            PHYS_CONTIG_FREE(pFlatBuff->pData);
+            pFlatBuff->pData = NULL;
+        }
+        pFlatBuff++;
+        curBuff++;
+    }
+
+    if (NULL != pBuffList->pPrivateMetaData)
+    {
+        PHYS_CONTIG_FREE(pBuffList->pPrivateMetaData);
+        pBuffList->pPrivateMetaData = NULL;
+    }
+
+    // OS_FREE(pBuffList);
+    *testBufferList = NULL;
+}
+
+static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
+                                        Cpa32U numBuffers,
+                                        Cpa32U bufferSize,
+                                        Cpa32U bufferMetaSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaBufferList *pBuffList = NULL;
+    CpaFlatBuffer *pFlatBuff = NULL;
+    Cpa32U curBuff = 0;
+    Cpa8U *pMsg = NULL;
+    /*
+     * allocate memory for bufferlist and array of flat buffers in a contiguous
+     * area and carve it up to reduce number of memory allocations required.
+     */
+    Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+
+    status = OS_MALLOC(&pBuffList, bufferListMemSize);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Error in allocating pBuffList\n");
+        return CPA_STATUS_FAIL;
+    }
+
+    pBuffList->numBuffers = numBuffers;
+
+    if (bufferMetaSize)
+    {
+        status =
+            PHYS_CONTIG_ALLOC(&pBuffList->pPrivateMetaData, bufferMetaSize);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("Error in allocating pBuffList->pPrivateMetaData\n");
+            OS_FREE(pBuffList);
+            return CPA_STATUS_FAIL;
+        }
+    }
+    else
+    {
+        pBuffList->pPrivateMetaData = NULL;
+    }
+
+    pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
+    pBuffList->pBuffers = pFlatBuff;
+    printf("Allocating medata of size %d\n", pBuffList->pPrivateMetaData);
+    while (curBuff < numBuffers)
+    {
+        if (0 != bufferSize)
+        {
+            status = PHYS_CONTIG_ALLOC(&pMsg, bufferSize);
+            if (CPA_STATUS_SUCCESS != status || NULL == pMsg)
+            {
+                PRINT_ERR("Error in allocating pMsg\n");
+                dcChainFreeBufferList(&pBuffList);
+                return CPA_STATUS_FAIL;
+            }
+            memset(pMsg, 0, bufferSize);
+            pFlatBuff->pData = pMsg;
+        }
+        else
+        {
+            pFlatBuff->pData = NULL;
+        }
+        pFlatBuff->dataLenInBytes = bufferSize;
+        pFlatBuff++;
+        curBuff++;
+    }
+
+    *testBufferList = pBuffList;
+
+    return CPA_STATUS_SUCCESS;
+}
+
+FILE * file = NULL;
+#define CALGARY "/lib/firmware/calgary"
+static CpaStatus populateBufferList(CpaBufferList **testBufferList,
+                                        Cpa32U numBuffers,
+                                        Cpa32U bufferSize,
+                                        Cpa32U bufferMetaSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaBufferList *pBuffList = *testBufferList;
+
+    if(file == NULL){
+        file = fopen(CALGARY, "r");
+    }
+    for(int i=0; i<numBuffers; i++){
+        uint64_t offset = 0;
+        offset = fread(pBuffList->pBuffers[i].pData, 1, bufferSize, file);
+        if ( offset < bufferSize){
+            rewind(file);
+            if (fread((pBuffList->pBuffers[i].pData) + offset, 1, bufferSize - offset, file) < 1){
+                PRINT_ERR("Error in reading file\n");
+                return CPA_STATUS_FAIL;
+            }
+        }
+    }
+    return CPA_STATUS_SUCCESS;
+}
+
+
 
 static void spawnSingleAx(int numAxs){
     OS_MALLOC(&cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
@@ -255,10 +390,32 @@ static void spawnSingleAx(int numAxs){
         printf("Failed to initialize Cy Session\n");
         exit(-1);
     }
-    if(status != CPA_STATUS_SUCCESS){
-        printf("Failed to start Cy Session\n");
-        exit(-1);
-    }
+        if(status != CPA_STATUS_SUCCESS){
+            printf("Failed to start Cy Session\n");
+            exit(-1);
+        }
+        if(pSrcBufferList_g == NULL){
+            Cpa32U bufferMetaSize = 0;
+            Cpa8U *pBufferMeta = NULL;
+            PHYS_CONTIG_ALLOC(&pSrcBufferList_g, numBufs_g * sizeof(CpaBufferList *));
+            PHYS_CONTIG_ALLOC(&pDstBufferList_g, numBufs_g * sizeof(CpaBufferList *));
+            status =
+                cpaCyBufferListGetMetaSize(singleCyInstHandle, numBufs_g, &bufferMetaSize);
+            if(status != CPA_STATUS_SUCCESS){
+                printf("Failed to get buffer meta size: %d\n", status);
+                exit(-1);
+            }
+                status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+            printf("Meta Size: %d\n", bufferMetaSize);
+            for(int i=0; i<numBufs_g;i++){
+                dcChainBuildBufferList(&pSrcBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
+                dcChainBuildBufferList(&pDstBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
+            }
+            for(int i=0; i<numBufs_g;i++){
+                populateBufferList(&pSrcBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
+            }
+
+        }
         printf("polling instance at address: %p\n", singleCyInstHandle);
         status = icp_sal_CyPollInstance(singleCyInstHandle, 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
@@ -271,6 +428,29 @@ static void spawnSingleAx(int numAxs){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
+        Cpa8U *pIvBuffer = NULL;
+        status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+        CpaCySymOpData *pOpData = NULL;
+        status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+        pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+        pOpData->pIv = pIvBuffer;
+        pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+        pOpData->cryptoStartSrcOffsetInBytes = 0;
+        pOpData->sessionCtx = sessionCtxs_g[i];
+        pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+        status = cpaCySymPerformOp(
+            cyHandles_g[i],
+            (void *)i,
+            pOpData,
+            pSrcBufferList_g[0],     /* source buffer list */
+            pDstBufferList_g[0],     /* destination buffer list */
+            NULL);
+        if(status != CPA_STATUS_SUCCESS){
+            printf("Failed to submit request: %d\n", status);
+            exit(-1);
+        }
+        while(icp_sal_CyPollInstance(cyHandles_g[i], 0) != CPA_STATUS_SUCCESS){}
+        printf("Request to ax %d submitted and rcvd\n", i);
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
@@ -429,10 +609,11 @@ static void startExp(){
     CpaStatus status;
     complete = 0;
     spawnSingleAx(1);
+    exit(0);
     // startPollingAllAx();
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    singleCoreRequestTransformPoller();
+    // singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     printf("Single Core Request Transform Time: %ld\n",
@@ -449,7 +630,7 @@ static void startExp(){
     exit(0);
 }
 
-#define CALGARY "/lib/firmware/calgary"
+
 #define FAIL_ON_CPA_FAIL(x)                                                             \
     if (x != CPA_STATUS_SUCCESS)                                                                     \
     {                                                                          \
@@ -487,7 +668,6 @@ static void startExp(){
         length;                                                                \
     })
 
-static void dcChainFreeBufferList(CpaBufferList **testBufferList);
 
 /* Calculate software digest */
 static inline CpaStatus calSWDigest(Cpa8U *msg,
@@ -599,140 +779,10 @@ static void copyMultiFlatBufferToBuffer(CpaBufferList *pBufferListSrc,
 //</snippet>
 
 /* Build dc chain buffer lists */
-static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
-                                        Cpa32U numBuffers,
-                                        Cpa32U bufferSize,
-                                        Cpa32U bufferMetaSize)
-{
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaBufferList *pBuffList = NULL;
-    CpaFlatBuffer *pFlatBuff = NULL;
-    Cpa32U curBuff = 0;
-    Cpa8U *pMsg = NULL;
-    /*
-     * allocate memory for bufferlist and array of flat buffers in a contiguous
-     * area and carve it up to reduce number of memory allocations required.
-     */
-    Cpa32U bufferListMemSize =
-        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
 
-    status = OS_MALLOC(&pBuffList, bufferListMemSize);
-    if (CPA_STATUS_SUCCESS != status)
-    {
-        PRINT_ERR("Error in allocating pBuffList\n");
-        return CPA_STATUS_FAIL;
-    }
-
-    pBuffList->numBuffers = numBuffers;
-
-    if (bufferMetaSize)
-    {
-        status =
-            PHYS_CONTIG_ALLOC(&pBuffList->pPrivateMetaData, bufferMetaSize);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("Error in allocating pBuffList->pPrivateMetaData\n");
-            OS_FREE(pBuffList);
-            return CPA_STATUS_FAIL;
-        }
-    }
-    else
-    {
-        pBuffList->pPrivateMetaData = NULL;
-    }
-
-    pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
-    pBuffList->pBuffers = pFlatBuff;
-
-    while (curBuff < numBuffers)
-    {
-        if (0 != bufferSize)
-        {
-            status = PHYS_CONTIG_ALLOC(&pMsg, bufferSize);
-            if (CPA_STATUS_SUCCESS != status || NULL == pMsg)
-            {
-                PRINT_ERR("Error in allocating pMsg\n");
-                dcChainFreeBufferList(&pBuffList);
-                return CPA_STATUS_FAIL;
-            }
-            memset(pMsg, 0, bufferSize);
-            pFlatBuff->pData = pMsg;
-        }
-        else
-        {
-            pFlatBuff->pData = NULL;
-        }
-        pFlatBuff->dataLenInBytes = bufferSize;
-        pFlatBuff++;
-        curBuff++;
-    }
-
-    *testBufferList = pBuffList;
-
-    return CPA_STATUS_SUCCESS;
-}
-
-FILE * file = NULL;
-
-static CpaStatus populateBufferList(CpaBufferList **testBufferList,
-                                        Cpa32U numBuffers,
-                                        Cpa32U bufferSize,
-                                        Cpa32U bufferMetaSize)
-{
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaBufferList *pBuffList = *testBufferList;
-
-    if(file == NULL){
-        file = fopen(CALGARY, "r");
-    }
-    for(int i=0; i<numBuffers; i++){
-        uint64_t offset = 0;
-        offset = fread(pBuffList->pBuffers[i].pData, 1, bufferSize, file);
-        if ( offset < bufferSize){
-            rewind(file);
-            if (fread((pBuffList->pBuffers[i].pData) + offset, 1, bufferSize - offset, file) < 1){
-                PRINT_ERR("Error in reading file\n");
-                return CPA_STATUS_FAIL;
-            }
-        }
-    }
-    return CPA_STATUS_SUCCESS;
-}
 
 /* Free dc chain buffer lists */
-static void dcChainFreeBufferList(CpaBufferList **testBufferList)
-{
-    CpaBufferList *pBuffList = *testBufferList;
-    CpaFlatBuffer *pFlatBuff = NULL;
-    Cpa32U curBuff = 0;
 
-    if (NULL == pBuffList)
-    {
-        PRINT_ERR("testBufferList is NULL\n");
-        return;
-    }
-
-    pFlatBuff = pBuffList->pBuffers;
-    while (curBuff < pBuffList->numBuffers)
-    {
-        if (NULL != pFlatBuff->pData)
-        {
-            PHYS_CONTIG_FREE(pFlatBuff->pData);
-            pFlatBuff->pData = NULL;
-        }
-        pFlatBuff++;
-        curBuff++;
-    }
-
-    if (NULL != pBuffList->pPrivateMetaData)
-    {
-        PHYS_CONTIG_FREE(pBuffList->pPrivateMetaData);
-        pBuffList->pPrivateMetaData = NULL;
-    }
-
-    // OS_FREE(pBuffList);
-    *testBufferList = NULL;
-}
 
 uint64_t *ts;
 
@@ -1012,6 +1062,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     CpaBufferList **dstBufferLists = NULL;
     PHYS_CONTIG_ALLOC(&srcBufferLists, numFragments * sizeof(CpaBufferList *));
     PHYS_CONTIG_ALLOC(&dstBufferLists, numFragments * sizeof(CpaBufferList *));
+
     for(int i=0; i<numFragments;i++){
         dcChainBuildBufferList(&srcBufferLists[i], 1, fragmentSize, bufferMetaSize);
         dcChainBuildBufferList(&dstBufferLists[i], 1, fragmentSize, bufferMetaSize);
