@@ -322,16 +322,21 @@ static void pollingThread(void * info)
     CpaInstanceHandle cyInstHandle = cyHandles_g[pollerInfo->idx];
     int idx = pollerInfo->idx;
     gPollingCys[idx] = 1;
+    printf("Poller %d started\n", idx);
     while (gPollingCys[idx])
     {
         // printf("Polling cy inst %d at address: %p\n", idx, cyInstHandle);
         CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
+        if(status == CPA_STATUS_SUCCESS){
+            gPollingCys[idx] = 0;
+        }
 
         if(  status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", status);
             exit(-1);
         }
     }
+    printf("Poller %d exited\n", idx);
 
     sampleThreadExit();
 }
@@ -368,7 +373,6 @@ Receive requests following some distribution. Dequeue the requests and submit th
 */
 
 static void singleCoreRequestTransformPoller(){
-    int bufIdx = 0;
     CpaStatus status;
     Cpa8U *pIvBuffer = NULL;
     status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
@@ -381,13 +385,14 @@ static void singleCoreRequestTransformPoller(){
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
     struct cbArg *arg=NULL;
 
-
+    int bufIdx = 0;
     for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
         status = OS_MALLOC(&arg, sizeof(struct cbArg));
         int axIdx = 0; /* getNextRequestHandle Updated */
         arg->mIdx = axIdx;
         arg->bufIdx = bufIdx;
         pOpData->sessionCtx = sessionCtxs_g[axIdx];
+        printf("Submitting request %d to cy inst %d\n", bufIdx, axIdx);
         status = cpaCySymPerformOp(
             cyHandles_g[axIdx],
             (void *)arg,
@@ -398,12 +403,9 @@ static void singleCoreRequestTransformPoller(){
         bufIdx = (bufIdx + 1) % numBufs_g;
     }
     printf("Requests Submitted\n");
+    while(!complete){
 
-    // while(!complete){
-        // for(int i=0; i<numAxs_g; i++){
-        //     status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
-        // }
-    // }
+    }
 }
 
 /*
@@ -429,6 +431,7 @@ static void startExp(){
     printf("Single Core Request Transform Time: %ld\n",
         (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
     for(int i=0; i<numAxs_g; i++){
+        gPollingCys[i] = 0;
         symSessionWaitForInflightReq(sessionCtxs_g[i]);
         status = cpaCySymRemoveSession(cyHandles_g[i], sessionCtxs_g[i]);
         if(status != CPA_STATUS_SUCCESS){
@@ -872,129 +875,129 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     struct timespec *userHashPollStart, *userHashPollEnd,
         *userDCPollStart, *userDCPollEnd;
 
-    sampleCyGetInstance(&cyInstHandle);
+    // sampleCyGetInstance(&cyInstHandle);
 
 
-    status = cpaCyStartInstance(cyInstHandle);
-    status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
-    status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+    // status = cpaCyStartInstance(cyInstHandle);
+    // status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+    // status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
 
 
-    sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-    sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
-    sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
-    sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
-    sessionSetupData.hashSetupData.digestResultLenInBytes = SHA256_DIGEST_LENGTH;
-    sessionSetupData.digestIsAppended = CPA_FALSE;
-    sessionSetupData.verifyDigest = CPA_FALSE;
+    // sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+    // sessionSetupData.symOperation = CPA_CY_SYM_OP_HASH;
+    // sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+    // sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_PLAIN;
+    // sessionSetupData.hashSetupData.digestResultLenInBytes = SHA256_DIGEST_LENGTH;
+    // sessionSetupData.digestIsAppended = CPA_FALSE;
+    // sessionSetupData.verifyDigest = CPA_FALSE;
 
     fragmentSize_g = fragmentSize;
     bufSize_g = fragmentSize;
 
-    status = cpaCySymSessionCtxGetSize(
-        cyInstHandle, &sessionSetupData, &sessionCtxSize);
-    status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-    status = cpaCySymInitSession(
-        cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
+    // status = cpaCySymSessionCtxGetSize(
+    //     cyInstHandle, &sessionSetupData, &sessionCtxSize);
+    // status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    // status = cpaCySymInitSession(
+    //     cyInstHandle, symCallback, &sessionSetupData, sessionCtx);
 
-    status =
-        cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
-    status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+    // status =
+    //     cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
+    // status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
 
-    status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
-    // printf("Buffer Meta Size: %d\n", buffMetaSize);
-    status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
-                                                    &numInterBuffLists);
+    // status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+    // // printf("Buffer Meta Size: %d\n", buffMetaSize);
+    // status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                    // &numInterBuffLists);
     // printf("Num Intermediate Buffers: %d\n", numInterBuffLists);
 
-    if (numInterBuffLists > 0){
-        status = PHYS_CONTIG_ALLOC(
-                &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
-        for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
-        {
-            status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
-                                            sizeof(CpaBufferList));
-            status = PHYS_CONTIG_ALLOC(
-                        &bufferInterArray[bufferNum]->pPrivateMetaData,
-                        buffMetaSize);
-            status =
-                        PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
-                                        sizeof(CpaFlatBuffer));
-            status = PHYS_CONTIG_ALLOC(
-                        &bufferInterArray[bufferNum]->pBuffers->pData,
-                        2 * fragmentSize);
-            bufferInterArray[bufferNum]->numBuffers = 1;
-                    bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
-                        2 * fragmentSize;
-        }
-    }
-    status = cpaDcStartInstance(
-        dcInstHandle, numInterBuffLists, bufferInterArray);
-    sd.compLevel = CPA_DC_L1;
-    sd.compType = CPA_DC_DEFLATE;
-    sd.huffType = CPA_DC_HT_STATIC;
-    sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
-    sd.sessDirection = CPA_DC_DIR_COMPRESS;
-    sd.sessState = CPA_DC_STATELESS;
-    sd.checksum = CPA_DC_CRC32;
-    // printf("Buffer Size: %d, Fragment Size: %d\n", bufferSize, fragmentSize);
-    status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
-    // printf("Session Size: %d\n", sess_size);
-    FAIL_ON_CPA_FAIL(status);
-    status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
-    bool do_sync = false;
+    // if (numInterBuffLists > 0){
+    //     status = PHYS_CONTIG_ALLOC(
+    //             &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
+    //     for (bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+    //     {
+    //         status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+    //                                         sizeof(CpaBufferList));
+    //         status = PHYS_CONTIG_ALLOC(
+    //                     &bufferInterArray[bufferNum]->pPrivateMetaData,
+    //                     buffMetaSize);
+    //         status =
+    //                     PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+    //                                     sizeof(CpaFlatBuffer));
+    //         status = PHYS_CONTIG_ALLOC(
+    //                     &bufferInterArray[bufferNum]->pBuffers->pData,
+    //                     2 * fragmentSize);
+    //         bufferInterArray[bufferNum]->numBuffers = 1;
+    //                 bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+    //                     2 * fragmentSize;
+    //     }
+    // }
+    // status = cpaDcStartInstance(
+    //     dcInstHandle, numInterBuffLists, bufferInterArray);
+    // sd.compLevel = CPA_DC_L1;
+    // sd.compType = CPA_DC_DEFLATE;
+    // sd.huffType = CPA_DC_HT_STATIC;
+    // sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+    // sd.sessDirection = CPA_DC_DIR_COMPRESS;
+    // sd.sessState = CPA_DC_STATELESS;
+    // sd.checksum = CPA_DC_CRC32;
+    // // printf("Buffer Size: %d, Fragment Size: %d\n", bufferSize, fragmentSize);
+    // status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+    // // printf("Session Size: %d\n", sess_size);
+    // FAIL_ON_CPA_FAIL(status);
+    // status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+    // bool do_sync = false;
 
 
-    status =
-        cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
-    status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
-    status = OS_MALLOC(&pBufferList, bufferListMemSize);
-    status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+    // status =
+    //     cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
+    // status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
+    // status = OS_MALLOC(&pBufferList, bufferListMemSize);
+    // status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
 
-    pFlatBuffer = (CpaFlatBuffer *)(pBufferList + 1);
+    // pFlatBuffer = (CpaFlatBuffer *)(pBufferList + 1);
 
-    pBufferList->pBuffers = pFlatBuffer;
-    pBufferList->numBuffers = 1;
-    pBufferList->pPrivateMetaData = pBufferMeta;
+    // pBufferList->pBuffers = pFlatBuffer;
+    // pBufferList->numBuffers = 1;
+    // pBufferList->pPrivateMetaData = pBufferMeta;
 
-    pFlatBuffer->dataLenInBytes = bufferSize;
-    pFlatBuffer->pData = pSrcBuffer;
+    // pFlatBuffer->dataLenInBytes = bufferSize;
+    // pFlatBuffer->pData = pSrcBuffer;
 
-    /* Hash Op Data */
-    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
-    pOpData->sessionCtx = sessionCtx;
-    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-    pOpData->hashStartSrcOffsetInBytes = 0;
-    pOpData->messageLenToHashInBytes = fragmentSize;
+    // /* Hash Op Data */
+    // status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    // pOpData->sessionCtx = sessionCtx;
+    // pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    // pOpData->hashStartSrcOffsetInBytes = 0;
+    // pOpData->messageLenToHashInBytes = fragmentSize;
 
-    COMPLETION_INIT((&complete));
-
-
+    // COMPLETION_INIT((&complete));
 
 
-    /* DC Op */
-    status =
-        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
-    status = cpaDcDeflateCompressBound(
-        dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
-    status = cpaDcDeflateCompressBound(
-        dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
 
-    status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
-    FAIL_ON_CPA_FAIL(status);
 
-    status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
-    FAIL_ON_CPA_FAIL(status);
+    // /* DC Op */
+    // status =
+    //     cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+    // status = cpaDcDeflateCompressBound(
+    //     dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
+    // status = cpaDcDeflateCompressBound(
+    //     dcInstHandle, sd.huffType, bufferSize, &dstBufferSize);
 
-    status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
-    FAIL_ON_CPA_FAIL(status);
+    // status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+    // FAIL_ON_CPA_FAIL(status);
 
-    status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
-    FAIL_ON_CPA_FAIL(status);
-    status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
-    FAIL_ON_CPA_FAIL(status);
-    status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
-    FAIL_ON_CPA_FAIL(status);
+    // status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+    // FAIL_ON_CPA_FAIL(status);
+
+    // status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+    // FAIL_ON_CPA_FAIL(status);
+
+    // status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
+    // FAIL_ON_CPA_FAIL(status);
+    // status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
+    // FAIL_ON_CPA_FAIL(status);
+    // status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
+    // FAIL_ON_CPA_FAIL(status);
 
 
         /* */
