@@ -239,65 +239,6 @@ static void spawnSingleAx(int numAxs){
     printf("Chain Configured\n");
 }
 
-static void spawnAxs(int numAxs){
-    cyHandles_g = malloc(numAxs * sizeof(CpaInstanceHandle));
-    sessionCtxs_g = malloc(numAxs * sizeof(CpaCySymSessionCtx));
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaCySymSessionSetupData sessionSetupData = {0};
-    CpaCySymSessionCtx sessionCtx = NULL;
-    Cpa32U sessionCtxSize = 0;
-    sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-    sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
-    sessionSetupData.cipherSetupData.cipherAlgorithm =
-        CPA_CY_SYM_CIPHER_AES_CBC;
-    sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
-    sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
-        sizeof(sampleCipherKey);
-    sessionSetupData.cipherSetupData.cipherDirection =
-        CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
-    for(int i=0; i<numAxs; i++){
-        sampleCyGetInstance(&(cyHandles_g[i]));
-        if(cyHandles_g[i] == NULL){
-            printf("Failed to get Cy Instance\n");
-            exit(-1);
-        }
-        status = cpaCyStartInstance(cyHandles_g[i]);
-        if( status != CPA_STATUS_SUCCESS){
-            printf("Failed to start Cy Instance\n");
-            exit(-1);
-        }
-        status = cpaCySetAddressTranslation(cyHandles_g[i], sampleVirtToPhys);
-        if( status != CPA_STATUS_SUCCESS){
-            printf("Failed to set address translation\n");
-            exit(-1);
-        }
-        status = cpaCySymSessionCtxGetSize(
-            cyHandles_g[i], &sessionSetupData, &sessionCtxSize);
-        if( status != CPA_STATUS_SUCCESS){
-            printf("Failed to get session size\n");
-            exit(-1);
-        }
-        status = PHYS_CONTIG_ALLOC(&sessionCtxs_g[i], sessionCtxSize);
-        if( status != CPA_STATUS_SUCCESS){
-            printf("Failed to allocate session context\n");
-            exit(-1);
-        }
-        if(i<numAxs-1){
-            status = cpaCySymInitSession(
-                cyHandles_g[i], interCallback, &sessionSetupData, &sessionCtxs_g[i]);
-        } else {
-            status = cpaCySymInitSession(
-                cyHandles_g[i], endCallback, &sessionSetupData, &sessionCtxs_g[i]);
-        }
-        if( status != CPA_STATUS_SUCCESS){
-            printf("Failed to init session: %d, error: %d\n", i, status);
-            exit(-1);
-        }
-    }
-    numAxs_g = numAxs;
-    printf("Chain Configured\n");
-}
-
 /*
  At chained offload startup
  how long should a host core go on making requests
@@ -377,7 +318,7 @@ static void singleCoreRequestTransformPoller(){
 
     while(!complete){
         for(int i=0; i<numAxs_g; i++){
-            // status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
+            status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
         }
     }
 }
