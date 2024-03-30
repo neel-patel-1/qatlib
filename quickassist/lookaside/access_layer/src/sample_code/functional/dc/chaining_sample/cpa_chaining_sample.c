@@ -116,7 +116,7 @@ static Cpa8U sampleCipherIv[] = {
 
 // Repeatedly encrypt for balanced chain
 int numAxs_g;
-CpaInstanceHandle *cyHandles_g;
+CpaInstanceHandle *cyInst_g;
 CpaCySymSessionCtx *sessionCtxs_g;
 
 // For pollers
@@ -295,12 +295,13 @@ static CpaStatus populateBufferList(CpaBufferList **testBufferList,
 
 
 static void spawnSingleAx(int numAxs){
-    OS_MALLOC(&cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
+    OS_MALLOC(&cyInst_g, sizeof(CpaInstanceHandle) * numAxs);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
 
     /* Check available instances */
     Cpa16U numInstances = 0;
     CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaInstanceInfo2 info = {0};
 
     status = cpaCyGetNumInstances(&numInstances);
     if(numAxs > numInstances){
@@ -309,7 +310,7 @@ static void spawnSingleAx(int numAxs){
     }
     if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
     {
-        status = cpaCyGetInstances(numAxs, cyHandles_g);
+        status = cpaCyGetInstances(numAxs, cyInst_g);
         if (status != CPA_STATUS_SUCCESS){
             printf("Failed to get Cy Instances\n");
             exit(-1);
@@ -317,7 +318,13 @@ static void spawnSingleAx(int numAxs){
     }
 
     for(int i=0; i<numAxs; i++){
-        CpaInstanceHandle singleCyInstHandle = cyHandles_g[i];
+        status = cpaCyInstanceGetInfo2(cyInst_g[i], &info);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("could not get instance info\n");
+            return status;
+        }
+        CpaInstanceHandle singleCyInstHandle = cyInst_g[i];
         CpaCySymSessionCtx sessionCtx = sessionCtxs_g[i];
         Cpa32U sessionCtxSize = 0;
         CpaCySymSessionSetupData sessionSetupData = {0};
@@ -419,8 +426,8 @@ static void spawnSingleAx(int numAxs){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
-        printf("polling instance at address: %p\n", cyHandles_g[i]);
-        status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
+        printf("polling instance at address: %p\n", cyInst_g[i]);
+        status = icp_sal_CyPollInstance(cyInst_g[i], 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
@@ -433,11 +440,11 @@ static void spawnSingleAx(int numAxs){
         pOpData->pIv = pIvBuffer;
         pOpData->ivLenInBytes = sizeof(sampleCipherIv);
         pOpData->cryptoStartSrcOffsetInBytes = 0;
-        pOpData->sessionCtx = sessionCtx;
+        pOpData->sessionCtx = sessionCtxs_g[i];
         pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
         printf("%d\n", pOpData->messageLenToCipherInBytes);
         status = cpaCySymPerformOp(
-            cyHandles_g[i],
+            cyInst_g[i],
             (void *)i,
             pOpData,
             pSrcBufferList_g[0],     /* source buffer list */
@@ -447,7 +454,7 @@ static void spawnSingleAx(int numAxs){
             printf("Failed to submit request: %d\n", status);
             exit(-1);
         }
-        while(icp_sal_CyPollInstance(cyHandles_g[i], 0) != CPA_STATUS_SUCCESS){}
+        while(icp_sal_CyPollInstance(cyInst_g[i], 0) != CPA_STATUS_SUCCESS){}
         printf("Request to ax %d submitted and rcvd\n", i);
     }
     numAxs_g = numAxs;
@@ -482,7 +489,7 @@ a
 
 static inline CpaInstanceHandle getNextRequestHandleRR(){
     int nextIdx = (lastIdx + 1) % numAxs_g;
-    CpaInstanceHandle instHandle = cyHandles_g[nextIdx];
+    CpaInstanceHandle instHandle = cyInst_g[nextIdx];
     return instHandle;
 }
 
@@ -498,7 +505,7 @@ static inline CpaInstanceHandle getNextRequestHandle(){
 static void pollingThread(void * info)
 {
     struct pollerInfo *pollerInfo = (struct pollerInfo *)info;
-    CpaInstanceHandle cyInstHandle = cyHandles_g[pollerInfo->idx];
+    CpaInstanceHandle cyInstHandle = cyInst_g[pollerInfo->idx];
     int idx = pollerInfo->idx;
     gPollingCys[idx] = 1;
     printf("Poller %d started\n", idx);
@@ -529,11 +536,11 @@ void startPollingAllAx()
 
     for(int i=0; i< numAxs_g; i++){
         gPollingCys[i] = 0;
-        status = cpaCyInstanceGetInfo2(cyHandles_g[i], &info2);
+        status = cpaCyInstanceGetInfo2(cyInst_g[i], &info2);
         if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
         {
             struct pollerInfo *pollerInfo = malloc(sizeof(struct pollerInfo));
-            pollerInfo->cyInstHandle = cyHandles_g[i];
+            pollerInfo->cyInstHandle = cyInst_g[i];
             pollerInfo->idx = i;
             /* Start thread to poll instance */
             sampleThreadCreate(&gPollingThreads[i], pollingThread, (void *)pollerInfo);
@@ -573,7 +580,7 @@ static void singleCoreRequestTransformPoller(){
         pOpData->sessionCtx = sessionCtxs_g[axIdx];
         printf("Submitting request %d to cy inst %d\n", bufIdx, axIdx);
         status = cpaCySymPerformOp(
-            cyHandles_g[axIdx],
+            cyInst_g[axIdx],
             (void *)arg,
             pOpData,
             pSrcBufferList_g[bufIdx],     /* source buffer list */
@@ -584,8 +591,8 @@ static void singleCoreRequestTransformPoller(){
             exit(-1);
         }
         bufIdx = (bufIdx + 1) % numBufs_g;
-        printf("polling cy inst %d at address: %p\n", axIdx, cyHandles_g[axIdx] );
-        while(icp_sal_CyPollInstance(cyHandles_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
+        printf("polling cy inst %d at address: %p\n", axIdx, cyInst_g[axIdx] );
+        while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
         printf("Request %d submitted\n", i);
     }
     printf("Requests Submitted\n");
@@ -620,7 +627,7 @@ static void startExp(){
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
         symSessionWaitForInflightReq(sessionCtxs_g[i]);
-        status = cpaCySymRemoveSession(cyHandles_g[i], sessionCtxs_g[i]);
+        status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
         if(status != CPA_STATUS_SUCCESS){
             printf("Failed to remove session: %d\n", status);
             exit(-1);
