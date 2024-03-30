@@ -150,11 +150,14 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
     }
 }
 
-CpaInstanceHandle singleCyInstHandle;
 
-static void spawnSingleAx(){
+
+static void spawnSingleAx(int numAxs){
+    OS_MALLOC(cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
+    OS_MALLOC(sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
+    CpaInstanceHandle singleCyInstHandle = cyHandles_g[0];
     CpaStatus status = CPA_STATUS_FAIL;
-    CpaCySymSessionCtx sessionCtx = NULL;
+    CpaCySymSessionCtx sessionCtx = sessionCtxs_g[0];
     Cpa32U sessionCtxSize = 0;
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaCySymStats64 symStats = {0};
@@ -383,7 +386,7 @@ static void startExp(){
     struct timespec start, end;
     complete = 0;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    spawnSingleAx();
+    spawnSingleAx(2);
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
     printf("Single Core Request Transform Time: %ld\n",
