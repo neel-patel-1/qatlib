@@ -433,7 +433,7 @@ static void spawnSingleAx(int numAxs){
         pOpData->pIv = pIvBuffer;
         pOpData->ivLenInBytes = sizeof(sampleCipherIv);
         pOpData->cryptoStartSrcOffsetInBytes = 0;
-        pOpData->sessionCtx = sessionCtxs_g[i];
+        pOpData->sessionCtx = sessionCtx;
         pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
         printf("%d\n", pOpData->messageLenToCipherInBytes);
         status = cpaCySymPerformOp(
@@ -452,6 +452,7 @@ static void spawnSingleAx(int numAxs){
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
+    exit(0);
 }
 
 /*
