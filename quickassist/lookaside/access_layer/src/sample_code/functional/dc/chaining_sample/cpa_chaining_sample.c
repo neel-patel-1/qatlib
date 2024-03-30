@@ -243,9 +243,15 @@ static void spawnSingleAx(int numAxs){
         printf("Failed to start Cy Session\n");
         exit(-1);
     }
+        status = icp_sal_CyPollInstance(singleCyInstHandle, 0);
+        if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+            printf("Failed to poll instance: %d\n", i);
+            exit(-1);
+        }
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
+    exit(0);
 }
 
 /*
