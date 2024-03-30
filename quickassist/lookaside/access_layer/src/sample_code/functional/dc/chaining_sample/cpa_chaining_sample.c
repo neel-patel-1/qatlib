@@ -89,17 +89,9 @@ volatile Cpa32U bufSize_g;
 extern struct timespec hashStartTime_g;
 extern volatile int test_complete;
 volatile Cpa16U numSamples_g;
+volatile CpaBoolean processingInFlights = CPA_FALSE;
 
-struct timespec *userDescStart;
-struct timespec *userDescEnd;
-struct timespec *userSubmitStart;
-struct timespec *userSubmitEnd;
-struct timespec *userSubmitHashStart;
-struct timespec *userSubmitHashEnd;
-struct timespec *userPollStart;
-struct timespec *userPollEnd;
-struct timespec sessionInitStart;
-struct timespec sessionInitEnd;
+#define MAX_AXS 10
 
 int requestCtr = 0;
 
@@ -121,7 +113,7 @@ CpaCySymSessionCtx *sessionCtxs_g;
 
 // For pollers
 int *gPollingThreads;
-int *gPollingCys;
+volatile int gPollingCys[MAX_AXS];
 struct pollerInfo {
     CpaInstanceHandle cyInstHandle;
     int idx;
@@ -530,7 +522,6 @@ void startPollingAllAx()
     CpaInstanceInfo2 info2 = {0};
     CpaStatus status = CPA_STATUS_SUCCESS;
     gPollingThreads = malloc(sizeof(sampleThread) * numAxs_g);
-    gPollingCys = malloc(sizeof(int) * numAxs_g);
 
     for(int i=0; i< numAxs_g; i++){
         gPollingCys[i] = 0;
@@ -632,7 +623,14 @@ static void startExp(){
 
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
-        symSessionWaitForInflightReq(sessionCtxs_g[i]);
+        CpaBoolean sessionInUse = CPA_TRUE;
+        processingInFlights = CPA_TRUE;
+        do{
+            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+        } while(sessionInUse);
+
+        // symSessionWaitForInflightReq(sessionCtxs_g[i]);
         status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
         if(status != CPA_STATUS_SUCCESS){
             printf("Failed to remove session: %d\n", status);
