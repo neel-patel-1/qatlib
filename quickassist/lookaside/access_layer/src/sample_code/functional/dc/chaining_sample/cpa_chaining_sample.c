@@ -150,8 +150,87 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
     }
 }
 
+CpaInstanceHandle singleCyInstHandle;
+
+static void spawnSingleAx(){
+    CpaStatus status = CPA_STATUS_FAIL;
+    CpaCySymSessionCtx sessionCtx = NULL;
+    Cpa32U sessionCtxSize = 0;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymStats64 symStats = {0};
+
+    sampleCyGetInstance(&singleCyInstHandle);
+    printf("getting cy instance\n");
+    if(singleCyInstHandle == NULL){
+        printf("Failed to get Cy Instance\n");
+        exit(-1);
+    }
+
+    status = cpaCyStartInstance(singleCyInstHandle);
+    if (singleCyInstHandle == NULL)
+    {
+        printf("Failed to get Cy Instance\n");
+        return CPA_STATUS_FAIL;
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * Set the address translation function for the instance
+         */
+        status = cpaCySetAddressTranslation(singleCyInstHandle, sampleVirtToPhys);
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /*
+         * If the instance is polled start the polling thread. Note that
+         * how the polling is done is implementation-dependent.
+         */
+
+
+        sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+        sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+        sessionSetupData.cipherSetupData.cipherAlgorithm =
+            CPA_CY_SYM_CIPHER_AES_CBC;
+        sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+        sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+            sizeof(sampleCipherKey);
+        sessionSetupData.cipherSetupData.cipherDirection =
+            CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+        //</snippet>
+
+        /* Determine size of session context to allocate */
+
+        status = cpaCySymSessionCtxGetSize(
+            singleCyInstHandle, &sessionSetupData, &sessionCtxSize);
+
+
+    }
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Allocate session context */
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Initialize the session */
+
+        status = cpaCySymInitSession(
+            singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
+    } else{
+        printf("Failed to initialize Cy Session\n");
+        exit(-1);
+    }
+    if(status != CPA_STATUS_SUCCESS){
+        printf("Failed to start Cy Session\n");
+        exit(-1);
+    }
+}
+
 static void spawnAxs(int numAxs){
     cyHandles_g = malloc(numAxs * sizeof(CpaInstanceHandle));
+    sessionCtxs_g = malloc(numAxs * sizeof(CpaCySymSessionCtx));
     CpaStatus status = CPA_STATUS_SUCCESS;
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaCySymSessionCtx sessionCtx = NULL;
@@ -200,7 +279,7 @@ static void spawnAxs(int numAxs){
                 cyHandles_g[i], endCallback, &sessionSetupData, &sessionCtxs_g[i]);
         }
         if( status != CPA_STATUS_SUCCESS){
-            printf("Failed to init session\n");
+            printf("Failed to init session: %d, error: %d\n", i, status);
             exit(-1);
         }
     }
@@ -304,7 +383,7 @@ static void startExp(){
     struct timespec start, end;
     complete = 0;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    spawnAxs(2);
+    spawnSingleAx();
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
     printf("Single Core Request Transform Time: %ld\n",
@@ -903,7 +982,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
         // Cpa8U *pDigestBuffer = (srcBufferLists[buf_idx]->pBuffers->pData) + fragmentSize;
         // pOpData->pDigestResult = pDigestBuffer;
         // status = cpaCySymPerformOp(
-        //     cyInstHandle,
+        //     singleCyInstHandle,
         //     NULL, /* data sent as is to the callback function*/
         //     pOpData,           /* operational data struct */
         //     srcBufferLists[buf_idx],       /* source buffer list */
