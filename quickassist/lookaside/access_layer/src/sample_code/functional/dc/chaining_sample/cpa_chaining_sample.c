@@ -324,14 +324,13 @@ static void pollingThread(void * info)
     gPollingCys[idx] = 1;
     while (gPollingCys[idx])
     {
-        printf("Polling cy inst %d at address: %p\n", idx, cyInstHandle);
+        // printf("Polling cy inst %d at address: %p\n", idx, cyInstHandle);
         CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
 
         if(  status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", status);
             exit(-1);
         }
-        OS_SLEEP(10);
     }
 
     sampleThreadExit();
@@ -420,23 +419,24 @@ static void startExp(){
     struct timespec start, end;
     CpaStatus status;
     complete = 0;
-    clock_gettime(CLOCK_MONOTONIC, &start);
     spawnSingleAx(1);
-
     startPollingAllAx();
-    while(1){}
-    return 1;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
+
     printf("Single Core Request Transform Time: %ld\n",
         (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
     for(int i=0; i<numAxs_g; i++){
+        symSessionWaitForInflightReq(sessionCtxs_g[i]);
         status = cpaCySymRemoveSession(cyHandles_g[i], sessionCtxs_g[i]);
         if(status != CPA_STATUS_SUCCESS){
             printf("Failed to remove session: %d\n", status);
             exit(-1);
         }
     }
+    exit(0);
 }
 
 #define CALGARY "/lib/firmware/calgary"

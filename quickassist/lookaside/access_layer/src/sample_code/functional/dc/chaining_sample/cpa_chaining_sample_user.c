@@ -130,6 +130,7 @@ int main(int argc, const char **argv)
         for(int i=1024; i<=pSize; i*=2){
             printf("%d %d\n", i, pSize / i);
             requestGen(i,pSize / i, 7000);
+            exit(0);
         }
     } else{
         if( useSw )
