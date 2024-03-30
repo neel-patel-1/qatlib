@@ -156,9 +156,9 @@ static void spawnSingleAx(int numAxs){
     OS_MALLOC(&cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
     for(int i=0; i<numAxs; i++){
-    CpaInstanceHandle singleCyInstHandle = cyHandles_g[0];
+    CpaInstanceHandle singleCyInstHandle = cyHandles_g[i];
     CpaStatus status = CPA_STATUS_FAIL;
-    CpaCySymSessionCtx sessionCtx = sessionCtxs_g[0];
+    CpaCySymSessionCtx sessionCtx = sessionCtxs_g[i];
     Cpa32U sessionCtxSize = 0;
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaCySymStats64 symStats = {0};
@@ -256,7 +256,7 @@ static void spawnAxs(int numAxs){
     sessionSetupData.cipherSetupData.cipherDirection =
         CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
     for(int i=0; i<numAxs; i++){
-        sampleCyGetInstance(&cyHandles_g[i]);
+        sampleCyGetInstance(&(cyHandles_g[i]));
         if(cyHandles_g[i] == NULL){
             printf("Failed to get Cy Instance\n");
             exit(-1);
