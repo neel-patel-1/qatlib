@@ -267,14 +267,12 @@ static void singleCoreRequestTransformPoller(){
     while(!complete){
         for(int i=0; i<rqB4Poll; i++){
             status = OS_MALLOC(&arg, sizeof(struct cbArg));
-            CpaInstanceHandle cyInstHandle =
-                getNextRequestHandle();
-            int axIdx = lastIdx; /* getNextRequestHandle Updated */
+            int axIdx = 0; /* getNextRequestHandle Updated */
             arg->mIdx = axIdx;
             arg->bufIdx = bufIdx;
             pOpData->sessionCtx = sessionCtxs_g[axIdx];
             status = cpaCySymPerformOp(
-                cyInstHandle,
+                cyHandles_g[axIdx],
                 (void *)arg,
                 pOpData,
                 pSrcBufferList_g[bufIdx],     /* source buffer list */
