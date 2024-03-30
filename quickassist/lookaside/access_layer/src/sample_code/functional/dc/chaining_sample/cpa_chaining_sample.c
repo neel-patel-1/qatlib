@@ -295,7 +295,7 @@ static CpaStatus populateBufferList(CpaBufferList **testBufferList,
 
 
 static void spawnSingleAx(int numAxs){
-    OS_MALLOC(&cyInst_g, sizeof(CpaInstanceHandle) * numAxs);
+    cyInst_g= qaeMemAlloc( sizeof(CpaInstanceHandle) * numAxs);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
 
     /* Check available instances */
