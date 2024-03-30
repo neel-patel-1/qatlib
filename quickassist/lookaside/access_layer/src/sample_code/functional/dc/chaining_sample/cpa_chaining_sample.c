@@ -434,34 +434,35 @@ static void spawnSingleAx(int numAxs){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
-        Cpa8U *pIvBuffer = NULL;
-        status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-        CpaCySymOpData *pOpData = NULL;
-        status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
-        pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-        pOpData->pIv = pIvBuffer;
-        pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-        pOpData->cryptoStartSrcOffsetInBytes = 0;
-        pOpData->sessionCtx = sessionCtxs_g[i];
-        pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
-        printf("%d\n", pOpData->messageLenToCipherInBytes);
-        status = cpaCySymPerformOp(
-            cyInst_g[i],
-            (void *)i,
-            pOpData,
-            pSrcBufferList_g[0],     /* source buffer list */
-            pDstBufferList_g[0],     /* destination buffer list */
-            NULL);
-        if(status != CPA_STATUS_SUCCESS){
-            printf("Failed to submit request: %d\n", status);
-            exit(-1);
-        }
-        while(icp_sal_CyPollInstance(cyInst_g[i], 0) != CPA_STATUS_SUCCESS){}
-        printf("Request to ax %d submitted and rcvd\n", i);
+        // Cpa8U *pIvBuffer = NULL;
+        // status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+        // CpaCySymOpData *pOpData = NULL;
+        // status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+        // pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+        // pOpData->pIv = pIvBuffer;
+        // pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+        // pOpData->cryptoStartSrcOffsetInBytes = 0;
+        // pOpData->sessionCtx = sessionCtx;
+        // pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+        // printf("%d\n", pOpData->messageLenToCipherInBytes);
+        // status = cpaCySymPerformOp(
+        //     cyInst_g[i],
+        //     (void *)(),
+        //     pOpData,
+        //     pSrcBufferList_g[0],     /* source buffer list */
+        //     pDstBufferList_g[0],     /* destination buffer list */
+        //     NULL);
+        // if(status != CPA_STATUS_SUCCESS){
+        //     printf("Failed to submit request: %d\n", status);
+        //     exit(-1);
+        // }
+        // while(icp_sal_CyPollInstance(cyInst_g[i], 0) != CPA_STATUS_SUCCESS){}
+        // printf("Request to ax %d submitted and rcvd\n", i);
+        sessionCtxs_g[i] = sessionCtx;
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
-    exit(0);
+    // exit(0);
 }
 
 /*
