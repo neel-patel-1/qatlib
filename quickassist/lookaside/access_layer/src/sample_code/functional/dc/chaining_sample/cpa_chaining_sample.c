@@ -173,6 +173,7 @@ static void spawnSingleAx(int numAxs){
     CpaCySymStats64 symStats = {0};
 
     sampleCyGetInstance(&singleCyInstHandle);
+    printf("Configuring cy inst at address: %p\n", singleCyInstHandle);
     printf("getting cy instance\n");
     if(singleCyInstHandle == NULL){
         printf("Failed to get Cy Instance\n");
@@ -251,7 +252,6 @@ static void spawnSingleAx(int numAxs){
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
-    exit(0);
 }
 
 /*
@@ -298,16 +298,18 @@ static inline CpaInstanceHandle getNextRequestHandle(){
 static void pollingThread(void * info)
 {
     struct pollerInfo *pollerInfo = (struct pollerInfo *)info;
-    CpaInstanceHandle cyInstHandle = pollerInfo->cyInstHandle;
+    CpaInstanceHandle cyInstHandle = cyHandles_g[pollerInfo->idx];
     int idx = pollerInfo->idx;
     gPollingCys[idx] = 1;
     while (gPollingCys[idx])
     {
         CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
+        printf("Polling cy inst %d at address: %p\n", idx, cyInstHandle);
         if(  status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", status);
             exit(-1);
         }
+        exit(0);
         OS_SLEEP(10);
     }
 
@@ -328,7 +330,7 @@ void startPollingAllAx()
         {
             struct pollerInfo *pollerInfo = malloc(sizeof(struct pollerInfo));
             pollerInfo->cyInstHandle = cyHandles_g[i];
-            pollerInfo->idx = i;
+            pollerInfo->idx = i+1;
             /* Start thread to poll instance */
             sampleThreadCreate(&gPollingThreads[i], pollingThread, (void *)pollerInfo);
         } else{
@@ -401,6 +403,7 @@ static void startExp(){
     spawnSingleAx(1);
 
     startPollingAllAx();
+    while(1){}
     return 1;
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
