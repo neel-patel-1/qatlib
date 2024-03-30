@@ -160,21 +160,36 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
 }
 
 
-
 static void spawnSingleAx(int numAxs){
     OS_MALLOC(&cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
+
+    /* Check available instances */
+    Cpa16U numInstances = 0;
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    status = cpaCyGetNumInstances(&numInstances);
+    if(numAxs > numInstances){
+        printf("Not enough instances\n");
+        exit(-1);
+    }
+    if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
+    {
+        status = cpaCyGetInstances(numAxs, cyHandles_g);
+        if (status != CPA_STATUS_SUCCESS){
+            printf("Failed to get Cy Instances\n");
+            exit(-1);
+        }
+    }
+
     for(int i=0; i<numAxs; i++){
     CpaInstanceHandle singleCyInstHandle = cyHandles_g[i];
-    CpaStatus status = CPA_STATUS_FAIL;
     CpaCySymSessionCtx sessionCtx = sessionCtxs_g[i];
     Cpa32U sessionCtxSize = 0;
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaCySymStats64 symStats = {0};
 
-    sampleCyGetInstance(&singleCyInstHandle);
     printf("Configuring cy inst at address: %p\n", singleCyInstHandle);
-    printf("getting cy instance\n");
     if(singleCyInstHandle == NULL){
         printf("Failed to get Cy Instance\n");
         exit(-1);
@@ -244,14 +259,27 @@ static void spawnSingleAx(int numAxs){
         printf("Failed to start Cy Session\n");
         exit(-1);
     }
+        printf("polling instance at address: %p\n", singleCyInstHandle);
         status = icp_sal_CyPollInstance(singleCyInstHandle, 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
+        printf("polling instance at address: %p\n", cyHandles_g[i]);
+        status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
+        if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+            printf("Failed to poll instance: %d\n", i);
+            exit(-1);
+        }
+        cpaCySymRemoveSession(singleCyInstHandle, sessionCtx);
+
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
+
+
+
+    exit(0);
 }
 
 /*
@@ -303,8 +331,9 @@ static void pollingThread(void * info)
     gPollingCys[idx] = 1;
     while (gPollingCys[idx])
     {
-        CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
         printf("Polling cy inst %d at address: %p\n", idx, cyInstHandle);
+        CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
+
         if(  status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", status);
             exit(-1);
@@ -330,7 +359,7 @@ void startPollingAllAx()
         {
             struct pollerInfo *pollerInfo = malloc(sizeof(struct pollerInfo));
             pollerInfo->cyInstHandle = cyHandles_g[i];
-            pollerInfo->idx = i+1;
+            pollerInfo->idx = i;
             /* Start thread to poll instance */
             sampleThreadCreate(&gPollingThreads[i], pollingThread, (void *)pollerInfo);
         } else{
