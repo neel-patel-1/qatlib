@@ -120,6 +120,7 @@ CpaInstanceHandle *cyHandles_g;
 CpaCySymSessionCtx *sessionCtxs_g;
 
 // For pollers
+int *gPollingThreads;
 int *gPollingCys;
 struct pollerInfo {
     CpaInstanceHandle cyInstHandle;
@@ -296,7 +297,11 @@ static void pollingThread(void * info)
     gPollingCys[idx] = 1;
     while (gPollingCys[idx])
     {
-        icp_sal_CyPollInstance(cyInstHandle, 0);
+        CpaStatus status = icp_sal_CyPollInstance(cyInstHandle, 0);
+        if(  status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+            printf("Failed to poll instance: %d\n", status);
+            exit(-1);
+        }
         OS_SLEEP(10);
     }
 
@@ -308,20 +313,25 @@ void startPollingAllAx()
     CpaInstanceInfo2 info2 = {0};
     CpaStatus status = CPA_STATUS_SUCCESS;
     gPollingThreads = malloc(sizeof(sampleThread) * numAxs_g);
+    gPollingCys = malloc(sizeof(int) * numAxs_g);
 
     for(int i=0; i< numAxs_g; i++){
-    status = cpaCyInstanceGetInfo2(cyHandles_g[i], &info2);
-    if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
-    {
-        /* Start thread to poll instance */
-        sampleThreadCreate(&gPollingThreads[i], sal_polling, cyInstHandle);
-    } else{
-        printf("Failed to get instance info\n");
-        exit(-1);
-    }
+        gPollingCys[i] = 0;
+        status = cpaCyInstanceGetInfo2(cyHandles_g[i], &info2);
+        if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
+        {
+            struct pollerInfo *pollerInfo = malloc(sizeof(struct pollerInfo));
+            pollerInfo->cyInstHandle = cyHandles_g[i];
+            pollerInfo->idx = i;
+            /* Start thread to poll instance */
+            sampleThreadCreate(&gPollingThreads[i], pollingThread, (void *)pollerInfo);
+        } else{
+            printf("Failed to get instance info\n");
+            exit(-1);
+        }
 
     }
-    }
+
 }
 
 /*
@@ -344,7 +354,6 @@ static void singleCoreRequestTransformPoller(){
     struct cbArg *arg=NULL;
 
 
-
     for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
         status = OS_MALLOC(&arg, sizeof(struct cbArg));
         int axIdx = 0; /* getNextRequestHandle Updated */
@@ -363,9 +372,9 @@ static void singleCoreRequestTransformPoller(){
     printf("Requests Submitted\n");
 
     // while(!complete){
-        for(int i=0; i<numAxs_g; i++){
-            status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
-        }
+        // for(int i=0; i<numAxs_g; i++){
+        //     status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
+        // }
     // }
 }
 
@@ -384,6 +393,9 @@ static void startExp(){
     complete = 0;
     clock_gettime(CLOCK_MONOTONIC, &start);
     spawnSingleAx(1);
+
+    startPollingAllAx();
+    return 1;
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
     printf("Single Core Request Transform Time: %ld\n",
