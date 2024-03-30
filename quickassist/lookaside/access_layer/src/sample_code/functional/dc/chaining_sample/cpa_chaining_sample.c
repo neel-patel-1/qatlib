@@ -103,14 +103,58 @@ struct timespec sessionInitEnd;
 
 int requestCtr = 0;
 
+// reuse key and iv
+static Cpa8U sampleCipherKey[] = {
+    0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
+    0xD7, 0x1B, 0xA4, 0xCA, 0xEC, 0xBD, 0x15, 0xE2, 0x52, 0x6A, 0x21, 0x0B,
+    0x41, 0x4C, 0x41, 0x4E, 0xA1, 0xAA, 0x01, 0x3F};
+
+/* Initialization vector */
+static Cpa8U sampleCipherIv[] = {
+    0x7E, 0x9B, 0x4C, 0x1D, 0x82, 0x4A, 0xC5, 0xDF, 0x99, 0x4C, 0xA1, 0x44,
+    0xAA, 0x8D, 0x37, 0x27};
 
 // Repeatedly encrypt for balanced chain
 int numAxs_g;
 CpaInstanceHandle *cyHandles_g;
 
+// Synchronize between host and
+volatile int complete;
+struct cbArg{
+    Cpa16U mIdx;
+    Cpa16U bufIdx;
+};
+static void interCallback(void *pCallbackTag, CpaStatus status){
+    struct cbArg *arg = (struct encChainArg *)pCallbackTag;
+    Cpa16U mId = arg->mIdx;
+    if(arg->bufIdx == (numBufs_g-1)){
+        printf("cb: %d complete\n", mId);
+    }
+}
+static void endCallback(void *pCallbackTag, CpaStatus status){
+    struct cbArg *arg = (struct encChainArg *)pCallbackTag;
+    Cpa16U mId = arg->mIdx;
+    if(arg->bufIdx == (numBufs_g-1)){
+        printf("cb: %d complete\n", mId);
+        complete = 1;
+    }
+}
+
 static void spawnAxs(int numAxs){
     cyHandles_g = malloc(numAxs * sizeof(CpaInstanceHandle));
     CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaCySymSessionSetupData sessionSetupData = {0};
+    CpaCySymSessionCtx sessionCtx = NULL;
+    Cpa32U sessionCtxSize = 0;
+    sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+    sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+    sessionSetupData.cipherSetupData.cipherAlgorithm =
+        CPA_CY_SYM_CIPHER_AES_CBC;
+    sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+    sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+        sizeof(sampleCipherKey);
+    sessionSetupData.cipherSetupData.cipherDirection =
+        CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
     for(int i=0; i<numAxs; i++){
         sampleCyGetInstance(&cyHandles_g[i]);
         if(cyHandles_g[i] == NULL){
@@ -122,8 +166,52 @@ static void spawnAxs(int numAxs){
             printf("Failed to start Cy Instance\n");
             exit(-1);
         }
+        status = cpaCySetAddressTranslation(cyHandles_g[i], sampleVirtToPhys);
+        if( status != CPA_STATUS_SUCCESS){
+            printf("Failed to set address translation\n");
+            exit(-1);
+        }
+        status = cpaCySymSessionCtxGetSize(
+            cyHandles_g[i], &sessionSetupData, &sessionCtxSize);
+        if( status != CPA_STATUS_SUCCESS){
+            printf("Failed to get session size\n");
+            exit(-1);
+        }
+        status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+        if( status != CPA_STATUS_SUCCESS){
+            printf("Failed to allocate session context\n");
+            exit(-1);
+        }
+        if(i<numAxs-1){
+            status = cpaCySymInitSession(
+                cyHandles_g[i], interCallback, &sessionSetupData, sessionCtx);
+        } else {
+            status = cpaCySymInitSession(
+                cyHandles_g[i], endCallback, &sessionSetupData, sessionCtx);
+        }
+        if( status != CPA_STATUS_SUCCESS){
+            printf("Failed to init session\n");
+            exit(-1);
+        }
     }
     numAxs_g = numAxs;
+}
+
+static void singleCoreRequestTransformPoller(){
+    while(!complete){
+        printf("Single req poll\n");
+    }
+}
+
+static void startExp(){
+    struct timespec start, end;
+    complete = 0;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    spawnAxs(1);
+    singleCoreRequestTransformPoller();
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    printf("Single Core Request Transform Time: %ld\n",
+        (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
 }
 
 #define CALGARY "/lib/firmware/calgary"
@@ -696,7 +784,10 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     pSrcBufferList_g = srcBufferLists;
     numBufs_g = numFragments;
 
-    sampleCyStartPolling(cyInstHandle);
+    // sampleCyStartPolling(cyInstHandle);
+    startExp();
+    printf("Test complete\n");
+    return 0;
 
     /* Run Tests */
     uint64_t exeTimes[testIter];
