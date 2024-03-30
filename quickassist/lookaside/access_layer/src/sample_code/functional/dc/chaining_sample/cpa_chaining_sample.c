@@ -81,14 +81,14 @@
 #include <immintrin.h>
 
 extern int gDebugParam;
-extern Cpa32U fragmentSize_g;
-extern CpaBufferList **pSrcBufferList_g;
-extern CpaBufferList **pDstBufferList_g;
-extern Cpa16U numBufs_g;
-extern Cpa32U bufSize_g;
+volatile Cpa32U fragmentSize_g;
+volatile Cpa16U numBufs_g = 0;
+CpaBufferList **pSrcBufferList_g = NULL;
+CpaBufferList **pDstBufferList_g = NULL;
+volatile Cpa32U bufSize_g;
 extern struct timespec hashStartTime_g;
 extern volatile int test_complete;
-extern Cpa16U numSamples_g;
+volatile Cpa16U numSamples_g;
 
 struct timespec *userDescStart;
 struct timespec *userDescEnd;
@@ -751,7 +751,11 @@ void symCallback(void *pCallbackTag,
                         const CpaCySymOp operationType,
                         void *pOpData,
                         CpaBufferList *pDstBuffer,
-                        CpaBoolean verifyResult);
+                        CpaBoolean verifyResult)
+{
+
+
+}
 
 CpaStatus decompressAndVerify(Cpa8U* orig, Cpa8U* hwCompBuf,
     Cpa8U* hwDigest, Cpa32U size){
