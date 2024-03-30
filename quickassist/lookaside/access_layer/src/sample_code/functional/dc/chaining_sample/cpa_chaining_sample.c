@@ -119,6 +119,14 @@ int numAxs_g;
 CpaInstanceHandle *cyHandles_g;
 CpaCySymSessionCtx *sessionCtxs_g;
 
+// For pollers
+int *gPollingCys;
+struct pollerInfo {
+    CpaInstanceHandle cyInstHandle;
+    int idx;
+    int rsvd;
+};
+
 // Round Robin Policy
 int lastIdx = 0;
 enum Policy{
@@ -280,6 +288,42 @@ static inline CpaInstanceHandle getNextRequestHandle(){
     }
 }
 
+static void pollingThread(void * info)
+{
+    struct pollerInfo *pollerInfo = (struct pollerInfo *)info;
+    CpaInstanceHandle cyInstHandle = pollerInfo->cyInstHandle;
+    int idx = pollerInfo->idx;
+    gPollingCys[idx] = 1;
+    while (gPollingCys[idx])
+    {
+        icp_sal_CyPollInstance(cyInstHandle, 0);
+        OS_SLEEP(10);
+    }
+
+    sampleThreadExit();
+}
+
+void startPollingAllAx()
+{
+    CpaInstanceInfo2 info2 = {0};
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    gPollingThreads = malloc(sizeof(sampleThread) * numAxs_g);
+
+    for(int i=0; i< numAxs_g; i++){
+    status = cpaCyInstanceGetInfo2(cyHandles_g[i], &info2);
+    if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
+    {
+        /* Start thread to poll instance */
+        sampleThreadCreate(&gPollingThreads[i], sal_polling, cyInstHandle);
+    } else{
+        printf("Failed to get instance info\n");
+        exit(-1);
+    }
+
+    }
+    }
+}
+
 /*
 Receive requests following some distribution. Dequeue the requests and submit them to the first accelerator
 
@@ -299,6 +343,8 @@ static void singleCoreRequestTransformPoller(){
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
     struct cbArg *arg=NULL;
 
+
+
     for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
         status = OS_MALLOC(&arg, sizeof(struct cbArg));
         int axIdx = 0; /* getNextRequestHandle Updated */
@@ -316,11 +362,11 @@ static void singleCoreRequestTransformPoller(){
     }
     printf("Requests Submitted\n");
 
-    while(!complete){
+    // while(!complete){
         for(int i=0; i<numAxs_g; i++){
             status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
         }
-    }
+    // }
 }
 
 /*
@@ -334,13 +380,21 @@ ax have been accumulated
 
 static void startExp(){
     struct timespec start, end;
+    CpaStatus status;
     complete = 0;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    spawnSingleAx(2);
+    spawnSingleAx(1);
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
     printf("Single Core Request Transform Time: %ld\n",
         (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
+    for(int i=0; i<numAxs_g; i++){
+        status = cpaCySymRemoveSession(cyHandles_g[i], sessionCtxs_g[i]);
+        if(status != CPA_STATUS_SUCCESS){
+            printf("Failed to remove session: %d\n", status);
+            exit(-1);
+        }
+    }
 }
 
 #define CALGARY "/lib/firmware/calgary"
