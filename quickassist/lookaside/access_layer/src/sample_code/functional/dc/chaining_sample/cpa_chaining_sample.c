@@ -594,9 +594,7 @@ static void singleCoreRequestTransformPoller(){
             exit(-1);
         }
         bufIdx = (bufIdx + 1) % numBufs_g;
-        printf("polling cy inst %d at address: %p\n", axIdx, cyInst_g[axIdx] );
         while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
-        printf("Request %d submitted\n", i);
     }
     printf("Requests Submitted\n");
     while(!complete){
@@ -618,12 +616,12 @@ static void startExp(){
     CpaStatus status;
     complete = 0;
     spawnSingleAx(1);
-    exit(0);
     // startPollingAllAx();
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    // singleCoreRequestTransformPoller();
+    singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
+
 
     printf("Single Core Request Transform Time: %ld\n",
         (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
@@ -636,6 +634,7 @@ static void startExp(){
             exit(-1);
         }
     }
+    printf("Test Complete\n");
     exit(0);
 }
 
