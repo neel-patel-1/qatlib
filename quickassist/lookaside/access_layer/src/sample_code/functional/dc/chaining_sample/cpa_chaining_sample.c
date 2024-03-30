@@ -205,6 +205,7 @@ static void spawnAxs(int numAxs){
         }
     }
     numAxs_g = numAxs;
+    printf("Chain Configured\n");
 }
 
 /*
@@ -248,8 +249,12 @@ static inline CpaInstanceHandle getNextRequestHandle(){
     }
 }
 
+/*
+Receive requests following some distribution. Dequeue the requests and submit them to the first accelerator
+
+*/
+
 static void singleCoreRequestTransformPoller(){
-    int rqB4Poll = 10 < numBufs_g ? 10 : numBufs_g;
     int bufIdx = 0;
     CpaStatus status;
     Cpa8U *pIvBuffer = NULL;
@@ -263,34 +268,43 @@ static void singleCoreRequestTransformPoller(){
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
     struct cbArg *arg=NULL;
 
+    for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
+        status = OS_MALLOC(&arg, sizeof(struct cbArg));
+        int axIdx = 0; /* getNextRequestHandle Updated */
+        arg->mIdx = axIdx;
+        arg->bufIdx = bufIdx;
+        pOpData->sessionCtx = sessionCtxs_g[axIdx];
+        status = cpaCySymPerformOp(
+            cyHandles_g[axIdx],
+            (void *)arg,
+            pOpData,
+            pSrcBufferList_g[bufIdx],     /* source buffer list */
+            pDstBufferList_g[bufIdx],     /* destination buffer list */
+            NULL);
+        bufIdx = (bufIdx + 1) % numBufs_g;
+    }
 
     while(!complete){
-        for(int i=0; i<rqB4Poll; i++){
-            status = OS_MALLOC(&arg, sizeof(struct cbArg));
-            int axIdx = 0; /* getNextRequestHandle Updated */
-            arg->mIdx = axIdx;
-            arg->bufIdx = bufIdx;
-            pOpData->sessionCtx = sessionCtxs_g[axIdx];
-            status = cpaCySymPerformOp(
-                cyHandles_g[axIdx],
-                (void *)arg,
-                pOpData,
-                pSrcBufferList_g[bufIdx],     /* source buffer list */
-                pDstBufferList_g[bufIdx],     /* destination buffer list */
-                NULL);
-            bufIdx = (bufIdx + 1) % numBufs_g;
-        }
         for(int i=0; i<numAxs_g; i++){
             status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
         }
     }
 }
 
+/*
+callback best location to fwd?
+- direct access to payload before/after restructuring
+- requires deciding whether to forward at each stage of the pipeline
+- host should decide when to batch / forward and must know how many fragments from a given
+ax have been accumulated
+- if 4
+*/
+
 static void startExp(){
     struct timespec start, end;
     complete = 0;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    spawnAxs(1);
+    spawnAxs(2);
     singleCoreRequestTransformPoller();
     clock_gettime(CLOCK_MONOTONIC, &end);
     printf("Single Core Request Transform Time: %ld\n",
