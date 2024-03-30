@@ -271,15 +271,9 @@ static void spawnSingleAx(int numAxs){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
-        cpaCySymRemoveSession(singleCyInstHandle, sessionCtx);
-
     }
     numAxs_g = numAxs;
     printf("Chain Configured\n");
-
-
-
-    exit(0);
 }
 
 /*
@@ -295,8 +289,7 @@ static void spawnSingleAx(int numAxs){
     We are somewhere between the library layer and application layer
     We can keep track of whatever book-keeping is necessary
 
-The benefit of the SPT is that it transparently solves the problem
-of determining when to poll from the main event loop in the code.
+
 
 The question we answer in this section is how the runtime or application
 can integrate the SPT into the processing loop to prevent
@@ -338,7 +331,6 @@ static void pollingThread(void * info)
             printf("Failed to poll instance: %d\n", status);
             exit(-1);
         }
-        exit(0);
         OS_SLEEP(10);
     }
 
