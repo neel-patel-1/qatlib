@@ -153,8 +153,9 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
 
 
 static void spawnSingleAx(int numAxs){
-    OS_MALLOC(cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
-    OS_MALLOC(sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
+    OS_MALLOC(&cyHandles_g, sizeof(CpaInstanceHandle) * numAxs);
+    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
+    for(int i=0; i<numAxs; i++){
     CpaInstanceHandle singleCyInstHandle = cyHandles_g[0];
     CpaStatus status = CPA_STATUS_FAIL;
     CpaCySymSessionCtx sessionCtx = sessionCtxs_g[0];
@@ -218,9 +219,13 @@ static void spawnSingleAx(int numAxs){
     if (CPA_STATUS_SUCCESS == status)
     {
         /* Initialize the session */
-
-        status = cpaCySymInitSession(
-            singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
+        if( i >= numAxs - 1){
+            status = cpaCySymInitSession(
+                singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
+        } else {
+            status = cpaCySymInitSession(
+                singleCyInstHandle, interCallback, &sessionSetupData, sessionCtx);
+        }
     } else{
         printf("Failed to initialize Cy Session\n");
         exit(-1);
@@ -229,6 +234,9 @@ static void spawnSingleAx(int numAxs){
         printf("Failed to start Cy Session\n");
         exit(-1);
     }
+    }
+    numAxs_g = numAxs;
+    printf("Chain Configured\n");
 }
 
 static void spawnAxs(int numAxs){
@@ -365,10 +373,11 @@ static void singleCoreRequestTransformPoller(){
             NULL);
         bufIdx = (bufIdx + 1) % numBufs_g;
     }
+    printf("Requests Submitted\n");
 
     while(!complete){
         for(int i=0; i<numAxs_g; i++){
-            status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
+            // status = icp_sal_CyPollInstance(cyHandles_g[i], 0);
         }
     }
 }
