@@ -400,7 +400,14 @@ static void singleCoreRequestTransformPoller(){
             pSrcBufferList_g[bufIdx],     /* source buffer list */
             pDstBufferList_g[bufIdx],     /* destination buffer list */
             NULL);
+        if(status != CPA_STATUS_SUCCESS){
+            printf("Failed to submit request: %d\n", status);
+            exit(-1);
+        }
         bufIdx = (bufIdx + 1) % numBufs_g;
+        printf("polling cy inst %d at address: %p\n", axIdx, cyHandles_g[axIdx] );
+        while(icp_sal_CyPollInstance(cyHandles_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
+        printf("Request %d submitted\n", i);
     }
     printf("Requests Submitted\n");
     while(!complete){
@@ -422,7 +429,7 @@ static void startExp(){
     CpaStatus status;
     complete = 0;
     spawnSingleAx(1);
-    startPollingAllAx();
+    // startPollingAllAx();
 
     clock_gettime(CLOCK_MONOTONIC, &start);
     singleCoreRequestTransformPoller();
