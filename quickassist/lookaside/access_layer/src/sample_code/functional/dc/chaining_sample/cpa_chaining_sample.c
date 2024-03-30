@@ -104,6 +104,27 @@ struct timespec sessionInitEnd;
 int requestCtr = 0;
 
 
+// Repeatedly encrypt for balanced chain
+int numAxs_g;
+CpaInstanceHandle *cyHandles_g;
+
+static void spawnAxs(int numAxs){
+    cyHandles_g = malloc(numAxs * sizeof(CpaInstanceHandle));
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    for(int i=0; i<numAxs; i++){
+        sampleCyGetInstance(&cyHandles_g[i]);
+        if(cyHandles_g[i] == NULL){
+            printf("Failed to get Cy Instance\n");
+            exit(-1);
+        }
+        status = cpaCyStartInstance(cyHandles_g[i]);
+        if( status != CPA_STATUS_SUCCESS){
+            printf("Failed to start Cy Instance\n");
+            exit(-1);
+        }
+    }
+    numAxs_g = numAxs;
+}
 
 #define CALGARY "/lib/firmware/calgary"
 #define FAIL_ON_CPA_FAIL(x)                                                             \
