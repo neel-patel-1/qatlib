@@ -625,8 +625,11 @@ static void startExp(){
     CpaStatus status;
 
     int rc;
+    int tflags = 0x1;
+    int xfer_size = 1024 * 1024;
+    int opcode = 0x3;
     struct accfg_ctx *dsa;
-    dsa = acctest_init(0x1);
+    dsa = acctest_init(tflags);
 
     int dev_id = -1;
     int wq_id = -1;
@@ -636,13 +639,15 @@ static void startExp(){
         printf("Failed to allocate dsa context\n");
         exit(-1);
     }
-    char *kvsData = (char *)malloc(4096);
-    if(kvsData == NULL){
-        printf("Failed to allocate kvsData\n");
+    struct task *tsk = (struct task*) malloc(sizeof(struct task));
+    tsk->opcode = opcode;
+	tsk->test_flags = tflags;
+	tsk->xfer_size = xfer_size;
+    tsk->src1 = aligned_alloc(4096, xfer_size);
+	if (!tsk->src1){
+        printf("Failed to allocate src1\n");
         exit(-1);
     }
-
-    rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
 
     return;
     printf("spawning %d axs\n", numAxs_g);
