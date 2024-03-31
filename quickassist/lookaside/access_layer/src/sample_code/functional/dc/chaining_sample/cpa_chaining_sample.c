@@ -80,6 +80,9 @@
 #include <stdbool.h>
 #include <immintrin.h>
 
+#include "dsa.h"
+#include "accel_test.h"
+
 extern int gDebugParam;
 volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
@@ -620,6 +623,30 @@ ax have been accumulated
 static void startExp(){
     struct timespec start, end;
     CpaStatus status;
+
+
+    struct accfg_ctx *ctx;
+    ctx = acctest_init(0x1);
+    struct acctest_context *dsa = acctest_init(0x1);
+    // Blocks on Page Fault
+
+    int rc;
+    int dev_id = -1;
+    int wq_id = -1;
+    int wq_type = 0;
+    if( 0 != acctest_alloc(dsa, 1, -1, -1) ){
+        printf("Failed to allocate dsa context\n");
+        exit(-1);
+    }
+    char *kvsData = (char *)malloc(4096);
+    if(kvsData == NULL){
+        printf("Failed to allocate kvsData\n");
+        exit(-1);
+    }
+
+    rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+
+    return;
     printf("spawning %d axs\n", numAxs_g);
     spawnAxs(chainLength_g);
     startPollingAllAxs();

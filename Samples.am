@@ -185,7 +185,7 @@ dc_stateless_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) libcpa_sample_code_s.la
 
 noinst_PROGRAMS += chaining_sample
 chaining_sample_SOURCES = \
-	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_chaining_sample_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample_user.c \
 	$(srcdir)/idxd/test/libaccfg.c \
 	$(srcdir)/idxd/test/core.c \
