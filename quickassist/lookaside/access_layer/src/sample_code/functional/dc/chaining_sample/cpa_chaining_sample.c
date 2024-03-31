@@ -158,7 +158,7 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
         pDstBufferList_g[bufIdx],     /* destination buffer list */
         NULL);
     if(bufIdx == (numBufs_g-1) && status == CPA_STATUS_SUCCESS){
-        printf("cb: %d buf: %d\n", mId);
+        printf("inter cb: %d\n", mId);
     }
 }
 static void endCallback(void *pCallbackTag, CpaStatus status){
@@ -168,6 +168,7 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
         complete = 1;
         // printf("cb: %d complete\n", mId);
     }
+
 }
 
 static void dcChainFreeBufferList(CpaBufferList **testBufferList)
@@ -615,6 +616,7 @@ ax have been accumulated
 static void startExp(){
     struct timespec start, end;
     CpaStatus status;
+    printf("spawning %d axs\n", numAxs_g);
     spawnAxs(chainLength_g);
     startPollingAllAxs();
 
@@ -647,6 +649,9 @@ static void startExp(){
         processingInFlights = CPA_TRUE;
         do{
             status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+            if(status == CPA_STATUS_SUCCESS){
+                printf("Out of order responses found\n");
+            }
             cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
         } while(sessionInUse);
 
