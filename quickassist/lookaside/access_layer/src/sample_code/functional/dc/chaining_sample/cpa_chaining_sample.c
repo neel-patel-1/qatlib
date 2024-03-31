@@ -572,6 +572,8 @@ Receive requests following some distribution. Dequeue the requests and submit th
 
 */
 
+Cpa64U total_oos = 0;
+
 static CpaStatus singleCoreRequestTransformPoller(){
     CpaStatus status;
     status = PHYS_CONTIG_ALLOC(&cIvBuffer, sizeof(sampleCipherIv));
@@ -627,6 +629,25 @@ retry:
         if( cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse)){
             return CPA_STATUS_FAIL;
         }
+        processingInFlights = CPA_TRUE;
+        Cpa64U num_ooos = 0;
+        do{
+            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+            if(status == CPA_STATUS_SUCCESS){
+                num_ooos++;
+                /*
+                    number of requests remaining on this accelerator's ring AFTER the response
+                    for the last fragment on the last accelerator was dequeued.
+
+                    Report the average number of requests remaining to process on a given accelerator
+                    after the entire offload completes.
+
+                    Do some accelerators have more requests remaining to process?
+                */
+            }
+            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+        } while(sessionInUse);
+        total_oos+=num_ooos;
     }
 }
 
@@ -650,10 +671,7 @@ static void startExp(){
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
-        if (singleCoreRequestTransformPoller() == CPA_STATUS_FAIL){
-            printf("Chained Op Unsuccessful\n");
-            exit(-1);
-        }
+        singleCoreRequestTransformPoller();
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -671,26 +689,28 @@ static void startExp(){
     {
         printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
     }
+    printf("Avg remaining requests per accelerator after offload completion: %lu\n", total_oos / numIterations / numAxs_g);
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
         CpaBoolean sessionInUse = CPA_TRUE;
-        processingInFlights = CPA_TRUE;
-        int num_ooos = 0;
-        do{
-            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
-            if(status == CPA_STATUS_SUCCESS){
-                // printf("Out of order responses found\n");
-                num_ooos++;
-            }
-            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
-        } while(sessionInUse);
-        printf("Num oos on ax %d: %d\n", i, num_ooos);
-        // symSessionWaitForInflightReq(sessionCtxs_g[i]);
-        status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
-        if(status != CPA_STATUS_SUCCESS){
-            printf("Failed to remove session: %d\n", status);
+        if( cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse) ){
+            /* should not get here */
+            printf("Fatal error: session still in use\n");
+            printf("Cleaning request ring and exiting...\n");
+            do{
+                cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+                status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+                if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+                    printf("Failed to poll instance: %d\n", status);
+                    exit(-1);
+                }
+            } while(sessionInUse);
+            status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
             exit(-1);
         }
+        // symSessionWaitForInflightReq(sessionCtxs_g[i]);
+        status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
+
     }
     printf("Test Complete\n");
 }
