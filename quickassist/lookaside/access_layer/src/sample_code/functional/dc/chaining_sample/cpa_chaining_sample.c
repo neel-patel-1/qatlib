@@ -644,10 +644,23 @@ static void startExp(){
 	tsk->test_flags = tflags;
 	tsk->xfer_size = xfer_size;
     tsk->src1 = aligned_alloc(4096, xfer_size);
+    tsk->pattern = 0x0123456789abcdef;
+    tsk->dst1 = aligned_alloc(4096, xfer_size);
+    tsk->pattern2 = 18364758544493064720;
+    tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
+    /* Implications of blocking/not-blocking on fault */
 	if (!tsk->src1){
         printf("Failed to allocate src1\n");
         exit(-1);
     }
+    if (!tsk->dst1){
+        printf("Failed to allocate dst1\n");
+        exit(-1);
+    }
+    memset_pattern(tsk->src1, tsk->pattern, xfer_size);
+    memset_pattern(tsk->dst1, tsk->pattern2, xfer_size);
+    acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+        (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
 
     return;
     printf("spawning %d axs\n", numAxs_g);
