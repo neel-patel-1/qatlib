@@ -124,12 +124,11 @@ int main(int argc, const char **argv)
     /* Legacy DC Chaining Sample Code */
     int rpsTest = 1;
     if(rpsTest){
-        printf("256KB Fragmentation BW\n");
         printf("FragmentSize NumFragments numAxs\n");
         int pSize = 1024 * 1024;
         for(int cLen = 1; cLen < 5; cLen++){
-            printf("%d %d %d\n", 32*1024, pSize / (32*1024), cLen);
-            requestGen(32*1024,pSize / (32*1024), cLen);
+            printf("%d %d %d\n", 1024*1024, pSize / (1024*1024), cLen);
+            requestGen(1024*1024,pSize / (1024*1024), cLen);
         }
         return 0;
         for(int i=pSize/4; i<=pSize; i*=2){
