@@ -572,7 +572,7 @@ Receive requests following some distribution. Dequeue the requests and submit th
 
 */
 
-static void singleCoreRequestTransformPoller(){
+static CpaStatus singleCoreRequestTransformPoller(){
     CpaStatus status;
     status = PHYS_CONTIG_ALLOC(&cIvBuffer, sizeof(sampleCipherIv));
     CpaCySymOpData *pOpData = NULL;
@@ -583,28 +583,50 @@ static void singleCoreRequestTransformPoller(){
     pOpData->cryptoStartSrcOffsetInBytes = 0;
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
     struct cbArg *arg=NULL;
+    int rr_polling_only_itrs = 0;
 
     int bufIdx = 0;
-    for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
-        status = OS_MALLOC(&arg, sizeof(struct cbArg));
-        int axIdx = 0; /* getNextRequestHandle Updated */
-        arg->mIdx = axIdx;
-        arg->bufIdx = bufIdx;
-        pOpData->sessionCtx = sessionCtxs_g[axIdx];
-retry:
-        status = cpaCySymPerformOp(
-            cyInst_g[axIdx],
-            (void *)arg,
-            pOpData,
-            pSrcBufferList_g[bufIdx],     /* source buffer list */
-            pDstBufferList_g[bufIdx],     /* destination buffer list */
-            NULL);
-        if(status == CPA_STATUS_RETRY){
-            goto retry;
-        }
-        bufIdx = (bufIdx + 1) % numBufs_g;
-    }
     while(!complete){
+        if(bufIdx < numBufs_g){
+            status = OS_MALLOC(&arg, sizeof(struct cbArg));
+            int nRetries = 0;
+            int axIdx = 0; /* getNextRequestHandle Updated */
+            arg->mIdx = axIdx;
+            arg->bufIdx = bufIdx;
+            pOpData->sessionCtx = sessionCtxs_g[axIdx];
+retry:
+            status = cpaCySymPerformOp(
+                cyInst_g[axIdx],
+                (void *)arg,
+                pOpData,
+                pSrcBufferList_g[bufIdx],     /* source buffer list */
+                pDstBufferList_g[bufIdx],     /* destination buffer list */
+                NULL);
+            if(status == CPA_STATUS_RETRY && nRetries < 3){
+                nRetries++;
+                goto retry;
+            }
+            bufIdx = (bufIdx + 1) % numBufs_g;
+        }
+        else{
+            // interested in how many round-robin iterations are spent forwarding requests
+            // after the entire batch has been submitted
+            rr_polling_only_itrs++;
+        }
+        for(int i=0; i< numAxs_g; i++){
+            status = icp_sal_CyPollInstance(cyInst_g[i], 0);
+            if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+                printf("Failed to poll instance: %d\n", status);
+                exit(-1);
+            }
+        }
+    }
+    for(int i=0; i<numAxs_g; i++){
+        CpaBoolean sessionInUse = CPA_TRUE;
+        processingInFlights = CPA_TRUE;
+        if( cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse)){
+            return CPA_STATUS_FAIL;
+        }
     }
 }
 
@@ -628,7 +650,10 @@ static void startExp(){
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
-        singleCoreRequestTransformPoller();
+        if (singleCoreRequestTransformPoller() == CPA_STATUS_FAIL){
+            printf("Chained Op Unsuccessful\n");
+            exit(-1);
+        }
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
 
@@ -646,19 +671,20 @@ static void startExp(){
     {
         printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
     }
-
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
         CpaBoolean sessionInUse = CPA_TRUE;
         processingInFlights = CPA_TRUE;
+        int num_ooos = 0;
         do{
             status = icp_sal_CyPollInstance(cyInst_g[i], 1);
             if(status == CPA_STATUS_SUCCESS){
-                printf("Out of order responses found\n");
+                // printf("Out of order responses found\n");
+                num_ooos++;
             }
             cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
         } while(sessionInUse);
-
+        printf("Num oos on ax %d: %d\n", i, num_ooos);
         // symSessionWaitForInflightReq(sessionCtxs_g[i]);
         status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
         if(status != CPA_STATUS_SUCCESS){
