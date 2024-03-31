@@ -129,7 +129,7 @@ int main(int argc, const char **argv)
         int pSize = 1024 * 1024;
         for(int cLen = 1; cLen < 5; cLen++){
             printf("%d %d %d\n", 32*1024, pSize / (32*1024), cLen);
-            requestGen(32*1024,pSize / (32*1024), cLen);
+            requestGen(32*1024,1, cLen);
         }
         return 0;
         for(int i=pSize/4; i<=pSize; i*=2){

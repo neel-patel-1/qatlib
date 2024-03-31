@@ -153,7 +153,7 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
     status = OS_MALLOC(&cArg, sizeof(struct cbArg));
     cArg->mIdx = mId+1;
     cArg->bufIdx = bufIdx;
-    // printf("inter cb: submit buf %d to %d\n", bufIdx, mId+1);
+    printf("inter cb: submit buf %d to %d\n", bufIdx, mId+1);
     status = cpaCySymPerformOp(
         cyInst_g[mId+1],
         (void *)(cArg),
@@ -168,6 +168,8 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
 static void endCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
+    Cpa16U bufIdx = arg->bufIdx;
+    printf("end cb: got buf %d at CpaInst %d\n", bufIdx, mId);
     if(arg->bufIdx == (numBufs_g-1)){
         complete = 1;
         // printf("cb: %d complete\n", mId);
@@ -396,14 +398,14 @@ static void spawnAxs(int numAxs){
         {
             /* Allocate session context */
             status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-            printf("Address of sessionctx %p\n", sessionCtx);
-            printf("Address of sessionCtxs_g %p\n", sessionCtxs_g[i]);
+            // printf("Address of sessionctx %p\n", sessionCtx);
+            // printf("Address of sessionCtxs_g %p\n", sessionCtxs_g[i]);
         }
 
         if (CPA_STATUS_SUCCESS == status)
         {
             /* Initialize the session */
-            if( i >= numAxs - 1){
+            if( i == (numAxs - 1)){
                 status = cpaCySymInitSession(
                     singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
             } else {
@@ -428,7 +430,7 @@ static void spawnAxs(int numAxs){
                 exit(-1);
             }
                 status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
-            printf("Meta Size: %d\n", bufferMetaSize);
+            // printf("Meta Size: %d\n", bufferMetaSize);
             for(int i=0; i<numBufs_g;i++){
                 dcChainBuildBufferList(&pSrcBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
                 dcChainBuildBufferList(&pDstBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
@@ -620,11 +622,11 @@ ax have been accumulated
 static void startExp(){
     struct timespec start, end;
     CpaStatus status;
-    printf("spawning %d axs\n", numAxs_g);
     spawnAxs(chainLength_g);
+    printf("spawning %d axs\n", numAxs_g);
     startPollingAllAxs();
 
-    int numIterations = 10000;
+    int numIterations = 1;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
