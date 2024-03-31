@@ -616,39 +616,33 @@ retry:
             rr_polling_only_itrs++;
         }
         for(int i=0; i< numAxs_g; i++){
+            do{
             status = icp_sal_CyPollInstance(cyInst_g[i], 0);
-            if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
-                printf("Failed to poll instance: %d\n", status);
-                exit(-1);
-            }
+            } while(status != CPA_STATUS_SUCCESS);
+            // if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+            //     printf("Failed to poll instance: %d\n", status);
+            //     exit(-1);
+            // }
         }
     }
-    for(int i=0; i<numAxs_g; i++){
-        CpaBoolean sessionInUse = CPA_TRUE;
-        processingInFlights = CPA_TRUE;
-        if( cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse)){
-            return CPA_STATUS_FAIL;
-        }
-        processingInFlights = CPA_TRUE;
-        Cpa64U num_ooos = 0;
-        do{
-            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
-            if(status == CPA_STATUS_SUCCESS){
-                num_ooos++;
-                /*
-                    number of requests remaining on this accelerator's ring AFTER the response
-                    for the last fragment on the last accelerator was dequeued.
+    // for(int i=0; i<numAxs_g; i++){
+    //     CpaBoolean sessionInUse = CPA_TRUE;
+    //     Cpa64U num_ooos = 0;
+    //     do{
+    //         status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+    //         if(status == CPA_STATUS_SUCCESS){
+    //             num_ooos++;
+    //             /*
+    //                 number of requests remaining on this accelerator's ring AFTER the response
+    //                 for the last fragment on the last accelerator was dequeued.
 
-                    Report the average number of requests remaining to process on a given accelerator
-                    after the entire offload completes.
-
-                    Do some accelerators have more requests remaining to process?
-                */
-            }
-            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
-        } while(sessionInUse);
-        total_oos+=num_ooos;
-    }
+    //                 Do some accelerators have more requests remaining to process than others?
+    //             */
+    //         }
+    //         cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+    //     } while(sessionInUse);
+    //     total_oos+=num_ooos;
+    // }
 }
 
 /*
@@ -689,6 +683,10 @@ static void startExp(){
     {
         printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
     }
+    /*
+        Report the average number of requests remaining to process on a given accelerator
+        after the entire offload completes.
+    */
     printf("Avg remaining requests per accelerator after offload completion: %lu\n", total_oos / numIterations / numAxs_g);
     for(int i=0; i<numAxs_g; i++){
         gPollingCys[i] = 0;
