@@ -125,9 +125,12 @@ int main(int argc, const char **argv)
     int rpsTest = 1;
     if(rpsTest){
         printf("256KB Fragmentation BW\n");
-        printf("FragmentSize,NumFragments\n");
+        printf("FragmentSize NumFragments numAxs\n");
         int pSize = 1024 * 1024;
-        requestGen(32*1024,pSize / (32*1024), 2);
+        for(int cLen = 1; cLen < 5; cLen++){
+            printf("%d %d %d\n", 32*1024, pSize / (32*1024), cLen);
+            requestGen(32*1024,pSize / (32*1024), cLen);
+        }
         return 0;
         for(int i=pSize/4; i<=pSize; i*=2){
             printf("%d %d\n", i, pSize / i);

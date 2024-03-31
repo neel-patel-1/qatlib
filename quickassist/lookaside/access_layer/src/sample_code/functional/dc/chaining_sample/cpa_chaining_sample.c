@@ -149,16 +149,20 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
     pOpData->sessionCtx = sessionCtxs_g[mId];
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
 
-    arg->mIdx++;
+    struct cbArg *cArg = NULL;
+    status = OS_MALLOC(&cArg, sizeof(struct cbArg));
+    cArg->mIdx = mId+1;
+    cArg->bufIdx = bufIdx;
+    // printf("inter cb: submit buf %d to %d\n", bufIdx, mId+1);
     status = cpaCySymPerformOp(
         cyInst_g[mId+1],
-        (void *)(arg),
+        (void *)(cArg),
         pOpData,
         pSrcBufferList_g[bufIdx],     /* source buffer list */
         pDstBufferList_g[bufIdx],     /* destination buffer list */
         NULL);
     if(bufIdx == (numBufs_g-1) && status == CPA_STATUS_SUCCESS){
-        printf("inter cb: %d\n", mId);
+        // printf("inter cb: %d completed fwding\n", mId);
     }
 }
 static void endCallback(void *pCallbackTag, CpaStatus status){
@@ -434,13 +438,13 @@ static void spawnAxs(int numAxs){
             }
 
         }
-        printf("polling instance at address: %p\n", singleCyInstHandle);
+        // printf("polling instance at address: %p\n", singleCyInstHandle);
         status = icp_sal_CyPollInstance(singleCyInstHandle, 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
-        printf("polling instance at address: %p\n", cyInst_g[i]);
+        // printf("polling instance at address: %p\n", cyInst_g[i]);
         status = icp_sal_CyPollInstance(cyInst_g[i], 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", i);
@@ -473,7 +477,7 @@ static void spawnAxs(int numAxs){
         sessionCtxs_g[i] = sessionCtx;
     }
     numAxs_g = numAxs;
-    printf("Chain Configured\n");
+    // printf("Chain Configured\n");
     // exit(0);
 }
 
