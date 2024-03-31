@@ -627,16 +627,7 @@ retry:
         CpaBoolean sessionInUse = CPA_TRUE;
         Cpa64U num_ooos = 0;
         do{
-            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
-            if(status == CPA_STATUS_SUCCESS){
-                num_ooos++;
-                /*
-                    number of requests remaining on this accelerator's ring AFTER the response
-                    for the last fragment on the last accelerator was dequeued.
-
-                    Do some accelerators have more requests remaining to process than others?
-                */
-            }
+            status = icp_sal_CyPollInstance(cyInst_g[i], 0);
             cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
         } while(sessionInUse);
         total_oos+=num_ooos;
