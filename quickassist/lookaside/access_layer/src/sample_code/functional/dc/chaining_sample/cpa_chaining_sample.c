@@ -147,6 +147,7 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
     Cpa16U mId = arg->mIdx;
     if(arg->bufIdx == (numBufs_g-1)){
         complete = 1;
+        // printf("cb: %d complete\n", mId);
     }
 }
 
@@ -285,7 +286,7 @@ static CpaStatus populateBufferList(CpaBufferList **testBufferList,
 
 
 
-static void spawnSingleAx(int numAxs){
+static void spawnAxs(int numAxs){
     cyInst_g= qaeMemAlloc( sizeof(CpaInstanceHandle) * numAxs);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * numAxs);
 
@@ -517,7 +518,7 @@ static void pollingThread(void * info)
     sampleThreadExit();
 }
 
-void startPollingAllAx()
+void startPollingAllAxs()
 {
     CpaInstanceInfo2 info2 = {0};
     CpaStatus status = CPA_STATUS_SUCCESS;
@@ -567,7 +568,8 @@ static void singleCoreRequestTransformPoller(){
         arg->mIdx = axIdx;
         arg->bufIdx = bufIdx;
         pOpData->sessionCtx = sessionCtxs_g[axIdx];
-retry:  status = cpaCySymPerformOp(
+retry:
+        status = cpaCySymPerformOp(
             cyInst_g[axIdx],
             (void *)arg,
             pOpData,
@@ -595,13 +597,13 @@ ax have been accumulated
 static void startExp(){
     struct timespec start, end;
     CpaStatus status;
-    complete = 0;
-    spawnSingleAx(1);
-    startPollingAllAx();
+    spawnAxs(1);
+    startPollingAllAxs();
 
-    int numIterations = 10000;
+    int numIterations = 2;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
+        complete = 0;
         singleCoreRequestTransformPoller();
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
@@ -618,7 +620,7 @@ static void startExp(){
     }
     else
     {
-        printf("BW(MB/s): %lu\n", numBufs_g * bufSize_g / us);
+        printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
     }
 
     for(int i=0; i<numAxs_g; i++){
@@ -1073,7 +1075,6 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
 
     // sampleCyStartPolling(cyInstHandle);
     startExp();
-    printf("Test complete\n");
     return 0;
 
     /* Run Tests */
