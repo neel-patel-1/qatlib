@@ -146,7 +146,7 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
     pOpData->pIv = cIvBuffer;
     pOpData->ivLenInBytes = sizeof(sampleCipherIv);
     pOpData->cryptoStartSrcOffsetInBytes = 0;
-    pOpData->sessionCtx = sessionCtxs_g[mId];
+    pOpData->sessionCtx = sessionCtxs_g[mId+1];
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
 
     struct cbArg *cArg = NULL;
