@@ -115,7 +115,7 @@ CpaInstanceHandle *cyInst_g;
 CpaCySymSessionCtx *sessionCtxs_g;
 
 // For pollers
-int *gPollingThreads;
+volatile int gPollingThreads[MAX_AXS];
 volatile int gPollingCys[MAX_AXS];
 struct pollerInfo {
     CpaInstanceHandle cyInstHandle;
@@ -169,7 +169,7 @@ static void endCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
     Cpa16U bufIdx = arg->bufIdx;
-    printf("end cb: got buf %d at CpaInst %d\n", bufIdx, mId);
+    printf("thread:%ld end cb: got buf %d at CpaInst %d\n", pthread_self(), bufIdx, mId);
     if(arg->bufIdx == (numBufs_g-1)){
         complete = 1;
         // printf("cb: %d complete\n", mId);
@@ -406,9 +406,11 @@ static void spawnAxs(int numAxs){
         {
             /* Initialize the session */
             if( i == (numAxs - 1)){
+                printf("Tail Callback Fn: %i\n", i);
                 status = cpaCySymInitSession(
                     singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
             } else {
+                printf("Intermediate Accel Cb:%d", i);
                 status = cpaCySymInitSession(
                     singleCyInstHandle, interCallback, &sessionSetupData, sessionCtx);
             }
@@ -548,7 +550,6 @@ void startPollingAllAxs()
 {
     CpaInstanceInfo2 info2 = {0};
     CpaStatus status = CPA_STATUS_SUCCESS;
-    gPollingThreads = malloc(sizeof(sampleThread) * numAxs_g);
 
     for(int i=0; i< numAxs_g; i++){
         gPollingCys[i] = 0;
@@ -558,6 +559,11 @@ void startPollingAllAxs()
             struct pollerInfo *pollerInfo = malloc(sizeof(struct pollerInfo));
             pollerInfo->cyInstHandle = cyInst_g[i];
             pollerInfo->idx = i;
+            if(i == numAxs_g - 1){
+                printf("Spawning end cb thread:%ld\n", gPollingThreads[i]);
+            } else{
+                printf("Spawning inter cb thread:%ld\n", gPollingThreads[i]);
+            }
             /* Start thread to poll instance */
             sampleThreadCreate(&gPollingThreads[i], pollingThread, (void *)pollerInfo);
         } else{

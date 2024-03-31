@@ -127,7 +127,8 @@ int main(int argc, const char **argv)
         printf("256KB Fragmentation BW\n");
         printf("FragmentSize NumFragments numAxs\n");
         int pSize = 1024 * 1024;
-        for(int cLen = 1; cLen < 5; cLen++){
+        // requestGen(64*1024,pSize / (64 * 1024), 1);
+        for(int cLen = 3; cLen < 5; cLen++){
             printf("%d %d %d\n", 32*1024, pSize / (32*1024), cLen);
             requestGen(32*1024,1, cLen);
         }
