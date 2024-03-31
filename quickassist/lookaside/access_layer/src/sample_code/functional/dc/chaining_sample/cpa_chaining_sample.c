@@ -624,17 +624,15 @@ static void startExp(){
     struct timespec start, end;
     CpaStatus status;
 
-
-    struct accfg_ctx *ctx;
-    ctx = acctest_init(0x1);
-    struct acctest_context *dsa = acctest_init(0x1);
-    // Blocks on Page Fault
-
     int rc;
+    struct accfg_ctx *dsa;
+    dsa = acctest_init(0x1);
+
     int dev_id = -1;
     int wq_id = -1;
     int wq_type = 0;
-    if( 0 != acctest_alloc(dsa, 1, -1, -1) ){
+    rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+    if (rc < 0) {
         printf("Failed to allocate dsa context\n");
         exit(-1);
     }
