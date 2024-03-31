@@ -83,6 +83,7 @@
 extern int gDebugParam;
 volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
+volatile Cpa16U chainLength_g = 0;
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
 volatile Cpa32U bufSize_g;
@@ -105,6 +106,8 @@ static Cpa8U sampleCipherKey[] = {
 static Cpa8U sampleCipherIv[] = {
     0x7E, 0x9B, 0x4C, 0x1D, 0x82, 0x4A, 0xC5, 0xDF, 0x99, 0x4C, 0xA1, 0x44,
     0xAA, 0x8D, 0x37, 0x27};
+
+static Cpa8U *cIvBuffer = NULL;
 
 // Repeatedly encrypt for balanced chain
 int numAxs_g;
@@ -137,10 +140,26 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
     Cpa16U bufIdx = arg->bufIdx;
-    if(arg->bufIdx == (numBufs_g-1)){
-        printf("cb: %d complete\n", mId);
+    CpaCySymOpData *pOpData = NULL;
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->pIv = cIvBuffer;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->sessionCtx = sessionCtxs_g[mId];
+    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+
+    arg->mIdx++;
+    status = cpaCySymPerformOp(
+        cyInst_g[mId+1],
+        (void *)(arg),
+        pOpData,
+        pSrcBufferList_g[bufIdx],     /* source buffer list */
+        pDstBufferList_g[bufIdx],     /* destination buffer list */
+        NULL);
+    if(bufIdx == (numBufs_g-1) && status == CPA_STATUS_SUCCESS){
+        printf("cb: %d buf: %d\n", mId);
     }
-    printf("cb: %d buf: %d\n", mId);
 }
 static void endCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
@@ -550,12 +569,11 @@ Receive requests following some distribution. Dequeue the requests and submit th
 
 static void singleCoreRequestTransformPoller(){
     CpaStatus status;
-    Cpa8U *pIvBuffer = NULL;
-    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+    status = PHYS_CONTIG_ALLOC(&cIvBuffer, sizeof(sampleCipherIv));
     CpaCySymOpData *pOpData = NULL;
     status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
     pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-    pOpData->pIv = pIvBuffer;
+    pOpData->pIv = cIvBuffer;
     pOpData->ivLenInBytes = sizeof(sampleCipherIv);
     pOpData->cryptoStartSrcOffsetInBytes = 0;
     pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
@@ -597,10 +615,10 @@ ax have been accumulated
 static void startExp(){
     struct timespec start, end;
     CpaStatus status;
-    spawnAxs(1);
+    spawnAxs(chainLength_g);
     startPollingAllAxs();
 
-    int numIterations = 2;
+    int numIterations = 10000;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
@@ -1072,6 +1090,7 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
         /* */
 
     numBufs_g = numFragments;
+    chainLength_g = testIter;
 
     // sampleCyStartPolling(cyInstHandle);
     startExp();
