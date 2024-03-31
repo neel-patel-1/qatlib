@@ -640,11 +640,6 @@ static void startExp(){
         exit(-1);
     }
     struct task *tsk = acctest_alloc_task(dsa);
-    memset(tsk, 0, sizeof(struct task));
-    tsk->comp = aligned_alloc(32, sizeof(struct completion_record));
-    memset(tsk->comp, 0, sizeof(struct completion_record));
-    void *wq_reg;
-
 
     tsk->opcode = opcode;
 	tsk->test_flags = tflags;
