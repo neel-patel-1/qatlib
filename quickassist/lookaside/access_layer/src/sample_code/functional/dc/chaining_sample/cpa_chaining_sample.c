@@ -616,33 +616,31 @@ retry:
             rr_polling_only_itrs++;
         }
         for(int i=0; i< numAxs_g; i++){
-            do{
             status = icp_sal_CyPollInstance(cyInst_g[i], 0);
-            } while(status != CPA_STATUS_SUCCESS);
-            // if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
-            //     printf("Failed to poll instance: %d\n", status);
-            //     exit(-1);
-            // }
+            if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
+                printf("Failed to poll instance: %d\n", status);
+                exit(-1);
+            }
         }
     }
-    // for(int i=0; i<numAxs_g; i++){
-    //     CpaBoolean sessionInUse = CPA_TRUE;
-    //     Cpa64U num_ooos = 0;
-    //     do{
-    //         status = icp_sal_CyPollInstance(cyInst_g[i], 1);
-    //         if(status == CPA_STATUS_SUCCESS){
-    //             num_ooos++;
-    //             /*
-    //                 number of requests remaining on this accelerator's ring AFTER the response
-    //                 for the last fragment on the last accelerator was dequeued.
+    for(int i=0; i<numAxs_g; i++){
+        CpaBoolean sessionInUse = CPA_TRUE;
+        Cpa64U num_ooos = 0;
+        do{
+            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+            if(status == CPA_STATUS_SUCCESS){
+                num_ooos++;
+                /*
+                    number of requests remaining on this accelerator's ring AFTER the response
+                    for the last fragment on the last accelerator was dequeued.
 
-    //                 Do some accelerators have more requests remaining to process than others?
-    //             */
-    //         }
-    //         cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
-    //     } while(sessionInUse);
-    //     total_oos+=num_ooos;
-    // }
+                    Do some accelerators have more requests remaining to process than others?
+                */
+            }
+            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+        } while(sessionInUse);
+        total_oos+=num_ooos;
+    }
 }
 
 /*
@@ -657,7 +655,7 @@ ax have been accumulated
 static void startExp(){
     struct timespec start, end;
     CpaStatus status;
-    printf("spawning %d axs\n", numAxs_g);
+    printf("spawning %d axs\n", chainLength_g);
     spawnAxs(chainLength_g);
     // startPollingAllAxs();
 
