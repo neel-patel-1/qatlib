@@ -628,9 +628,8 @@ static void startExp(){
     int tflags = 0x1;
     int xfer_size = 1024 * 1024;
     int opcode = 0x3;
-    struct accfg_ctx *dsa;
-    struct acctest_context * ctx = malloc(sizeof(struct acctest_context));
-    dsa = acctest_init(tflags);
+    struct acctest_context * dsa = acctest_init(tflags);
+    dsa->dev_type = ACCFG_DEVICE_DSA;
 
     int dev_id = -1;
     int wq_id = -1;
@@ -640,18 +639,12 @@ static void startExp(){
         printf("Failed to allocate dsa context\n");
         exit(-1);
     }
-    struct task *tsk = (struct task*) malloc(sizeof(struct task));
+    struct task *tsk = acctest_alloc_task(dsa);
     memset(tsk, 0, sizeof(struct task));
     tsk->comp = aligned_alloc(32, sizeof(struct completion_record));
     memset(tsk->comp, 0, sizeof(struct completion_record));
     void *wq_reg;
 
-    // Are any of these likely scenarios in a real application
-    // #define TEST_FLAGS_BOF     0x1     /* Block on page faults */
-    // #define TEST_FLAGS_WAIT    0x4     /* Wait in kernel */
-    // #define TEST_FLAGS_PREF    0x8     /* Pre-fault the buffers */
-    // #define TEST_FLAGS_CPFLT   0x10    /* Gen fault on completion record */
-    // #define TEST_FLAGS_BTFLT   0x20    /* Gen fault on batch desc. list */
 
     tsk->opcode = opcode;
 	tsk->test_flags = tflags;
@@ -676,8 +669,8 @@ static void startExp(){
         (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
     tsk->desc->completion_addr = (uint64_t)(tsk->comp);
     tsk->comp->status = 0;
-    acctest_desc_submit(ctx, tsk->desc);
-    dsa_wait_memcpy(ctx, tsk->comp);
+    acctest_desc_submit(dsa, tsk->desc);
+    dsa_wait_memcpy(dsa, tsk->comp);
 
     if (tsk->comp->status != DSA_COMP_SUCCESS){
         printf("Failed to complete task\n");
@@ -688,7 +681,7 @@ static void startExp(){
         printf("Failed to validate task\n");
         exit(-1);
     }
-    acctest_free_task(ctx);
+    acctest_free_task(dsa);
     return;
 
 
