@@ -622,7 +622,7 @@ static void startExp(){
     CpaStatus status;
     printf("spawning %d axs\n", numAxs_g);
     spawnAxs(chainLength_g);
-    startPollingAllAxs();
+    // startPollingAllAxs();
 
     int numIterations = 10000;
     clock_gettime(CLOCK_MONOTONIC, &start);
