@@ -1,0 +1,5 @@
+__accfg_test_skip: explicit skip test_libaccfg:918
+device is active, skipping tests
+libaccfg: accfg_unref: context 0x56363a28d2c0 released
+attempted: 1 skipped: 1
+SKIP libaccfg (exit status: 77)

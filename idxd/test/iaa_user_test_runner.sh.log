@@ -1,0 +1,144 @@
+++ dirname ./iaa_user_test_runner.sh
++ . ./common
+++ export SIZE_1=1
+++ SIZE_1=1
+++ export SIZE_512=512
+++ SIZE_512=512
+++ export SIZE_1K=1024
+++ SIZE_1K=1024
+++ export SIZE_4K=4096
+++ SIZE_4K=4096
+++ export SIZE_64K=65536
+++ SIZE_64K=65536
+++ export SIZE_1M=1048576
+++ SIZE_1M=1048576
+++ export SIZE_2M=2097152
+++ SIZE_2M=2097152
+++ export EXIT_FAILURE=1
+++ EXIT_FAILURE=1
+++ export EXIT_SKIP=77
+++ EXIT_SKIP=77
+++ TESTDIR=/usr/libexec/accel-config/test
+++ BINDIR=/usr/bin
+++ '[' -f ../accfg/accel-config ']'
+++ '[' -x ../accfg/accel-config ']'
+++ export ACCFG=../accfg/accel-config
+++ ACCFG=../accfg/accel-config
+++ '[' -f ./dsa_test ']'
+++ '[' -x ./dsa_test ']'
+++ export DSATEST=./dsa_test
+++ DSATEST=./dsa_test
+++ '[' -f ./iaa_test ']'
+++ '[' -x ./iaa_test ']'
+++ export IAATEST=./iaa_test
+++ IAATEST=./iaa_test
+++ '[' -f ./configs/2g2q_user_1.conf ']'
+++ export CONFIG1=./configs/2g2q_user_1.conf
+++ CONFIG1=./configs/2g2q_user_1.conf
+++ '[' -f ./configs/2g2q_user_2.conf ']'
+++ export CONFIG2=./configs/2g2q_user_2.conf
+++ CONFIG2=./configs/2g2q_user_2.conf
++ rc=77
++ DEV_OPT=
++ input1=
++ '[' '' == --skip-config ']'
++ IAA=iax1
++ echo iax1
+iax1
++ WQ0=wq1.4
++ WQ1=wq1.1
+++ ls -l /sys/bus/dsa/devices/iax3
+++ awk -F / '{print $(NF - 1)}'
++ DBDF=0000:f2:02.0
+++ lspci -n -s 0000:f2:02.0
+++ awk -F ' ' '{print $NF}'
+++ awk -F : '{print $1}'
++ VENDOR_ID=8086
+++ lspci -n -s 0000:f2:02.0
+++ awk -F ' ' '{print $NF}'
+++ awk -F : '{print $2}'
++ DEVICE_ID=0cfe
++ VFIO_BINDED=0
++ IAA_OPCODE_NOOP=0x0
++ IAA_OPCODE_TRANSL_FETCH=0xa
++ IAA_OPCODE_DECRYPT=0x40
++ IAA_OPCODE_ENCRYPT=0x41
++ IAA_OPCODE_DECOMPRESS=0x42
++ IAA_OPCODE_COMPRESS=0x43
++ IAA_OPCODE_CRC64=0x44
++ IAA_OPCODE_ZDECOMPRESS32=0x48
++ IAA_OPCODE_ZDECOMPRESS16=0x49
++ IAA_OPCODE_ZDECOMPRESS8=0x4a
++ IAA_OPCODE_ZCOMPRESS32=0x4c
++ IAA_OPCODE_ZCOMPRESS16=0x4d
++ IAA_OPCODE_ZCOMPRESS8=0x4e
++ IAA_OPCODE_SCAN=0x50
++ IAA_OPCODE_SET_MEMBERSHIP=0x51
++ IAA_OPCODE_EXTRACT=0x52
++ IAA_OPCODE_SELECT=0x53
++ IAA_OPCODE_RLE_BURST=0x54
++ IAA_OPCODE_FIND_UNIQUE=0x55
++ IAA_OPCODE_EXPAND=0x56
++ IAA_OPCODE_MASK_NOOP=1
++ IAA_OPCODE_MASK_TRANSL_FETCH=1024
++ IAA_OPCODE_MASK_DECRYPT=1
++ IAA_OPCODE_MASK_ENCRYPT=2
++ IAA_OPCODE_MASK_DECOMPRESS=4
++ IAA_OPCODE_MASK_COMPRESS=8
++ IAA_OPCODE_MASK_CRC64=16
++ IAA_OPCODE_MASK_ZDECOMPRESS32=256
++ IAA_OPCODE_MASK_ZDECOMPRESS16=512
++ IAA_OPCODE_MASK_ZDECOMPRESS8=1024
++ IAA_OPCODE_MASK_ZCOMPRESS32=4096
++ IAA_OPCODE_MASK_ZCOMPRESS16=8192
++ IAA_OPCODE_MASK_ZCOMPRESS8=16384
++ IAA_OPCODE_MASK_SCAN=65536
++ IAA_OPCODE_MASK_SET_MEMBERSHIP=131072
++ IAA_OPCODE_MASK_EXTRACT=262144
++ IAA_OPCODE_MASK_SELECT=524288
++ IAA_OPCODE_MASK_RLE_BURST=1048576
++ IAA_OPCODE_MASK_FIND_UNIQUE=2097152
++ IAA_OPCODE_MASK_EXPAND=4194304
+++ cat /sys/bus/dsa/devices/iax1/op_cap
+++ awk -F , '{print $NF}'
++ OP_CAP0=0000000d
++ OP_CAP0=0x0000000d
+++ cat /sys/bus/dsa/devices/iax1/op_cap
+++ awk -F , '{print $(NF - 2)}'
++ OP_CAP2=007f331c
++ OP_CAP2=0x007f331c
++ trap err_exit ERR
++ '[' '!' -f ./iaa_test ']'
++ check_min_kver 5.6
++ local ver=5.6
+++ uname -r
++ : 6.5.7-dirty
++ '[' -n 5.6 ']'
+++ echo -e '5.6\n6.5.7-dirty'
+++ sort -V
+++ head -1
++ [[ 5.6 == \5\.\6 ]]
++ '[' '!' -f /sys/bus/dsa/devices/iax1/pasid_enabled ']'
+++ cat /sys/bus/dsa/devices/iax1/pasid_enabled
++ pasid_en=1
++ '[' 1 -ne 1 ']'
++ '[' '' '!=' --skip-config ']'
++ _cleanup
++ lsmod
++ grep -wq idxd_vdev
++ lsmod
++ grep -wq idxd_uacce
++ lsmod
++ grep -wq iaa_crypto
++ lsmod
++ grep -wq iax_crypto
++ lsmod
++ grep -wq idxd
++ rmmod idxd
+rmmod: ERROR: ../libkmod/libkmod-module.c:799 kmod_module_remove_module() could not remove 'idxd': Operation not permitted
+rmmod: ERROR: could not remove module idxd: Operation not permitted
+++ err_exit
+++ err_code=1
+++ '[' 0 == 1 ']'
+++ exit 1
+FAIL iaa_user_test_runner.sh (exit status: 1)

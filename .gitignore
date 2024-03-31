@@ -96,7 +96,6 @@ sweep_inst_sync_async.log
 sweep_inst_sync_async.log.2
 sweep_inst_sync_async.log.3
 sync_sample
-test/
 throughput_4_td_4_inst_parsed.csv
 throughput_4_threads_4_instances_1_device.data
 throughput_4_threads_4_instances_1_device.log

@@ -629,6 +629,7 @@ static void startExp(){
     int xfer_size = 1024 * 1024;
     int opcode = 0x3;
     struct accfg_ctx *dsa;
+    struct acctest_context * ctx = malloc(sizeof(struct acctest_context));
     dsa = acctest_init(tflags);
 
     int dev_id = -1;
@@ -640,6 +641,18 @@ static void startExp(){
         exit(-1);
     }
     struct task *tsk = (struct task*) malloc(sizeof(struct task));
+    memset(tsk, 0, sizeof(struct task));
+    tsk->comp = aligned_alloc(32, sizeof(struct completion_record));
+    memset(tsk->comp, 0, sizeof(struct completion_record));
+    void *wq_reg;
+
+    // Are any of these likely scenarios in a real application
+    // #define TEST_FLAGS_BOF     0x1     /* Block on page faults */
+    // #define TEST_FLAGS_WAIT    0x4     /* Wait in kernel */
+    // #define TEST_FLAGS_PREF    0x8     /* Pre-fault the buffers */
+    // #define TEST_FLAGS_CPFLT   0x10    /* Gen fault on completion record */
+    // #define TEST_FLAGS_BTFLT   0x20    /* Gen fault on batch desc. list */
+
     tsk->opcode = opcode;
 	tsk->test_flags = tflags;
 	tsk->xfer_size = xfer_size;
@@ -661,8 +674,24 @@ static void startExp(){
     memset_pattern(tsk->dst1, tsk->pattern2, xfer_size);
     acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
         (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+    tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+    tsk->comp->status = 0;
+    acctest_desc_submit(ctx, tsk->desc);
+    dsa_wait_memcpy(ctx, tsk->comp);
 
+    if (tsk->comp->status != DSA_COMP_SUCCESS){
+        printf("Failed to complete task\n");
+        exit(-1);
+    }
+    rc = memcmp(tsk->src1, tsk->dst1, tsk->xfer_size);
+    if(rc != 0){
+        printf("Failed to validate task\n");
+        exit(-1);
+    }
+    acctest_free_task(ctx);
     return;
+
+
     printf("spawning %d axs\n", numAxs_g);
     spawnAxs(chainLength_g);
     startPollingAllAxs();
