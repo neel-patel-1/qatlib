@@ -615,9 +615,11 @@ retry:
 static void startExp(){
     CpaStatus status;
 
+
+
     int rc;
     int tflags = 0x1;
-    int xfer_size = 32 * 1024;
+    int xfer_size = 1024;
     int opcode = 0x3;
     struct acctest_context * dsa = acctest_init(tflags);
     dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -632,9 +634,10 @@ static void startExp(){
     }
 
     /* alloc Tasks*/
-    int maxInflights = 128;
-    struct task ** tsk = (struct task *)(malloc(sizeof(struct task *) * maxInflights));
-    for (int i=0; i< maxInflights; i++){
+    int totalRequests = 1024;
+
+    struct task * tsk[totalRequests];;
+    for (int i=0; i< totalRequests; i++){
         tsk[i] = acctest_alloc_task(dsa);
         rc = init_task(tsk[i], tflags, opcode, xfer_size);
         if(rc != ACCTEST_STATUS_OK){
@@ -644,28 +647,68 @@ static void startExp(){
         tsk[i]->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR ;
         dsa_prep_memcpy(tsk[i]);
     }
-    int nTasks = 128;
 
+    int maxInflights = 128;
+    int freeWqSpace = maxInflights;
+    int curRqst2Prep = 0;
+    int curRqst2Submit = 0;
+    int curCr2Poll = 0;
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    for(int i=0; i<nTasks; i++){
-        dsa_prep_memcpy(tsk[i]);
-        acctest_desc_submit(dsa, tsk[i]->desc);
+    while(totalRequests > 0){
+        for (int i=0; i<freeWqSpace; i++){
+            dsa_prep_memcpy(tsk[curRqst2Prep]);
+            curRqst2Prep++;
+        }
+
+        for (int i=0; i<freeWqSpace; i++){
+            dsa_prep_memcpy(tsk[curRqst2Prep]);
+            acctest_desc_submit(dsa, tsk[curRqst2Submit]->desc);
+            curRqst2Submit++;
+            freeWqSpace--;
+        }
+
+        /*
+        There are a couple of options here: we can
+        (1) poll for the last submission's CR's -- full-response-batch
+        (2) poll for cr's starting with the first submission not - individual-response-check
+        What factors affect whether we see a completed CR?
+        */
+
+        /* naive --
+        mwait for at least a single CR -
+            the requestor is greedily filling up the wq queue so all requests have been submitted
+            OR the WQ is full
+        Keep checking following CR's until we hit one not received
+        */
+        // bool checkNextCtr = true; bool wait4Cr=true;
+        // while( (curCr2Poll < totalRequests) && (checkNextCtr == true)){
+        //     struct completion_record *comp = tsk[curCr2Poll]->comp;
+        //     if(curCr2)
+        //     dsa_wait_memcpy(dsa, tsk[curCr2Poll]);
+        //     curCr2Poll ++;
+        //     do{
+
+
+        //     }
+        // }
+        while(curCr2Poll < curRqst2Submit){
+            dsa_wait_memcpy(dsa, tsk[curCr2Poll]);
+            curCr2Poll++;
+            freeWqSpace++;
+            totalRequests--;
+        }
     }
-    dsa_wait_memcpy(dsa, tsk[nTasks-1]);
     clock_gettime(CLOCK_MONOTONIC, &end);
     uint64_t nanos =
         (end.tv_sec - start.tv_sec) * 1000000000 +
         (end.tv_nsec - start.tv_nsec);
-    uint64_t bw = (nTasks * xfer_size) / nanos;
+    uint64_t bw = (totalRequests * xfer_size) / nanos;
     printf("BW(GB/s): %lu\n", bw);
 
-    for(int i=0; i<nTasks; i++){
+    for(int i=0; i<totalRequests; i++){
         rc = task_result_verify(tsk[i], 0);
     }
-
-
-
 
     acctest_free_task(dsa);
     acctest_free(dsa);
