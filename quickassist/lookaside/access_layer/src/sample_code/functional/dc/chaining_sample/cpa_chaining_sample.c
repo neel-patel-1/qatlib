@@ -617,7 +617,7 @@ static void startExp(){
 
     int rc;
     int tflags = 0x1;
-    int xfer_size = 1024 * 1024;
+    int xfer_size = 32 * 1024;
     int opcode = 0x3;
     struct acctest_context * dsa = acctest_init(tflags);
     dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -649,7 +649,7 @@ static void startExp(){
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<nTasks; i++){
-        dsa_prep_memcpy(tsk[0]);
+        dsa_prep_memcpy(tsk[i]);
         acctest_desc_submit(dsa, tsk[i]->desc);
     }
     dsa_wait_memcpy(dsa, tsk[nTasks-1]);
