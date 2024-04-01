@@ -611,14 +611,6 @@ retry:
     }
 }
 
-/*
-callback best location to fwd?
-- direct access to payload before/after restructuring
-- requires deciding whether to forward at each stage of the pipeline
-- host should decide when to batch / forward and must know how many fragments from a given
-ax have been accumulated
-- if 4
-*/
 
 static void startExp(){
     struct timespec start, end;
@@ -631,7 +623,7 @@ static void startExp(){
     struct acctest_context * dsa = acctest_init(tflags);
     dsa->dev_type = ACCFG_DEVICE_DSA;
 
-    int dev_id = -1;
+    int dev_id = 2;
     int wq_id = -1;
     int wq_type = 0;
     rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
@@ -639,45 +631,43 @@ static void startExp(){
         printf("Failed to allocate dsa context\n");
         exit(-1);
     }
-    struct task *tsk = acctest_alloc_task(dsa);
-    rc = init_task(tsk, tflags, opcode, xfer_size);
-    if(rc != ACCTEST_STATUS_OK){
-        printf("Failed to init task\n");
-        exit(-1);
+
+    /* alloc Tasks*/
+    int maxInflights = 128;
+    struct task ** tsk = (struct task *)(malloc(sizeof(struct task *) * maxInflights));
+    for (int i=0; i< maxInflights; i++){
+        tsk[i] = acctest_alloc_task(dsa);
+        rc = init_task(tsk[i], tflags, opcode, xfer_size);
+        if(rc != ACCTEST_STATUS_OK){
+            printf("Failed to init task\n");
+            exit(-1);
+        }
+        tsk[i]->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR ;
+        dsa_prep_memcpy(tsk[i]);
+    }
+    int nTasks = 128;
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for(int i=0; i<nTasks; i++){
+        dsa_prep_memcpy(tsk[0]);
+        acctest_desc_submit(dsa, tsk[i]->desc);
+    }
+    dsa_wait_memcpy(dsa, tsk[nTasks-1]);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    uint64_t nanos =
+        (end.tv_sec - start.tv_sec) * 1000000000 +
+        (end.tv_nsec - start.tv_nsec);
+    uint64_t bw = (nTasks * xfer_size) / nanos;
+    printf("BW(GB/s): %lu\n", bw);
+
+    for(int i=0; i<nTasks; i++){
+        rc = task_result_verify(tsk[i], 0);
     }
 
-    tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR ;
-    dsa_prep_memcpy(tsk);
-    /* Implications of blocking/not-blocking on fault */
-	if (!tsk->src1){
-        printf("Failed to allocate src1\n");
-        exit(-1);
-    }
-    if (!tsk->dst1){
-        printf("Failed to allocate dst1\n");
-        exit(-1);
-    }
-    memset_pattern(tsk->src1, tsk->pattern, xfer_size);
-    memset_pattern(tsk->dst1, tsk->pattern2, xfer_size);
 
-    // acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
-    //     (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
-    // tsk->desc->completion_addr = (uint64_t)(tsk->comp);
-    // tsk->comp->status = 0;
-    acctest_desc_submit(dsa, tsk->desc);
-    dsa_wait_memcpy(dsa, tsk);
 
-    // if (tsk->comp->status != DSA_COMP_SUCCESS){
-    //     printf("Failed to complete task: %d\n",
-    //        tsk->comp->status );
-    //     exit(-1);
-    // }
-    // rc = memcmp(tsk->src1, tsk->dst1, tsk->xfer_size);
-    // if(rc != 0){
-    //     printf("Failed to validate task\n");
-    //     exit(-1);
-    // }
-    rc = task_result_verify(tsk, 0);
+
     acctest_free_task(dsa);
     acctest_free(dsa);
     return;
