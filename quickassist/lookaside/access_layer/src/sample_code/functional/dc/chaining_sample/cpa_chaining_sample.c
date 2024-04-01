@@ -640,6 +640,7 @@ static void startExp(){
         exit(-1);
     }
     struct task *tsk = acctest_alloc_task(dsa);
+    rc = init_task(tsk, tflags, opcode, xfer_size);
 
     tsk->opcode = opcode;
 	tsk->test_flags = tflags;
@@ -660,15 +661,17 @@ static void startExp(){
     }
     memset_pattern(tsk->src1, tsk->pattern, xfer_size);
     memset_pattern(tsk->dst1, tsk->pattern2, xfer_size);
-    acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
-        (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
-    tsk->desc->completion_addr = (uint64_t)(tsk->comp);
-    tsk->comp->status = 0;
+    dsa_prep_memcpy(tsk);
+    // acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+    //     (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+    // tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+    // tsk->comp->status = 0;
     acctest_desc_submit(dsa, tsk->desc);
-    dsa_wait_memcpy(dsa, tsk->comp);
+    dsa_wait_memcpy(dsa, tsk);
 
     if (tsk->comp->status != DSA_COMP_SUCCESS){
-        printf("Failed to complete task\n");
+        printf("Failed to complete task: %d\n",
+           tsk->comp->status );
         exit(-1);
     }
     rc = memcmp(tsk->src1, tsk->dst1, tsk->xfer_size);
