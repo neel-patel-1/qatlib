@@ -642,14 +642,9 @@ static void startExp(){
     struct task *tsk = acctest_alloc_task(dsa);
     rc = init_task(tsk, tflags, opcode, xfer_size);
 
-    tsk->opcode = opcode;
-	tsk->test_flags = tflags;
-	tsk->xfer_size = xfer_size;
-    tsk->src1 = aligned_alloc(4096, xfer_size);
-    tsk->pattern = 0x0123456789abcdef;
-    tsk->dst1 = aligned_alloc(4096, xfer_size);
-    tsk->pattern2 = 18364758544493064720;
-    tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
+    init_memcpy(tsk, tflags, opcode, xfer_size);
+
+    // tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
     /* Implications of blocking/not-blocking on fault */
 	if (!tsk->src1){
         printf("Failed to allocate src1\n");
