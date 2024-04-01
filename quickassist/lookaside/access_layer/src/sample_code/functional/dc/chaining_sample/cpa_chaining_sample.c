@@ -613,7 +613,6 @@ retry:
 
 
 static void startExp(){
-    struct timespec start, end;
     CpaStatus status;
 
     int rc;
@@ -678,48 +677,48 @@ static void startExp(){
     startPollingAllAxs();
 
     int numIterations = 10000;
-    clock_gettime(CLOCK_MONOTONIC, &start);
+    // clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
         singleCoreRequestTransformPoller();
     }
-    clock_gettime(CLOCK_MONOTONIC, &end);
+    // clock_gettime(CLOCK_MONOTONIC, &end);
 
 
-    uint64_t nanos =
-        (end.tv_sec - start.tv_sec) * 1000000000 +
-        (end.tv_nsec - start.tv_nsec);
-    uint64_t avg = nanos / numIterations;
-    uint64_t us = avg / 1000;
-    if (us == 0)
-    {
-        printf("BW(MB/s): %lu\n", 0);
-    }
-    else
-    {
-        printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
-    }
+    // uint64_t nanos =
+    //     (end.tv_sec - start.tv_sec) * 1000000000 +
+    //     (end.tv_nsec - start.tv_nsec);
+    // uint64_t avg = nanos / numIterations;
+    // uint64_t us = avg / 1000;
+    // if (us == 0)
+    // {
+    //     printf("BW(MB/s): %lu\n", 0);
+    // }
+    // else
+    // {
+    //     printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
+    // }
 
-    for(int i=0; i<numAxs_g; i++){
-        gPollingCys[i] = 0;
-        CpaBoolean sessionInUse = CPA_TRUE;
-        processingInFlights = CPA_TRUE;
-        do{
-            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
-            if(status == CPA_STATUS_SUCCESS){
-                printf("Out of order responses found\n");
-            }
-            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
-        } while(sessionInUse);
+    // for(int i=0; i<numAxs_g; i++){
+    //     gPollingCys[i] = 0;
+    //     CpaBoolean sessionInUse = CPA_TRUE;
+    //     processingInFlights = CPA_TRUE;
+    //     do{
+    //         status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+    //         if(status == CPA_STATUS_SUCCESS){
+    //             printf("Out of order responses found\n");
+    //         }
+    //         cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+    //     } while(sessionInUse);
 
-        // symSessionWaitForInflightReq(sessionCtxs_g[i]);
-        status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
-        if(status != CPA_STATUS_SUCCESS){
-            printf("Failed to remove session: %d\n", status);
-            exit(-1);
-        }
-    }
-    printf("Test Complete\n");
+    //     // symSessionWaitForInflightReq(sessionCtxs_g[i]);
+    //     status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
+    //     if(status != CPA_STATUS_SUCCESS){
+    //         printf("Failed to remove session: %d\n", status);
+    //         exit(-1);
+    //     }
+    // }
+    // printf("Test Complete\n");
 }
 
 
