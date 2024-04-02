@@ -666,11 +666,11 @@ static void startExp(){
     uint64_t us = avg / 1000;
     if (us == 0)
     {
-        printf("BW(MB/s): %lu\n", 0);
+        printf("AvgLatency(us): %lu\n", us);
     }
     else
     {
-        printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
+        printf("AvgLatency(us): %lu\n", us);
     }
     /*
         Report the average number of requests remaining to process on a given accelerator
