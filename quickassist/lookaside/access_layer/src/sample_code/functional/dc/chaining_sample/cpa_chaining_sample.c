@@ -640,11 +640,11 @@ static void startExp(){
     uint64_t us = avg / 1000;
     if (us == 0)
     {
-        printf("BW(MB/s): %lu\n", 0);
+        printf("AvgLatency: %lu\n", us);
     }
     else
     {
-        printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
+        printf("AvgLatency: %lu\n", us);
     }
 
     for(int i=0; i<numAxs_g; i++){
