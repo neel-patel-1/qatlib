@@ -603,6 +603,9 @@ retry:
             goto retry;
         }
         bufIdx = (bufIdx + 1) % numBufs_g;
+        for(int axIdx = 0; axIdx < numAxs_g; axIdx++){
+            while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
+        }
     }
     while(!complete){
     }
@@ -640,11 +643,11 @@ static void startExp(){
     uint64_t us = avg / 1000;
     if (us == 0)
     {
-        printf("BW(MB/s): %lu\n", 0);
+        printf("AvgLatency: %lu\n", us);
     }
     else
     {
-        printf("BW(MB/s): %lu\n", (numBufs_g * bufSize_g) / us);
+        printf("AvgLatency: %lu\n", us);
     }
 
     for(int i=0; i<numAxs_g; i++){
