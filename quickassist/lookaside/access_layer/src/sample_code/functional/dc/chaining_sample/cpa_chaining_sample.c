@@ -636,7 +636,7 @@ static void startExp(){
     spawnAxs(chainLength_g);
     // startPollingAllAxs();
 
-    int numIterations = 100;
+    int numIterations = 1;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;

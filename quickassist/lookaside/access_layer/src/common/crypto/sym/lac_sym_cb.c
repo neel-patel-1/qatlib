@@ -111,6 +111,7 @@ struct spinUpTdArgs
     CpaCySymOpData *pOpData;
     CpaBufferList *pDstBuffer;
     CpaBoolean qatRespStatusOkFlag;
+    lac_session_desc_t *pSessionDesc;
 };
 
 static void performCB(void *arg){
@@ -122,6 +123,7 @@ static void performCB(void *arg){
            targs->pOpData,
            targs->pDstBuffer,
            targs->qatRespStatusOkFlag);
+    osalAtomicDec(&(targs->pSessionDesc->u.pendingCbCount));
 }
 /*
 *******************************************************************************
@@ -356,18 +358,21 @@ STATIC void LacSymCb_ProcessCallbackInternal(lac_sym_bulk_cookie_t *pCookie,
     /* user callback function is the last thing to be called */
 
     LAC_ASSERT_NOT_NULL(pSymCb);
-
+#define APP_LOGICAL_CORE 4
     OsalThread *cbTd;
-    LAC_OS_MALLOC(cbTd, sizeof(OsalThread));
+    LAC_OS_MALLOC(&cbTd, sizeof(OsalThread));
     struct spinUpTdArgs *targs;
-    LAC_OS_MALLOC(targs, sizeof(struct spinUpTdArgs));
+    LAC_OS_MALLOC(&targs, sizeof(struct spinUpTdArgs));
     targs->pSymCb = pSymCb;
     targs->pCallbackTag = pCallbackTag;
     targs->pOpData = pOpData;
     targs->pDstBuffer = pDstBuffer;
     targs->qatRespStatusOkFlag = qatRespStatusOkFlag;
+    targs->pSessionDesc = pSessionDesc;
 
-    // osalThreadCreate()
+    // osalThreadBind(cbTd, APP_LOGICAL_CORE);
+    // osalThreadCreate(cbTd, NULL, performCB, targs);
+    printf("Thread created\n");
     pSymCb(pCallbackTag,
            status,
            operationType,
