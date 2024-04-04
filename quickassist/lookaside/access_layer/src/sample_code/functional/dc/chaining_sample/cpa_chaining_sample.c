@@ -157,16 +157,16 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
     cArg->mIdx = mId+1;
     cArg->bufIdx = bufIdx;
     // printf("inter cb: submit buf %d to %d\n", bufIdx, mId+1);
-    if(! counting_oos){
-        status = cpaCySymPerformOp(
-            cyInst_g[mId+1],
-            (void *)(cArg),
-            pOpData,
-            pSrcBufferList_g[bufIdx],     /* source buffer list */
-            pDstBufferList_g[bufIdx],     /* destination buffer list */
-            NULL);
-    }
-    else {
+
+    status = cpaCySymPerformOp(
+        cyInst_g[mId+1],
+        (void *)(cArg),
+        pOpData,
+        pSrcBufferList_g[bufIdx],     /* source buffer list */
+        pDstBufferList_g[bufIdx],     /* destination buffer list */
+        NULL);
+
+    if(counting_oos){
         total_oos++;
     }
     if(bufIdx == (numBufs_g-1) && status == CPA_STATUS_SUCCESS){
