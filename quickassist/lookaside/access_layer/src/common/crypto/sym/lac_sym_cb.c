@@ -101,6 +101,28 @@
 
 #define DEQUEUE_MSGPUT_MAX_RETRIES 10000
 
+
+struct spinUpTdArgs
+{
+    CpaCySymCbFunc pSymCb;
+    CpaStatus status;
+    void *pCallbackTag;
+    CpaCySymOp operationType;
+    CpaCySymOpData *pOpData;
+    CpaBufferList *pDstBuffer;
+    CpaBoolean qatRespStatusOkFlag;
+};
+
+static void performCB(void *arg){
+    struct spinUpTdArgs *targs;
+    targs = (struct spinUpTdArgs *)arg;
+    targs->pSymCb(targs->pCallbackTag,
+           targs->status,
+           targs->operationType,
+           targs->pOpData,
+           targs->pDstBuffer,
+           targs->qatRespStatusOkFlag);
+}
 /*
 *******************************************************************************
 * Define static function definitions
@@ -337,6 +359,14 @@ STATIC void LacSymCb_ProcessCallbackInternal(lac_sym_bulk_cookie_t *pCookie,
 
     OsalThread *cbTd;
     LAC_OS_MALLOC(cbTd, sizeof(OsalThread));
+    struct spinUpTdArgs *targs;
+    LAC_OS_MALLOC(targs, sizeof(struct spinUpTdArgs));
+    targs->pSymCb = pSymCb;
+    targs->pCallbackTag = pCallbackTag;
+    targs->pOpData = pOpData;
+    targs->pDstBuffer = pDstBuffer;
+    targs->qatRespStatusOkFlag = qatRespStatusOkFlag;
+
     // osalThreadCreate()
     pSymCb(pCallbackTag,
            status,
