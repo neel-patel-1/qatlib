@@ -91,6 +91,7 @@ extern struct timespec hashStartTime_g;
 extern volatile int test_complete;
 volatile Cpa16U numSamples_g;
 volatile CpaBoolean processingInFlights = CPA_FALSE;
+volatile int counting_oos = 0;
 
 #define MAX_AXS 10
 
@@ -136,6 +137,8 @@ struct cbArg{
     Cpa16U mIdx;
     Cpa16U bufIdx;
 };
+Cpa64U total_oos = 0;
+
 static void interCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
@@ -154,13 +157,18 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
     cArg->mIdx = mId+1;
     cArg->bufIdx = bufIdx;
     // printf("inter cb: submit buf %d to %d\n", bufIdx, mId+1);
-    status = cpaCySymPerformOp(
-        cyInst_g[mId+1],
-        (void *)(cArg),
-        pOpData,
-        pSrcBufferList_g[bufIdx],     /* source buffer list */
-        pDstBufferList_g[bufIdx],     /* destination buffer list */
-        NULL);
+    if(! counting_oos){
+        status = cpaCySymPerformOp(
+            cyInst_g[mId+1],
+            (void *)(cArg),
+            pOpData,
+            pSrcBufferList_g[bufIdx],     /* source buffer list */
+            pDstBufferList_g[bufIdx],     /* destination buffer list */
+            NULL);
+    }
+    else {
+        total_oos++;
+    }
     if(bufIdx == (numBufs_g-1) && status == CPA_STATUS_SUCCESS){
         // printf("inter cb: %d completed fwding\n", mId);
     }
@@ -572,7 +580,6 @@ Receive requests following some distribution. Dequeue the requests and submit th
 
 */
 
-Cpa64U total_oos = 0;
 
 static CpaStatus singleCoreRequestTransformPoller(){
     CpaStatus status;
@@ -610,11 +617,11 @@ retry:
             }
             bufIdx = (bufIdx + 1) % numBufs_g;
         }
-        else{
-            // interested in how many round-robin iterations are spent forwarding requests
-            // after the entire batch has been submitted
-            rr_polling_only_itrs++;
-        }
+        // else{
+        //     // interested in how many round-robin iterations are spent forwarding requests
+        //     // after the entire batch has been submitted
+        //     rr_polling_only_itrs++;
+        // }
         for(int i=0; i< numAxs_g; i++){
             status = icp_sal_CyPollInstance(cyInst_g[i], 0);
             if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
@@ -623,15 +630,16 @@ retry:
             }
         }
     }
+    counting_oos = 1;
     for(int i=0; i<numAxs_g; i++){
         CpaBoolean sessionInUse = CPA_TRUE;
-        Cpa64U num_ooos = 0;
         do{
             status = icp_sal_CyPollInstance(cyInst_g[i], 0);
             cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+
         } while(sessionInUse);
-        total_oos+=num_ooos;
     }
+    counting_oos = 0;
 }
 
 /*
@@ -650,7 +658,7 @@ static void startExp(){
     spawnAxs(chainLength_g);
     // startPollingAllAxs();
 
-    int numIterations = 10000;
+    int numIterations = 1;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
