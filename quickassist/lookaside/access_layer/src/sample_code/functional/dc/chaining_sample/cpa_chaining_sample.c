@@ -590,32 +590,33 @@ static void singleCoreRequestTransformPoller(){
 
     int bufIdx = 0;
     int response_quota = numBufs_g;
-    for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
-        status = OS_MALLOC(&arg, sizeof(struct cbArg));
-        int axIdx = 0; /* getNextRequestHandle Updated */
-        arg->mIdx = axIdx;
-        arg->bufIdx = bufIdx;
-        pOpData->sessionCtx = sessionCtxs_g[axIdx];
-retry:
-        status = cpaCySymPerformOp(
-            cyInst_g[axIdx],
-            (void *)arg,
-            pOpData,
-            pSrcBufferList_g[bufIdx],     /* source buffer list */
-            pDstBufferList_g[bufIdx],     /* destination buffer list */
-            NULL);
-        if(status == CPA_STATUS_RETRY){
-            goto retry;
+    while(!complete){
+        for(int i=0; i<response_quota; i++){ /* submit a batch */
+            status = OS_MALLOC(&arg, sizeof(struct cbArg));
+            int axIdx = 0; /* getNextRequestHandle Updated */
+            arg->mIdx = axIdx;
+            arg->bufIdx = bufIdx;
+            pOpData->sessionCtx = sessionCtxs_g[axIdx];
+    retry:
+            status = cpaCySymPerformOp(
+                cyInst_g[axIdx],
+                (void *)arg,
+                pOpData,
+                pSrcBufferList_g[bufIdx],     /* source buffer list */
+                pDstBufferList_g[bufIdx],     /* destination buffer list */
+                NULL);
+            if(status == CPA_STATUS_RETRY){
+                goto retry;
+            }
+            bufIdx = (bufIdx + 1) % numBufs_g;
+
         }
-        bufIdx = (bufIdx + 1) % numBufs_g;
         for(int axIdx = 0; axIdx < numAxs_g; axIdx++){
             while(retrieved < response_quota){
                 icp_sal_CyPollInstance(cyInst_g[axIdx], 0);
             }
             retrieved = 0;
         }
-    }
-    while(!complete){
     }
 }
 
