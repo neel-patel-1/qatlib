@@ -372,7 +372,7 @@ STATIC void LacSymCb_ProcessCallbackInternal(lac_sym_bulk_cookie_t *pCookie,
 
     // osalThreadBind(cbTd, APP_LOGICAL_CORE);
     // osalThreadCreate(cbTd, NULL, performCB, targs);
-    printf("Thread created\n");
+    // printf("Thread created\n");
     // pSymCb(pCallbackTag,
     //        status,
     //        operationType,
@@ -380,6 +380,7 @@ STATIC void LacSymCb_ProcessCallbackInternal(lac_sym_bulk_cookie_t *pCookie,
     //        pDstBuffer,
     //        qatRespStatusOkFlag);
     osalThreadCreate(cbTd, NULL, performCB, targs);
+    osalThreadBind(cbTd, APP_LOGICAL_CORE);
 
     // osalAtomicDec(&(pSessionDesc->u.pendingCbCount));
 }
