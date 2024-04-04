@@ -136,6 +136,7 @@ struct cbArg{
     Cpa16U mIdx;
     Cpa16U bufIdx;
 };
+int retrieved = 0;
 static void interCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
@@ -161,6 +162,8 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
         pSrcBufferList_g[bufIdx],     /* source buffer list */
         pDstBufferList_g[bufIdx],     /* destination buffer list */
         NULL);
+
+    retrieved++;
     if(bufIdx == (numBufs_g-1) && status == CPA_STATUS_SUCCESS){
         // printf("inter cb: %d completed fwding\n", mId);
     }
@@ -168,6 +171,7 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
 static void endCallback(void *pCallbackTag, CpaStatus status){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
+    retrieved++;
     if(arg->bufIdx == (numBufs_g-1)){
         complete = 1;
         // printf("cb: %d complete\n", mId);
@@ -585,6 +589,7 @@ static void singleCoreRequestTransformPoller(){
     struct cbArg *arg=NULL;
 
     int bufIdx = 0;
+    int response_quota = numBufs_g;
     for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
         status = OS_MALLOC(&arg, sizeof(struct cbArg));
         int axIdx = 0; /* getNextRequestHandle Updated */
@@ -604,7 +609,10 @@ retry:
         }
         bufIdx = (bufIdx + 1) % numBufs_g;
         for(int axIdx = 0; axIdx < numAxs_g; axIdx++){
-            while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
+            while(retrieved < response_quota){
+                icp_sal_CyPollInstance(cyInst_g[axIdx], 0);
+            }
+            retrieved = 0;
         }
     }
     while(!complete){
@@ -627,7 +635,7 @@ static void startExp(){
     spawnAxs(chainLength_g);
     // startPollingAllAxs();
 
-    int numIterations = 10000;
+    int numIterations = 100;
     clock_gettime(CLOCK_MONOTONIC, &start);
     for(int i=0; i<numIterations; i++){
         complete = 0;
