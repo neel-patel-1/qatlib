@@ -115,7 +115,7 @@ static Cpa8U *cIvBuffer = NULL;
 // Repeatedly encrypt for balanced chain
 int numAxs_g;
 CpaInstanceHandle *cyInst_g;
-CpaCySymSessionCtx *sessionCtxs_g;
+CpaCySymDpSessionCtx *sessionCtxs_g;
 
 // For pollers
 int *gPollingThreads;
