@@ -124,6 +124,7 @@ static void performCB(void *arg){
            targs->pDstBuffer,
            targs->qatRespStatusOkFlag);
     osalAtomicDec(&(targs->pSessionDesc->u.pendingCbCount));
+    osalThreadExit();
 }
 /*
 *******************************************************************************
