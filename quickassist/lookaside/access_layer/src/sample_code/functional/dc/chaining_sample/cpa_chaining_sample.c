@@ -141,7 +141,7 @@ struct cbArg{
 };
 Cpa64U total_oos = 0;
 
-static void interCallback(void *pCallbackTag, CpaStatus status){
+static void interCallback(void *pCallbackTag, CpaStatus status, CpaBoolean verifyResult){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
     Cpa16U bufIdx = arg->bufIdx;
@@ -175,7 +175,7 @@ static void interCallback(void *pCallbackTag, CpaStatus status){
         // printf("inter cb: %d completed fwding\n", mId);
     }
 }
-static void endCallback(void *pCallbackTag, CpaStatus status){
+static void endCallback(void *pCallbackTag, CpaStatus status, CpaBoolean verifyResult){
     struct cbArg *arg = (struct encChainArg *)pCallbackTag;
     Cpa16U mId = arg->mIdx;
     if(arg->bufIdx == (numBufs_g-1)){
@@ -384,8 +384,7 @@ static void spawnAxs(int numAxs){
             */
 
 
-            sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-            sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+            sessionSetupData.sessionPriority = CPA_CY_PRIORITY_HIGH;            sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
             sessionSetupData.cipherSetupData.cipherAlgorithm =
                 CPA_CY_SYM_CIPHER_AES_CBC;
             sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
@@ -561,27 +560,31 @@ static CpaStatus singleCoreRequestTransformPoller(){
     status = PHYS_CONTIG_ALLOC(&cIvBuffer, sizeof(sampleCipherIv));
     CpaCySymDpOpData *pOpData = NULL;
     status = PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
-    pOpData->pIv = cIvBuffer;
-    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-    pOpData->cryptoStartSrcOffsetInBytes = 0;
-    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+
     struct cbArg *arg=NULL;
     int rr_polling_only_itrs = 0;
 
     int bufIdx = 0;
     while(!complete){
         if(bufIdx < numBufs_g){
-            status = OS_MALLOC(&arg, sizeof(struct cbArg));
+            status = PHYS_CONTIG_ALLOC(&arg, sizeof(struct cbArg));
             int nRetries = 0;
             int axIdx = 0; /* getNextRequestHandle Updated */
             arg->mIdx = axIdx;
             arg->bufIdx = bufIdx;
+
+            pOpData->cryptoStartSrcOffsetInBytes = 0;
+            pOpData->messageLenToCipherInBytes = pSrcBufferList_g[bufIdx]->pBuffers->dataLenInBytes;
             pOpData->iv =
                 virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)cIvBuffer,
                                 cyInst_g[axIdx],
                                 CPA_ACC_SVC_TYPE_CRYPTO);
+            pOpData->pIv = cIvBuffer;
+            // pOpData->hashStartSrcOffsetInBytes = 0;
+            // pOpData->messageLenToHashInBytes = sizeof(sampleAlgChainingSrc);
             pOpData->instanceHandle = cyInst_g[axIdx];
             pOpData->sessionCtx = sessionCtxs_g[axIdx];
+            pOpData->ivLenInBytes = sizeof(sampleCipherIv);
             pOpData->srcBuffer = pSrcBufferList_g[bufIdx]->pBuffers;
             pOpData->srcBufferLen = pSrcBufferList_g[bufIdx]->pBuffers->dataLenInBytes;
             pOpData->dstBuffer = pDstBufferList_g[bufIdx]->pBuffers;
@@ -590,6 +593,7 @@ static CpaStatus singleCoreRequestTransformPoller(){
                 virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
                                 cyInst_g[axIdx],
                                 CPA_ACC_SVC_TYPE_CRYPTO);
+            pOpData->pCallbackTag = (void *)arg;
 retry:
             status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
             if(status == CPA_STATUS_RETRY && nRetries < 3){
