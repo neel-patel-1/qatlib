@@ -69,6 +69,8 @@
 #include "cpa.h"
 #include "cpa_cy_sym.h"
 #include "cpa_dc.h"
+#include "cpa_cy_sym_dp.h"
+#include "icp_sal_poll.h"
 #include "cpa_dc_chain.h"
 #include "cpa_sample_utils.h"
 #include "openssl/sha.h"
@@ -406,12 +408,16 @@ static void spawnAxs(int numAxs){
             status = cpaCySymDpSessionCtxGetSize(
                 singleCyInstHandle, &sessionSetupData, &sessionCtxSize);
             if (CPA_STATUS_SUCCESS != status){
-                printf("Failed to initialize Cy Session\n");
+                printf("Failed to get Cy Session size\n");
                 exit(-1);
             }
             status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-            printf("Address of sessionctx %p\n", sessionCtx);
-            printf("Address of sessionCtxs_g %p\n", sessionCtxs_g[i]);
+            status =
+                cpaCySymDpInitSession(singleCyInstHandle, &sessionSetupData, sessionCtx);
+            if (CPA_STATUS_SUCCESS != status){
+                printf("Failed to get Cy Session Inited\n");
+                exit(-1);
+            }
         }
         if (CPA_STATUS_SUCCESS != status){
             printf("Failed to initialize Cy Session\n");
@@ -441,46 +447,21 @@ static void spawnAxs(int numAxs){
 
         }
         // printf("polling instance at address: %p\n", singleCyInstHandle);
-        status = icp_sal_CyPollInstance(singleCyInstHandle, 0);
+        status = icp_sal_CyPollDpInstance(singleCyInstHandle, 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
         // printf("polling instance at address: %p\n", cyInst_g[i]);
-        status = icp_sal_CyPollInstance(cyInst_g[i], 0);
+        status = icp_sal_CyPollDpInstance(cyInst_g[i], 0);
         if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
-        // Cpa8U *pIvBuffer = NULL;
-        // status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-        // CpaCySymOpData *pOpData = NULL;
-        // status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
-        // pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-        // pOpData->pIv = pIvBuffer;
-        // pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-        // pOpData->cryptoStartSrcOffsetInBytes = 0;
-        // pOpData->sessionCtx = sessionCtx;
-        // pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
-        // printf("%d\n", pOpData->messageLenToCipherInBytes);
-        // status = cpaCySymPerformOp(
-        //     cyInst_g[i],
-        //     (void *)(),
-        //     pOpData,
-        //     pSrcBufferList_g[0],     /* source buffer list */
-        //     pDstBufferList_g[0],     /* destination buffer list */
-        //     NULL);
-        // if(status != CPA_STATUS_SUCCESS){
-        //     printf("Failed to submit request: %d\n", status);
-        //     exit(-1);
-        // }
-        // while(icp_sal_CyPollInstance(cyInst_g[i], 0) != CPA_STATUS_SUCCESS){}
-        // printf("Request to ax %d submitted and rcvd\n", i);
         sessionCtxs_g[i] = sessionCtx;
     }
     numAxs_g = numAxs;
-    // printf("Chain Configured\n");
-    // exit(0);
+
 }
 
 /*
@@ -578,9 +559,8 @@ Receive requests following some distribution. Dequeue the requests and submit th
 static CpaStatus singleCoreRequestTransformPoller(){
     CpaStatus status;
     status = PHYS_CONTIG_ALLOC(&cIvBuffer, sizeof(sampleCipherIv));
-    CpaCySymOpData *pOpData = NULL;
-    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
-    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    CpaCySymDpOpData *pOpData = NULL;
+    status = PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
     pOpData->pIv = cIvBuffer;
     pOpData->ivLenInBytes = sizeof(sampleCipherIv);
     pOpData->cryptoStartSrcOffsetInBytes = 0;
@@ -596,7 +576,20 @@ static CpaStatus singleCoreRequestTransformPoller(){
             int axIdx = 0; /* getNextRequestHandle Updated */
             arg->mIdx = axIdx;
             arg->bufIdx = bufIdx;
+            pOpData->iv =
+                virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)cIvBuffer,
+                                cyInst_g[axIdx],
+                                CPA_ACC_SVC_TYPE_CRYPTO);
+            pOpData->instanceHandle = cyInst_g[axIdx];
             pOpData->sessionCtx = sessionCtxs_g[axIdx];
+            pOpData->srcBuffer = pSrcBufferList_g[bufIdx]->pBuffers;
+            pOpData->srcBufferLen = pSrcBufferList_g[bufIdx]->pBuffers->dataLenInBytes;
+            pOpData->dstBuffer = pDstBufferList_g[bufIdx]->pBuffers;
+            pOpData->dstBufferLen = pDstBufferList_g[bufIdx]->pBuffers->dataLenInBytes;
+            pOpData->thisPhys =
+                virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
+                                cyInst_g[axIdx],
+                                CPA_ACC_SVC_TYPE_CRYPTO);
 retry:
             status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
             if(status == CPA_STATUS_RETRY && nRetries < 3){

@@ -136,11 +136,6 @@ int main(int argc, const char **argv)
             printf("%d %d\n", i, pSize / i);
             requestGen(i,pSize / i, 7000);
         }
-    } else{
-        if( useSw )
-            stat = syncSWChainedOpPerf();
-        else
-            stat = syncHWChainedOpPerf();
     }
     // stat = syncSwHashOp();
     if (CPA_STATUS_SUCCESS != stat)
