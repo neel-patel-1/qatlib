@@ -635,6 +635,30 @@ static void startExp(){
     printf("spawning %d axs\n", numAxs_g);
     spawnAxs(chainLength_g);
     // startPollingAllAxs();
+    pthread_t myPid = pthread_self();
+    cpu_set_t cpuSet;
+    #define SPT_THREAD 5
+    /* Initialize the cpuSet to zero */
+    CPU_ZERO(&cpuSet);
+    /* Set given cpu in cpuSet */
+    CPU_SET(SPT_THREAD, &cpuSet);
+    if (pthread_setaffinity_np(myPid, sizeof(cpuSet), &cpuSet) != 0){
+        printf("Failed to set affinity\n");
+        exit(-1);
+    }
+    if (pthread_getaffinity_np(myPid, sizeof(cpuSet), &cpuSet) != 0)
+    {
+        printf(
+                "\nosalThreadBind: Failed to obtain bounded thread "
+                "affinity!\n");
+        return;
+    }
+    if (!CPU_ISSET(SPT_THREAD, &cpuSet))
+    {
+        printf(
+                "\nosalThreadBind: thread is not bound with requested core!\n");
+        exit(-1);
+    }
 
     int numIterations = 10000;
     clock_gettime(CLOCK_MONOTONIC, &start);
