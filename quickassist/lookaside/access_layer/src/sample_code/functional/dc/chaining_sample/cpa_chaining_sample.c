@@ -392,32 +392,26 @@ static void spawnAxs(int numAxs){
             sessionSetupData.cipherSetupData.cipherDirection =
                 CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
             //</snippet>
-
-            /* Determine size of session context to allocate */
-
-            status = cpaCySymSessionCtxGetSize(
-                singleCyInstHandle, &sessionSetupData, &sessionCtxSize);
-
-
-        }
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            /* Allocate session context */
-            status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-            printf("Address of sessionctx %p\n", sessionCtx);
-            printf("Address of sessionCtxs_g %p\n", sessionCtxs_g[i]);
         }
 
         if (CPA_STATUS_SUCCESS == status)
         {
             /* Initialize the session */
             if( i >= numAxs - 1){
-                status = cpaCySymInitSession(
-                    singleCyInstHandle, endCallback, &sessionSetupData, sessionCtx);
+                status = cpaCySymDpRegCbFunc(singleCyInstHandle, endCallback);
+
             } else {
-                status = cpaCySymInitSession(
-                    singleCyInstHandle, interCallback, &sessionSetupData, sessionCtx);
+                status = cpaCySymDpRegCbFunc(singleCyInstHandle, interCallback);
             }
+            status = cpaCySymDpSessionCtxGetSize(
+                singleCyInstHandle, &sessionSetupData, &sessionCtxSize);
+            if (CPA_STATUS_SUCCESS != status){
+                printf("Failed to initialize Cy Session\n");
+                exit(-1);
+            }
+            status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+            printf("Address of sessionctx %p\n", sessionCtx);
+            printf("Address of sessionCtxs_g %p\n", sessionCtxs_g[i]);
         }
         if (CPA_STATUS_SUCCESS != status){
             printf("Failed to initialize Cy Session\n");
@@ -604,24 +598,16 @@ static CpaStatus singleCoreRequestTransformPoller(){
             arg->bufIdx = bufIdx;
             pOpData->sessionCtx = sessionCtxs_g[axIdx];
 retry:
-            status = cpaCySymPerformOp(
-                cyInst_g[axIdx],
-                (void *)arg,
-                pOpData,
-                pSrcBufferList_g[bufIdx],     /* source buffer list */
-                pDstBufferList_g[bufIdx],     /* destination buffer list */
-                NULL);
+            status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
             if(status == CPA_STATUS_RETRY && nRetries < 3){
                 nRetries++;
                 goto retry;
+            } else if(status != CPA_STATUS_SUCCESS){
+                printf("Failed to submit request: %d\n", status);
+                exit(-1);
             }
             bufIdx = (bufIdx + 1) % numBufs_g;
         }
-        // else{
-        //     // interested in how many round-robin iterations are spent forwarding requests
-        //     // after the entire batch has been submitted
-        //     rr_polling_only_itrs++;
-        // }
         for(int i=0; i< numAxs_g; i++){
             status = icp_sal_CyPollInstance(cyInst_g[i], 0);
             if(status != CPA_STATUS_SUCCESS && status != CPA_STATUS_RETRY){
