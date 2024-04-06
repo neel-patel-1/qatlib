@@ -337,9 +337,9 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
         }
     }
 
-    PHYS_CONTIG_FREE(pSrcBuffer);
-    PHYS_CONTIG_FREE(pIvBuffer);
-    PHYS_CONTIG_FREE(pOpData);
+    // PHYS_CONTIG_FREE(pSrcBuffer);
+    // PHYS_CONTIG_FREE(pIvBuffer);
+    // PHYS_CONTIG_FREE(pOpData);
 
     return status;
 }
@@ -526,7 +526,7 @@ CpaStatus tearDownInstances(int desiredInstances,
 }
 
 void startTest(int chainLength){
-    num_Axs_g = chainLength;
+    numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
     setupInstances(chainLength, instanceHandles, sessionCtxs_g);
