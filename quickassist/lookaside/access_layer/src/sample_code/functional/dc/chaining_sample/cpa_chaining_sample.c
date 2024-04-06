@@ -16,7 +16,7 @@ volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
-CpaInstanceHandle *cyInst_g;
+CpaInstanceHandle *instanceHandles;
 CpaCySymDpSessionCtx *sessionCtxs_g;
 
 
@@ -318,7 +318,7 @@ CpaStatus setupInstances(int desiredInstances,
         {
             /* Allocate session context */
             status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
-
+            sessionCtxs[i] = sessionCtx;
         }
         if (CPA_STATUS_SUCCESS == status)
         {
@@ -395,9 +395,12 @@ CpaStatus tearDownInstances(int desiredInstances,
 }
 
 void startTest(int chainLength){
-    CpaInstanceHandle instanceHandles[chainLength];
-    CpaCySymSessionCtx sessionCtxs[chainLength];
-    setupInstances(chainLength, instanceHandles, sessionCtxs);
+    OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
+    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
+    setupInstances(chainLength, instanceHandles, sessionCtxs_g);
+    for(int i=0; i<chainLength; i++){
+        symDpPerformOp(instanceHandles[i], sessionCtxs_g[i]);
+    }
 
-    tearDownInstances(chainLength, instanceHandles, sessionCtxs);
+    tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
