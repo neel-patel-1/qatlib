@@ -19,6 +19,11 @@ CpaBufferList **pDstBufferList_g = NULL;
 CpaInstanceHandle *instanceHandles;
 CpaCySymDpSessionCtx *sessionCtxs_g;
 
+struct cbArg{
+    Cpa16U mIdx;
+    Cpa16U bufIdx;
+    CpaBoolean kickTail;
+};
 
 static Cpa8U sampleCipherKey[] = {
     0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
@@ -63,7 +68,13 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
                           CpaStatus status,
                           CpaBoolean verifyResult)
 {
-    PRINT_DBG("Callback called with status = %d.\n", status);
+    struct cbArg *cbArg = (struct cbArg *)pOpData->pCallbackTag;
+    CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx];
+    CpaCySymSessionCtx toSubSessionCtx = sessionCtxs_g[cbArg->mIdx];
+    pOpData->instanceHandle = toSubInst;
+    pOpData->sessionCtx = toSubSessionCtx;
+    PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx);
+    cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
     pOpData->pCallbackTag = (void *)1;
 }
 
