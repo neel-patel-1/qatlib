@@ -10,12 +10,15 @@
 #define DIGEST_LENGTH 32
 
 extern int gDebugParam;
-/* AES key, 256 bits long */
 
-int numAxs_g;
+/* AES key, 256 bits long */
 volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
+int numAxs_g;
+
 volatile CpaBoolean globalDone = 0;
+volatile CpaBoolean doPoll[10];
+
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
 CpaInstanceHandle *instanceHandles;
@@ -26,6 +29,12 @@ struct cbArg{
     Cpa16U bufIdx;
     Cpa16U numBufs;
     CpaBoolean kickTail;
+};
+
+struct pollerArg{
+    CpaInstanceHandle instanceHandle;
+    Cpa16U mIdx;
+    Cpa16U rBS;
 };
 
 static Cpa8U sampleCipherKey[] = {
@@ -429,11 +438,13 @@ static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32
     }
 }
 
-static inline void dedicatedRRPoller(int chainLength, Cpa8U ***ppBuffers,
-    int numBuffers, int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
+static void dedicatedRRPoller(void *arg){
     CpaStatus status = CPA_STATUS_SUCCESS;
-    for(int i=0; i<numAxs_g; i++){
-        status = icp_sal_CyPollDpInstance(instanceHandles[i], rBS);
+    struct pollerArg *pArg = (struct pollerArg *)arg;
+    int mIdx = pArg->mIdx;
+    int rBS = pArg->rBS;
+    while(doPoll[mIdx] == CPA_TRUE){
+        status = icp_sal_CyPollDpInstance(instanceHandles[mIdx], rBS);
     }
 }
 
@@ -492,20 +503,31 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
 }
 
 
-static void spawnPollingThreads(int chainLength){
-    pthread_t *tid = NULL;
+static void spawnPollingThreads(int chainLength, pthread_t **ptid, int batchSize){
     /* SPR SMT-2's*/
+    pthread_t *tid;
     PHYS_CONTIG_ALLOC(&tid, sizeof(pthread_t) * chainLength);
     uint32_t coreMap[19] = {41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
                             51, 52, 53, 54, 55, 56, 57, 58, 59};
     for(int i=0; i<chainLength; i++){
-        int *axIdx = NULL;
-        PHYS_CONTIG_ALLOC(&axIdx, sizeof(int));
-        osalThreadCreate(&tid[i], dedicatedRRPoller, NULL, (void *)axIdx);
+        struct pollerArg *axIdx = NULL;
+        PHYS_CONTIG_ALLOC(&axIdx, sizeof(struct pollerArg));
+        axIdx->instanceHandle = instanceHandles[i];
+        axIdx->mIdx = i;
+        axIdx->rBS = batchSize;
+        doPoll[i] = CPA_TRUE;
+        osalThreadCreate(&tid[i], NULL, dedicatedRRPoller,
+        (void *)axIdx);
         osalThreadBind(&tid[i], coreMap[i]);
     }
+    *ptid = tid;
 
-
+}
+static void killPollingThreads(int chainLength, pthread_t *tid){
+    for(int i=0; i<chainLength; i++){
+        doPoll[i] = CPA_FALSE;
+        osalThreadKill(&tid[i]);
+    }
 }
 static void genOpDataArray(CpaCySymDpOpData ***ppOpDatas, int numBuffers){
     CpaCySymDpOpData ** pOpDatas = NULL;
@@ -562,13 +584,59 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
+void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int bufferSize){
+    numAxs_g = chainLength;
+    OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
+    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
+    setupInstances(chainLength, instanceHandles, sessionCtxs_g);
+    pthread_t *tid = NULL;
+    spawnPollingThreads(chainLength, &tid, rBS);
+    Cpa8U *pIvBuffer = NULL;
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaCySymDpOpData *pOpData;
 
+    numAxs_g = chainLength;
+    numBufs_g = numBuffers;
+    Cpa32U bufferMetaSize = 0;
+    Cpa8U **pSrcBuffers[numAxs_g];
+
+    Cpa8U ***ppBuffers = NULL;
+    arrayOfBufArraysFactory(&ppBuffers, numAxs_g, numBuffers, bufferSize);
+    validateArrayOfBufferArrays(ppBuffers, numAxs_g, numBuffers, bufferSize);
+
+    CpaCySymDpOpData **pOpDatas = NULL;
+    genOpDataArray(&pOpDatas, numBuffers);
+
+    int numIterations = 1000;
+    uint64_t start = sampleCoderdtsc();
+    for(int i=0; i<numIterations; i++){
+        hostSubmitOnly(chainLength, ppBuffers,
+            numBuffers, rBS, bufferSize, pOpDatas);
+    }
+    uint64_t end = sampleCoderdtsc();
+    uint64_t cycles = end-start;
+    uint64_t avgCycles = cycles/numIterations;
+    // uint64_t freqKHz = sampleCodeFreqKHz();
+    uint64_t cpuFreqMHz = 2000;
+
+    printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
+    killPollingThreads(chainLength, tid);
+    tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
+}
 /*
 Tests:
 (1) SingleCPU-RR-Submit and poll
 - params: batch size
 (2) Submit and dedicated poll
 - params: number of dedicated pollers, per-cb-thread spinup on/off
+
+Which configurations are truly comparable?:
+(1) a dedicated polling thread per accelerator could spin up new threads
+for each callback function - we will test this
+(2) a single-host request-poller could spin up new threads as well
+- does the removal of cb's from the critical path
+1 - which configuration can achieve the lowest latency?
+
 */
 
 void runExps(){
