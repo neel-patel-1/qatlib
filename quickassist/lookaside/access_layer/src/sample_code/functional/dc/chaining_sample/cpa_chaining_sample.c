@@ -213,9 +213,11 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
     return status;
 }
 
-CpaStatus setupInstances(int desiredInstances, CpaInstanceHandle *cyInstHandles){
+CpaStatus setupInstances(int desiredInstances,
+    CpaInstanceHandle *cyInstHandles,
+    CpaCySymSessionCtx *sessionCtxs){
+
     CpaStatus status = CPA_STATUS_FAIL;
-    CpaCySymSessionCtx sessionCtx = NULL;
     Cpa32U sessionCtxSize = 0;
     CpaInstanceHandle cyInstHandle = NULL;
     CpaCySymSessionSetupData sessionSetupData = {0};
@@ -246,6 +248,7 @@ CpaStatus setupInstances(int desiredInstances, CpaInstanceHandle *cyInstHandles)
 
     for(int i=0; i<numInstances; i++){
         CpaInstanceHandle cyInstHandle = cyInstHandles[i];
+        CpaCySymSessionCtx sessionCtx = sessionCtxs[i];
         status = cpaCyStartInstance(cyInstHandle);
         if (CPA_STATUS_SUCCESS == status)
         {
@@ -275,13 +278,55 @@ CpaStatus setupInstances(int desiredInstances, CpaInstanceHandle *cyInstHandles)
             status = cpaCySymDpRegCbFunc(cyInstHandle, symDpCallback);
             //</snippet>
         }
-    }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* populate symmetric session data structure */
+            //<snippet name="initSession">
+            sessionSetupData.sessionPriority = CPA_CY_PRIORITY_HIGH;
+            sessionSetupData.symOperation = CPA_CY_SYM_OP_ALGORITHM_CHAINING;
+            sessionSetupData.algChainOrder =
+                CPA_CY_SYM_ALG_CHAIN_ORDER_CIPHER_THEN_HASH;
 
+            sessionSetupData.cipherSetupData.cipherAlgorithm =
+                CPA_CY_SYM_CIPHER_AES_CBC;
+            sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+            sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+                sizeof(sampleCipherKey);
+            sessionSetupData.cipherSetupData.cipherDirection =
+                CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+
+            sessionSetupData.hashSetupData.hashAlgorithm = CPA_CY_SYM_HASH_SHA256;
+            sessionSetupData.hashSetupData.hashMode = CPA_CY_SYM_HASH_MODE_AUTH;
+            sessionSetupData.hashSetupData.digestResultLenInBytes = DIGEST_LENGTH;
+            sessionSetupData.hashSetupData.authModeSetupData.authKey =
+                sampleCipherKey;
+            sessionSetupData.hashSetupData.authModeSetupData.authKeyLenInBytes =
+                sizeof(sampleCipherKey);
+
+            /* Even though MAC follows immediately after the region to hash
+            digestIsAppended is set to false in this case due to
+            errata number IXA00378322 */
+            sessionSetupData.digestIsAppended = CPA_FALSE;
+            sessionSetupData.verifyDigest = CPA_FALSE;
+
+            /* Determine size of session context to allocate */
+            PRINT_DBG("cpaCySymDpSessionCtxGetSize\n");
+            status = cpaCySymDpSessionCtxGetSize(
+                cyInstHandle, &sessionSetupData, &sessionCtxSize);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Allocate session context */
+            status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
+
+        }
+    }
 
 }
 
 
 void startTest(int chainLength){
     CpaInstanceHandle instanceHandles[chainLength];
-    setupInstances(chainLength, instanceHandles);
+    CpaCySymSessionCtx sessionCtxs[chainLength];
+    setupInstances(chainLength, instanceHandles, sessionCtxs);
 }
