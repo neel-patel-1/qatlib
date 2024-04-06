@@ -204,13 +204,12 @@ static void interCallback(void *pCallbackTag, CpaStatus status, CpaBoolean verif
         // printf("inter cb: %d completed fwding\n", mId);
     }
 }
-static void endCallback(void *pCallbackTag, CpaStatus status, CpaBoolean verifyResult){
-    struct cbArg *arg = (struct encChainArg *)pCallbackTag;
-    Cpa16U mId = arg->mIdx;
-    if(arg->bufIdx == (numBufs_g-1)){
-        complete = 1;
-        // printf("cb: %d complete\n", mId);
-    }
+static void endCallback(CpaCySymDpOpData *pOpData,
+                          CpaStatus status,
+                          CpaBoolean verifyResult){
+
+        pOpData->pCallbackTag = (void *)1;
+
 
 }
 
