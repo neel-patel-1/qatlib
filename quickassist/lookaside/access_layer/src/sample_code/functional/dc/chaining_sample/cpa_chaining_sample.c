@@ -474,7 +474,6 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     setupInstances(chainLength, instanceHandles, sessionCtxs_g);
     Cpa8U *pIvBuffer = NULL;
     CpaStatus status = CPA_STATUS_SUCCESS;
-    // Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
     CpaCySymDpOpData *pOpData;
 
     numAxs_g = chainLength;
@@ -487,15 +486,9 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     validateArrayOfBufferArrays(ppBuffers, numAxs_g, numBuffers, bufferSize);
 
     CpaCySymDpOpData **pOpDatas = NULL;
-    status =
-        PHYS_CONTIG_ALLOC(&pOpDatas, sizeof(CpaCySymDpOpData*) * numBuffers);
-    for(int i=0; i<numBuffers; i++){
-        CpaCySymDpOpData *pOpData = NULL;
-        PHYS_CONTIG_ALLOC(&pOpData, sizeof(CpaCySymDpOpData));
-        pOpDatas[i] = pOpData;
-    }
+    genOpDataArray(&pOpDatas, numBuffers);
 
-    int numIterations = 10;
+    int numIterations = 1000;
     uint64_t start = sampleCoderdtsc();
     for(int i=0; i<numIterations; i++){
         roundRobinSubmitAndPoll(chainLength, ppBuffers,
@@ -503,8 +496,27 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     }
     uint64_t end = sampleCoderdtsc();
     uint64_t cycles = end-start;
-    PRINT("Cycles: %lu\n", cycles);
+    uint64_t avgCycles = cycles/numIterations;
+    // uint64_t freqKHz = sampleCodeFreqKHz();
+    PRINT("NumBuffers: %d ", numBuffers);
+    PRINT("BufferSize: %d ", bufferSize);
+    PRINT("BatchSize: %d ", rBS);
+    PRINT("ChainLength: %d ", chainLength);
+
+    PRINT("AvgOffloadCycles: %lu\n", avgCycles);
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
+}
+
+void runExps(){
+    int numBufferses[] = {32};
+    int batchSizes[] = {1, 2, 4, 8, 16, 32};
+    int numBuffersIdx=0;
+    for(int batchSizeIdx = 0; batchSizeIdx<6; batchSizeIdx++){
+        for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
+            startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSizes[batchSizeIdx],
+                /*bufferSize=*/32*1024);
+        }
+    }
 }
 
