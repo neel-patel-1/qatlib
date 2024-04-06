@@ -572,6 +572,18 @@ CpaStatus tearDownInstances(int desiredInstances,
 
 }
 
+static void bufArrayFactory(Cpa8U ***ppBuffers, Cpa32U numBuffers, Cpa32U bufferSize){
+    Cpa8U **pBuffers = NULL;
+    PHYS_CONTIG_ALLOC(&pBuffers, sizeof(Cpa8U*) * numBuffers);
+    for(int i=0; i<numBuffers; i++){
+        Cpa8U *pBuf = NULL;
+        PHYS_CONTIG_ALLOC(&pBuf, bufferSize);
+        memcpy(pBuf, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
+        pBuffers[i] = pBuf;
+    }
+    *ppBuffers = pBuffers;
+}
+
 void startTest(int chainLength){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
@@ -588,27 +600,25 @@ void startTest(int chainLength){
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
 
-    Cpa8U **pBuffers = NULL;
-    PHYS_CONTIG_ALLOC(&pBuffers, sizeof(Cpa8U*) * numBuffers);
-    for(int i=0; i<numBuffers; i++){
-        Cpa8U *pBuf = NULL;
-        PHYS_CONTIG_ALLOC(&pBuf, bufferSize);
-        memcpy(pBuf, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
-        pBuffers[i] = pBuf;
-    }
+
 
     Cpa8U ***ppBuffers = NULL;
     PHYS_CONTIG_ALLOC(&ppBuffers, sizeof(Cpa8U**) * numAxs_g);
     for(int i=0; i<numAxs_g; i++){
-        ppBuffers[i] = pBuffers;
+        bufArrayFactory(&ppBuffers[i], numBuffers, bufferSize);
     }
 
+    CpaBoolean copiedCorrectly = CPA_TRUE;
     for(int i=0; i<numBuffers;i++){
         if (0 != memcmp(ppBuffers[0][i], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
         {
             PRINT_ERR("Output does not match expected output\n");
             status = CPA_STATUS_FAIL;
+            copiedCorrectly = CPA_FALSE;
         }
+    }
+    if(copiedCorrectly){
+        PRINT_DBG("Buffers copied correctly\n");
     }
 
     // CpaBufferList *pSrcBuffers;
