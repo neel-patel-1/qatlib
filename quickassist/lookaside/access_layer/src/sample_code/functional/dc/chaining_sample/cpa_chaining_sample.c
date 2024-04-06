@@ -3,6 +3,7 @@
 #include "cpa_cy_sym_dp.h"
 #include "icp_sal_poll.h"
 #include "cpa_sample_utils.h"
+#include "Osal.h"
 
 /* The digest length must be less than or equal to SHA256 digest
    length (16) for this example */
@@ -488,6 +489,23 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
     } while (
         ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
         (globalDone == CPA_FALSE));
+}
+
+
+static void spawnPollingThreads(int chainLength){
+    pthread_t *tid = NULL;
+    /* SPR SMT-2's*/
+    PHYS_CONTIG_ALLOC(&tid, sizeof(pthread_t) * chainLength);
+    uint32_t coreMap[19] = {41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+                            51, 52, 53, 54, 55, 56, 57, 58, 59};
+    for(int i=0; i<chainLength; i++){
+        int *axIdx = NULL;
+        PHYS_CONTIG_ALLOC(&axIdx, sizeof(int));
+        osalThreadCreate(&tid[i], dedicatedRRPoller, NULL, (void *)axIdx);
+        osalThreadBind(&tid[i], coreMap[i]);
+    }
+
+
 }
 static void genOpDataArray(CpaCySymDpOpData ***ppOpDatas, int numBuffers){
     CpaCySymDpOpData ** pOpDatas = NULL;
