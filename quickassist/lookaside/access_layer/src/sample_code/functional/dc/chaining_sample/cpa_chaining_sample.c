@@ -81,13 +81,13 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
             globalDone = CPA_TRUE;
         // }
     } else {
-        struct cbArg *newCbArg = NULL;
+        struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
         PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
         newCbArg->mIdx = cbArg->mIdx + 1;
         newCbArg->bufIdx = cbArg->bufIdx;
         newCbArg->kickTail = cbArg->kickTail;
         pOpData->pCallbackTag = newCbArg;
-        cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
+        cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
     }
 }
 
@@ -530,9 +530,9 @@ void startTest(int chainLength){
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
     setupInstances(chainLength, instanceHandles, sessionCtxs_g);
-    for(int i=0; i<chainLength; i++){
-        symDpPerformOp(instanceHandles[i], sessionCtxs_g[i]);
-    }
+    // for(int i=0; i<chainLength; i++){
+        symDpPerformOp(instanceHandles[0], sessionCtxs_g[0]);
+    // }
     CpaStatus status = CPA_STATUS_SUCCESS;
         do
         {
