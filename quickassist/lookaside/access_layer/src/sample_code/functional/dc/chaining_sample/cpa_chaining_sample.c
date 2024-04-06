@@ -244,6 +244,39 @@ CpaStatus setupInstances(int desiredInstances, CpaInstanceHandle *cyInstHandles)
         PRINT_ERR("Also make sure to use config file version 2.\n");
     }
 
+    for(int i=0; i<numInstances; i++){
+        CpaInstanceHandle cyInstHandle = cyInstHandles[i];
+        status = cpaCyStartInstance(cyInstHandle);
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = cpaCyInstanceGetInfo2(cyInstHandle, info2);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            if (info2->isPolled == CPA_FALSE)
+            {
+                status = CPA_STATUS_FAIL;
+                PRINT_ERR("This sample code works only with instances "
+                        "configured in polling mode\n");
+            }
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+
+            /*
+            * Set the address translation function for the instance
+            */
+            status = cpaCySetAddressTranslation(cyInstHandle, sampleVirtToPhys);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Register callback function for the instance */
+            //<snippet name="regCb">
+            status = cpaCySymDpRegCbFunc(cyInstHandle, symDpCallback);
+            //</snippet>
+        }
+    }
+
 
 }
 
