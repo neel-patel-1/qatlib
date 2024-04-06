@@ -23,6 +23,7 @@ CpaCySymDpSessionCtx *sessionCtxs_g;
 struct cbArg{
     Cpa16U mIdx;
     Cpa16U bufIdx;
+    Cpa16U numBufs;
     CpaBoolean kickTail;
 };
 
@@ -70,17 +71,18 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
                           CpaBoolean verifyResult)
 {
     struct cbArg *cbArg = (struct cbArg *)pOpData->pCallbackTag;
-    CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx];
+    CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx+1];
     CpaCySymSessionCtx toSubSessionCtx = sessionCtxs_g[cbArg->mIdx];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
-    PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx);
 
-    if(cbArg->mIdx == numAxs_g - 1){
-        // if(cbArg->bufIdx == numBufs_g - 1){
+    if(cbArg->mIdx == (numAxs_g - 1)){
+        PRINT_DBG("Op %d received at final ax: %d\n", cbArg->bufIdx, cbArg->mIdx);
+        if(cbArg->bufIdx == cbArg->numBufs - 1){
             globalDone = CPA_TRUE;
-        // }
+        }
     } else {
+        PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx+1);
         struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
         PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
         newCbArg->mIdx = cbArg->mIdx + 1;
@@ -132,227 +134,6 @@ Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
     pOpData->pCallbackTag = (void *)pCallbackTag;
 }
 
-static void dcChainFreeBufferList(CpaBufferList **testBufferList)
-{
-    CpaBufferList *pBuffList = *testBufferList;
-    CpaFlatBuffer *pFlatBuff = NULL;
-    Cpa32U curBuff = 0;
-
-    if (NULL == pBuffList)
-    {
-        PRINT_ERR("testBufferList is NULL\n");
-        return;
-    }
-
-    pFlatBuff = pBuffList->pBuffers;
-    while (curBuff < pBuffList->numBuffers)
-    {
-        if (NULL != pFlatBuff->pData)
-        {
-            PHYS_CONTIG_FREE(pFlatBuff->pData);
-            pFlatBuff->pData = NULL;
-        }
-        pFlatBuff++;
-        curBuff++;
-    }
-
-    if (NULL != pBuffList->pPrivateMetaData)
-    {
-        PHYS_CONTIG_FREE(pBuffList->pPrivateMetaData);
-        pBuffList->pPrivateMetaData = NULL;
-    }
-
-    OS_FREE(pBuffList);
-    *testBufferList = NULL;
-}
-
-static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
-                                        Cpa32U numBuffers,
-                                        Cpa32U bufferSize,
-                                        Cpa32U bufferMetaSize)
-{
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaBufferList *pBuffList = NULL;
-    CpaFlatBuffer *pFlatBuff = NULL;
-    Cpa32U curBuff = 0;
-    Cpa8U *pMsg = NULL;
-    /*
-     * allocate memory for bufferlist and array of flat buffers in a contiguous
-     * area and carve it up to reduce number of memory allocations required.
-     */
-    Cpa32U bufferListMemSize =
-        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
-
-    status = OS_MALLOC(&pBuffList, bufferListMemSize);
-    if (CPA_STATUS_SUCCESS != status)
-    {
-        PRINT_ERR("Error in allocating pBuffList\n");
-        return CPA_STATUS_FAIL;
-    }
-
-    pBuffList->numBuffers = numBuffers;
-
-    if (bufferMetaSize)
-    {
-        status =
-            PHYS_CONTIG_ALLOC(&pBuffList->pPrivateMetaData, bufferMetaSize);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("Error in allocating pBuffList->pPrivateMetaData\n");
-            OS_FREE(pBuffList);
-            return CPA_STATUS_FAIL;
-        }
-    }
-    else
-    {
-        pBuffList->pPrivateMetaData = NULL;
-    }
-
-    pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
-    pBuffList->pBuffers = pFlatBuff;
-    while (curBuff < numBuffers)
-    {
-        if (0 != bufferSize)
-        {
-            status = PHYS_CONTIG_ALLOC(&pMsg, bufferSize);
-            if (CPA_STATUS_SUCCESS != status || NULL == pMsg)
-            {
-                PRINT_ERR("Error in allocating pMsg\n");
-                dcChainFreeBufferList(&pBuffList);
-                return CPA_STATUS_FAIL;
-            }
-            memset(pMsg, 0, bufferSize);
-            pFlatBuff->pData = pMsg;
-        }
-        else
-        {
-            pFlatBuff->pData = NULL;
-        }
-        pFlatBuff->dataLenInBytes = bufferSize;
-        pFlatBuff++;
-        curBuff++;
-    }
-
-    *testBufferList = pBuffList;
-
-    return CPA_STATUS_SUCCESS;
-}
-
-
-
-static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
-                                CpaCySymSessionCtx sessionCtx)
-{
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaCySymDpOpData *pOpData = NULL;
-    Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
-    Cpa8U *pSrcBuffer = NULL;
-    Cpa8U *pIvBuffer = NULL;
-
-    /* Allocate Src buffer */
-    status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Allocate IV buffer */
-        status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Setup all test Buffers */
-        /* copy source into buffer */
-        memcpy(pSrcBuffer, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
-
-        /* copy IV into buffer */
-        memcpy(pIvBuffer, sampleCipherIv, sizeof(sampleCipherIv));
-
-        /* Allocate memory for operational data. Note this needs to be
-         * 8-byte aligned, contiguous, resident in DMA-accessible
-         * memory.
-         */
-        status =
-            PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Setup all Op Datas */
-        CpaPhysicalAddr pPhySrcBuffer;
-        struct cbArg *cbArg = NULL;
-        PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
-        cbArg->mIdx = 0;
-        cbArg->bufIdx = 0;
-        cbArg->kickTail = CPA_TRUE;
-        populateOpData(pOpData,
-            cyInstHandle,
-            sessionCtx, pSrcBuffer, pSrcBuffer,
-             pIvBuffer, bufferSize, cbArg);
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-
-        PRINT_DBG("cpaCySymDpEnqueueOp\n");
-        /** Enqueue symmetric operation */
-        //<snippet name="enqueue">
-        status = cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
-        //</snippet>
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
-        }
-        else
-        {
-
-            /* Can now enqueue other requests before submitting all requests to
-             * the hardware. The cost of submitting the request to the hardware
-             * is
-             * then amortized across all enqueued requests.
-             * In this simple example we have only 1 request to send
-             */
-
-            PRINT_DBG("cpaCySymDpPerformOpNow\n");
-
-            /** Submit all enqueued symmetric operations to the hardware */
-            //<snippet name="perform">
-            status = cpaCySymDpPerformOpNow(cyInstHandle);
-            //</snippet>
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("cpaCySymDpPerformOpNow failed. (status = %d)\n",
-                          status);
-            }
-        }
-    }
-    /* Can now enqueue more operations and/or do other work while
-     * hardware processes the request.
-     * In this simple example we have no other work to do
-     * */
-
-
-
-    /* Check result */
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        if (0 == memcmp(pSrcBuffer, expectedOutput, bufferSize))
-        {
-            PRINT_DBG("Output matches expected output\n");
-        }
-        else
-        {
-            PRINT_ERR("Output does not match expected output\n");
-            status = CPA_STATUS_FAIL;
-        }
-    }
-
-    // PHYS_CONTIG_FREE(pSrcBuffer);
-    // PHYS_CONTIG_FREE(pIvBuffer);
-    // PHYS_CONTIG_FREE(pOpData);
-
-    return status;
-}
-
 static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
                                 CpaCySymSessionCtx sessionCtx,
                                 CpaCySymDpOpData *pOpData, /*Can we use
@@ -371,6 +152,7 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
         PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
         cbArg->mIdx = 0;
         cbArg->bufIdx = sub;
+        cbArg->numBufs = numBufs_g;
         cbArg->kickTail = CPA_FALSE;
         populateOpData(pOpData, cyInstHandle, sessionCtx,
             pSrcBufferList[sub], pDstBufferList[sub],
@@ -644,18 +426,25 @@ static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32
 }
 
 static inline void roundRobinSubmitAndPoll(int chainLength,
-Cpa8U **ppBuffers,
+Cpa8U ***ppBuffers,
 int numBuffers,
 int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
     CpaStatus status = CPA_STATUS_SUCCESS;
 
+    int startSubmitIdx = 0; int endSubmitIdx = rBS;
+
     do
     {
-        for(int bufIdx=0; bufIdx<numBuffers; bufIdx+=rBS){
-            symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-                pOpData[bufIdx], ppBuffers[0], ppBuffers[1],
-                bufferSize, rBS, bufIdx);
+        if(startSubmitIdx < numBuffers){
+            for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
+                symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
+                    pOpData[bufIdx], ppBuffers[0], ppBuffers[1],
+                    bufferSize, rBS, bufIdx);
+            }
+            startSubmitIdx = endSubmitIdx;
+            endSubmitIdx = startSubmitIdx + rBS;
         }
+
         for(int i=0; i<numAxs_g; i++){
             status = icp_sal_CyPollDpInstance(instanceHandles[i], rBS);
         }
@@ -675,6 +464,7 @@ void startTest(int chainLength, int numBuffers, int rBS){
     CpaCySymDpOpData *pOpData;
 
     numAxs_g = chainLength;
+    numBufs_g = numBuffers;
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
 
