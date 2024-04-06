@@ -583,6 +583,42 @@ static void bufArrayFactory(Cpa8U ***ppBuffers, Cpa32U numBuffers, Cpa32U buffer
     }
     *ppBuffers = pBuffers;
 }
+static void arrayOfBufArraysFactory(Cpa8U ****pppBuffers, Cpa32U numAxs, Cpa32U numBuffers, Cpa32U bufferSize){
+    Cpa8U ***ppBuffers = NULL;
+    PHYS_CONTIG_ALLOC(&ppBuffers, sizeof(Cpa8U**) * numAxs);
+    for(int i=0; i<numAxs; i++){
+        bufArrayFactory(&ppBuffers[i], numBuffers, bufferSize);
+    }
+    *pppBuffers = ppBuffers;
+}
+static void validateBufferArray(Cpa8U **pBuffers, Cpa32U numBuffers, Cpa32U bufferSize){
+    CpaBoolean copiedCorrectly = CPA_TRUE;
+    for(int i=0; i<numBuffers; i++){
+        if (0 != memcmp(pBuffers[i], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
+        {
+            PRINT_ERR("Output does not match expected output\n");
+            copiedCorrectly = CPA_FALSE;
+        }
+    }
+    if(copiedCorrectly){
+        PRINT_DBG("Buffers copied correctly\n");
+    }
+}
+static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32U numBuffers, Cpa32U bufferSize){
+    CpaBoolean copiedCorrectly = CPA_TRUE;
+    for(int j=0; j<numAxs; j++){
+        for(int i=0; i<numBuffers;i++){
+            if (0 != memcmp(ppBuffers[j][i], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
+            {
+                PRINT_ERR("Output does not match expected output\n");
+                copiedCorrectly = CPA_FALSE;
+            }
+        }
+        if(copiedCorrectly){
+            PRINT_DBG("Buffers copied correctly\n");
+        }
+    }
+}
 
 void startTest(int chainLength){
     numAxs_g = chainLength;
@@ -600,35 +636,16 @@ void startTest(int chainLength){
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
 
-
-
     Cpa8U ***ppBuffers = NULL;
-    PHYS_CONTIG_ALLOC(&ppBuffers, sizeof(Cpa8U**) * numAxs_g);
-    for(int i=0; i<numAxs_g; i++){
-        bufArrayFactory(&ppBuffers[i], numBuffers, bufferSize);
-    }
+    arrayOfBufArraysFactory(&ppBuffers, numAxs_g, numBuffers, bufferSize);
+    validateArrayOfBufferArrays(ppBuffers, numAxs_g, numBuffers, bufferSize);
 
-    CpaBoolean copiedCorrectly = CPA_TRUE;
-    for(int i=0; i<numBuffers;i++){
-        if (0 != memcmp(ppBuffers[0][i], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
-        {
-            PRINT_ERR("Output does not match expected output\n");
-            status = CPA_STATUS_FAIL;
-            copiedCorrectly = CPA_FALSE;
-        }
-    }
-    if(copiedCorrectly){
-        PRINT_DBG("Buffers copied correctly\n");
-    }
-
-    // CpaBufferList *pSrcBuffers;
-    // createEncTestBuffers(&pSrcBuffers, numAxs_g, 1, pIvBuffer);
     status =
         PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
 
 
     symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-        pOpData, pSrcBuffers[0], pSrcBuffers[1],
+        pOpData, ppBuffers[0], ppBuffers[1],
         bufferSize, 1);
 
     do
