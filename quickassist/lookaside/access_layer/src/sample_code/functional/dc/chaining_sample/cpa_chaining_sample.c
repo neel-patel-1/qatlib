@@ -620,7 +620,28 @@ static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32
     }
 }
 
-void startTest(int chainLength){
+static inline void roundRobinSubmitAndPoll(int chainLength,
+Cpa8U **ppBuffers,
+int numBuffers,
+int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    do
+    {
+        for(int bufIdx=0; bufIdx<numBuffers; bufIdx+=rBS){
+            symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
+                pOpData[0], ppBuffers[0], ppBuffers[1],
+                bufferSize, rBS);
+        }
+        for(int i=0; i<numAxs_g; i++){
+            status = icp_sal_CyPollDpInstance(instanceHandles[i], rBS);
+        }
+    } while (
+        ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
+        (globalDone == CPA_FALSE));
+}
+
+void startTest(int chainLength, int numBuffers, int rBS){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
@@ -630,9 +651,7 @@ void startTest(int chainLength){
     Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
     CpaCySymDpOpData *pOpData;
 
-    numAxs_g = 2;
-    Cpa32U numOps = 1;
-    Cpa32U numBuffers = 1;
+    numAxs_g = chainLength;
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
 
@@ -643,19 +662,7 @@ void startTest(int chainLength){
     status =
         PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
 
-
-    symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-        pOpData, ppBuffers[0], ppBuffers[1],
-        bufferSize, 1);
-
-    do
-    {
-        for(int i=0; i<numAxs_g; i++){
-            status = icp_sal_CyPollDpInstance(instanceHandles[i], 1);
-        }
-    } while (
-        ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
-        (globalDone == CPA_FALSE));
+    roundRobinSubmitAndPoll(chainLength, ppBuffers, numBuffers, rBS, bufferSize, &pOpData);
 
     // for(int i=0; i< numBuffers; i++){
     //     if (0 == memcmp(pSrcBuffers[1]->pBuffers[i].pData, expectedOutput, bufferSize))
@@ -671,3 +678,4 @@ void startTest(int chainLength){
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
+
