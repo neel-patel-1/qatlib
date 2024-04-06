@@ -118,8 +118,7 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    startTest(/*ChainLength=*/3, /*numBuffers=*/32, /*batchSize=*/2,
-        /*bufferSize=*/32*1024);
+    runExps();
 
 
     icp_sal_userStop();

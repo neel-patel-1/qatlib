@@ -498,24 +498,33 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     uint64_t cycles = end-start;
     uint64_t avgCycles = cycles/numIterations;
     // uint64_t freqKHz = sampleCodeFreqKHz();
+    uint64_t cpuFreqMHz = 2000;
     PRINT("NumBuffers: %d ", numBuffers);
     PRINT("BufferSize: %d ", bufferSize);
     PRINT("BatchSize: %d ", rBS);
     PRINT("ChainLength: %d ", chainLength);
 
-    PRINT("AvgOffloadCycles: %lu\n", avgCycles);
+    PRINT("AvgOffloadCycles: %lu ", avgCycles);
+    PRINT("AvgOffloadMicroseconds: %lu\n", (avgCycles/cpuFreqMHz));
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
 
 void runExps(){
-    int numBufferses[] = {32};
-    int batchSizes[] = {1, 2, 4, 8, 16, 32};
-    int numBuffersIdx=0;
-    for(int batchSizeIdx = 0; batchSizeIdx<6; batchSizeIdx++){
-        for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
+    int numBufferses[] = {1, 2, 4, 8, 16, 32};
+    int bufferSizes[] = {1*1024*1024, 512* 1024, 256*1024, 128*1024, 64*1024, 32*1024};
+
+    for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
+        int numPossibleBatchSizes = numBufferses[numBuffersIdx];
+        int batchSizes[numPossibleBatchSizes];
+        for(int i=0; i<numPossibleBatchSizes; i++){
+            int testBatchSize = numBufferses[i];
+            batchSizes[i] = testBatchSize;
+        }
+
+        for(int batchSizeIdx = 0; batchSizeIdx<numPossibleBatchSizes; batchSizeIdx++){
             startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSizes[batchSizeIdx],
-                /*bufferSize=*/32*1024);
+                /*bufferSize=*/bufferSizes[numBuffersIdx]);
         }
     }
 }
