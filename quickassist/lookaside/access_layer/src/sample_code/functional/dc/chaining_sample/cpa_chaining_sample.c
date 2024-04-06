@@ -513,17 +513,13 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
 void runExps(){
     int numBufferses[] = {1, 2, 4, 8, 16, 32};
     int bufferSizes[] = {1*1024*1024, 512* 1024, 256*1024, 128*1024, 64*1024, 32*1024};
-
+    gDebugParam = 0;
     for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
-        int numPossibleBatchSizes = numBufferses[numBuffersIdx];
-        int batchSizes[numPossibleBatchSizes];
-        for(int i=0; i<numPossibleBatchSizes; i++){
-            int testBatchSize = numBufferses[i];
-            batchSizes[i] = testBatchSize;
-        }
+        int maxAllowedBatchSize = numBufferses[numBuffersIdx];
 
-        for(int batchSizeIdx = 0; batchSizeIdx<numPossibleBatchSizes; batchSizeIdx++){
-            startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSizes[batchSizeIdx],
+
+        for(int batchSize = 1; batchSize<=maxAllowedBatchSize; batchSize*=2){
+            startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
                 /*bufferSize=*/bufferSizes[numBuffersIdx]);
         }
     }
