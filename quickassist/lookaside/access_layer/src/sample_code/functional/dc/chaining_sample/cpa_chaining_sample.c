@@ -360,34 +360,57 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
                                 Cpa8U **pSrcBufferList,
                                 Cpa8U **pDstBufferList,
                                 Cpa32U bufferSize,
-                                Cpa32U numOps)
+                                Cpa32U numOps,
+                                Cpa32U bufIdx)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
-    for(int sub=0; sub<numOps; sub++){
+    int sub = 0;
+    int numRetries = 3;
+    for(sub=bufIdx; sub<(bufIdx+numOps)-1; sub++){
         struct cbArg *cbArg = NULL;
         PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
         cbArg->mIdx = 0;
-        cbArg->bufIdx = 0;
-        cbArg->kickTail = CPA_TRUE;
+        cbArg->bufIdx = sub;
+        cbArg->kickTail = CPA_FALSE;
         populateOpData(pOpData, cyInstHandle, sessionCtx,
             pSrcBufferList[sub], pDstBufferList[sub],
             pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
             bufferSize, cbArg);
-        status = cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
+retry:
+        status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
+        if(CPA_STATUS_RETRY == status && numRetries > 0){
+            if(numRetries > 0){
+                numRetries--;
+            }
+            goto retry;
+        }
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
+            exit(-1);
+        }
+    }
+    struct cbArg *cbArg = NULL;
+    PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
+    cbArg->mIdx = 0;
+    cbArg->bufIdx = sub;
+    cbArg->kickTail = CPA_TRUE;
+    populateOpData(pOpData, cyInstHandle, sessionCtx,
+        pSrcBufferList[sub], pDstBufferList[sub],
+        pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
+        bufferSize, cbArg);
+retry_kick_tail:
+    status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
+    if(CPA_STATUS_RETRY == status && numRetries > 0){
+        if(numRetries > 0){
+            numRetries--;
+        }
+        goto retry_kick_tail;
     }
     if (CPA_STATUS_SUCCESS != status)
     {
         PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
-    }
-    else
-    {
-        PRINT_DBG("cpaCySymDpPerformOpNow\n");
-        status = cpaCySymDpPerformOpNow(cyInstHandle);
-        if (CPA_STATUS_SUCCESS != status)
-        {
-            PRINT_ERR("cpaCySymDpPerformOpNow failed. (status = %d)\n",
-                        status);
-        }
+        exit(-1);
     }
 }
 
@@ -630,8 +653,8 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
     {
         for(int bufIdx=0; bufIdx<numBuffers; bufIdx+=rBS){
             symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-                pOpData[0], ppBuffers[0], ppBuffers[1],
-                bufferSize, rBS);
+                pOpData[bufIdx], ppBuffers[0], ppBuffers[1],
+                bufferSize, rBS, bufIdx);
         }
         for(int i=0; i<numAxs_g; i++){
             status = icp_sal_CyPollDpInstance(instanceHandles[i], rBS);
@@ -659,10 +682,17 @@ void startTest(int chainLength, int numBuffers, int rBS){
     arrayOfBufArraysFactory(&ppBuffers, numAxs_g, numBuffers, bufferSize);
     validateArrayOfBufferArrays(ppBuffers, numAxs_g, numBuffers, bufferSize);
 
+    CpaCySymDpOpData **pOpDatas = NULL;
     status =
-        PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
+        PHYS_CONTIG_ALLOC(&pOpDatas, sizeof(CpaCySymDpOpData*) * numBuffers);
+    for(int i=0; i<numBuffers; i++){
+        CpaCySymDpOpData *pOpData = NULL;
+        PHYS_CONTIG_ALLOC(&pOpData, sizeof(CpaCySymDpOpData));
+        pOpDatas[i] = pOpData;
+    }
 
-    roundRobinSubmitAndPoll(chainLength, ppBuffers, numBuffers, rBS, bufferSize, &pOpData);
+    roundRobinSubmitAndPoll(chainLength, ppBuffers,
+    numBuffers, rBS, bufferSize, pOpDatas);
 
     // for(int i=0; i< numBuffers; i++){
     //     if (0 == memcmp(pSrcBuffers[1]->pBuffers[i].pData, expectedOutput, bufferSize))
