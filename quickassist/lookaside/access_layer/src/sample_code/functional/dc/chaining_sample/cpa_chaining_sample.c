@@ -74,7 +74,7 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
     CpaCySymSessionCtx toSubSessionCtx = sessionCtxs_g[cbArg->mIdx];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
-    printf("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx);
+    PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx);
 
     if(cbArg->mIdx == numAxs_g - 1){
         // if(cbArg->bufIdx == numBufs_g - 1){
@@ -87,14 +87,16 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
         newCbArg->bufIdx = cbArg->bufIdx;
         newCbArg->kickTail = cbArg->kickTail;
         pOpData->pCallbackTag = newCbArg;
-        cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
+        cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
     }
 }
 
 static inline void populateOpData(CpaCySymDpOpData *pOpData,
 CpaInstanceHandle cyInstHandle, CpaCySymSessionCtx sessionCtx,
-Cpa8U *pSrcBuffer, Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
+Cpa8U *pSrcBuffer,Cpa8U *pDstBuffer,
+Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
     CpaPhysicalAddr pPhySrcBuffer;
+    CpaPhysicalAddr pPhyDstBuffer;
     pOpData->cryptoStartSrcOffsetInBytes = 0;
     pOpData->messageLenToCipherInBytes = sizeof(sampleAlgChainingSrc);
     pOpData->iv =
@@ -111,13 +113,17 @@ Cpa8U *pSrcBuffer, Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
         virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer,
                           cyInstHandle,
                           CPA_ACC_SVC_TYPE_CRYPTO);
+    pPhyDstBuffer =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pDstBuffer,
+                          cyInstHandle,
+                          CPA_ACC_SVC_TYPE_CRYPTO);
     pOpData->digestResult = pPhySrcBuffer + sizeof(sampleAlgChainingSrc);
     pOpData->instanceHandle = cyInstHandle;
     pOpData->sessionCtx = sessionCtx;
     pOpData->ivLenInBytes = sizeof(sampleCipherIv);
     pOpData->srcBuffer = pPhySrcBuffer;
     pOpData->srcBufferLen = bufferSize;
-    pOpData->dstBuffer = pPhySrcBuffer;
+    pOpData->dstBuffer = pPhyDstBuffer;
     pOpData->dstBufferLen = bufferSize;
     pOpData->thisPhys =
         virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
@@ -232,6 +238,8 @@ static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
     return CPA_STATUS_SUCCESS;
 }
 
+
+
 static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
                                 CpaCySymSessionCtx sessionCtx)
 {
@@ -278,7 +286,8 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
         cbArg->kickTail = CPA_TRUE;
         populateOpData(pOpData,
             cyInstHandle,
-            sessionCtx, pSrcBuffer, pIvBuffer, bufferSize, cbArg);
+            sessionCtx, pSrcBuffer, pSrcBuffer,
+             pIvBuffer, bufferSize, cbArg);
     }
 
     if (CPA_STATUS_SUCCESS == status)
@@ -342,6 +351,43 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
     // PHYS_CONTIG_FREE(pOpData);
 
     return status;
+}
+
+static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
+                                CpaCySymSessionCtx sessionCtx,
+                                CpaCySymDpOpData *pOpData, /*Can we use
+                                the same pOpData for multiple submissions?*/
+                                CpaFlatBuffer *pSrcBufferList,
+                                CpaFlatBuffer *pDstBufferList,
+                                Cpa32U numOps)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    for(int sub=0; sub<numOps; sub++){
+        struct cbArg *cbArg = NULL;
+        PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
+        cbArg->mIdx = 0;
+        cbArg->bufIdx = 0;
+        cbArg->kickTail = CPA_TRUE;
+        populateOpData(pOpData, cyInstHandle, sessionCtx,
+            pSrcBufferList[sub].pData, pDstBufferList[sub].pData,
+            pDstBufferList[sub].pData + sizeof(sampleAlgChainingSrc),
+            pSrcBufferList[sub].dataLenInBytes, cbArg);
+        status = cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
+    }
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
+    }
+    else
+    {
+        PRINT_DBG("cpaCySymDpPerformOpNow\n");
+        status = cpaCySymDpPerformOpNow(cyInstHandle);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("cpaCySymDpPerformOpNow failed. (status = %d)\n",
+                        status);
+        }
+    }
 }
 
 CpaStatus setupInstances(int desiredInstances,
@@ -530,18 +576,55 @@ void startTest(int chainLength){
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
     setupInstances(chainLength, instanceHandles, sessionCtxs_g);
-    // for(int i=0; i<chainLength; i++){
-        symDpPerformOp(instanceHandles[0], sessionCtxs_g[0]);
-    // }
+    Cpa8U *pSrcBuffer = NULL;
+    Cpa8U *pIvBuffer = NULL;
     CpaStatus status = CPA_STATUS_SUCCESS;
-        do
-        {
-            for(int i=0; i<numAxs_g; i++){
-                status = icp_sal_CyPollDpInstance(instanceHandles[i], 1);
-            }
-        } while (
-            ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
-            (globalDone == CPA_FALSE));
+    Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
+    CpaCySymDpOpData *pOpData;
+
+    CpaBufferList *pSrcBufferList = NULL;
+    CpaBufferList *pSrc1BufferList = NULL;
+    CpaBufferList *pDstBufferList = NULL;
+    Cpa32U numOps = 1;
+    Cpa32U bufferMetaSize = 0;
+
+    status = dcChainBuildBufferList(&pSrcBufferList, 1, bufferSize, 0);
+    status = dcChainBuildBufferList(&pSrc1BufferList, 1, bufferSize, 0);
+    status = dcChainBuildBufferList(&pDstBufferList, 1, bufferSize, 0);
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Allocate IV buffer */
+        status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+    }
+
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Setup all test Buffers */
+        /* copy source into buffer */
+
+        /* copy IV into buffer */
+        memcpy(pIvBuffer, sampleCipherIv, sizeof(sampleCipherIv));
+
+        /* Allocate memory for operational data. Note this needs to be
+         * 8-byte aligned, contiguous, resident in DMA-accessible
+         * memory.
+         */
+        status =
+            PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
+    }
+
+    symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
+        pOpData, pSrcBufferList->pBuffers, pDstBufferList->pBuffers, 1);
+
+    do
+    {
+        for(int i=0; i<numAxs_g; i++){
+            status = icp_sal_CyPollDpInstance(instanceHandles[i], 1);
+        }
+    } while (
+        ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
+        (globalDone == CPA_FALSE));
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
