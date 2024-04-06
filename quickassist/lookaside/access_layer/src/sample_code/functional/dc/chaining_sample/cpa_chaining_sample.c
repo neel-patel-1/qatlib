@@ -320,13 +320,84 @@ CpaStatus setupInstances(int desiredInstances,
             status = PHYS_CONTIG_ALLOC(&sessionCtx, sessionCtxSize);
 
         }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Initialize the session */
+            PRINT_DBG("cpaCySymDpInitSession\n");
+            status =
+                cpaCySymDpInitSession(cyInstHandle, &sessionSetupData, sessionCtx);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            PRINT_DBG("Sample code ran successfully\n");
+        }
+        else
+        {
+            PRINT_DBG("Sample code failed with status of %d\n", status);
+        }
+#ifdef LAC_HW_PRECOMPUTES
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Poll for hw pre-compute responses. */
+            do
+            {
+                status = icp_sal_CyPollDpInstance(cyInstHandle, 0);
+            } while (CPA_STATUS_SUCCESS != status);
+        }
+
+#endif
     }
+    OS_FREE(info2);
 
 }
 
+CpaStatus tearDownInstances(int desiredInstances,
+    CpaInstanceHandle *cyInstHandles,
+    CpaCySymSessionCtx *sessionCtxs){
+
+    for(int i=0; i<desiredInstances; i++){
+        CpaInstanceHandle cyInstHandle = cyInstHandles[i];
+        CpaCySymSessionCtx sessionCtx = sessionCtxs[i];
+        CpaStatus status = CPA_STATUS_SUCCESS;
+        CpaStatus sessionStatus = CPA_STATUS_SUCCESS;
+
+        /* Wait for inflight requests to complete */
+        symSessionWaitForInflightReq(sessionCtx);
+
+        //<snippet name="removeSession">
+        sessionStatus = cpaCySymDpRemoveSession(cyInstHandle, sessionCtx);
+        //</snippet>
+
+        /* maintain status of remove session only when status of all operations
+         * before it are successful. */
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = sessionStatus;
+        }
+        PHYS_CONTIG_FREE(sessionCtx);
+
+        PRINT_DBG("cpaCyStopInstance\n");
+        cpaCyStopInstance(cyInstHandle);
+
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            PRINT_DBG("Sample code ran successfully\n");
+        }
+        else
+        {
+            PRINT_DBG("Sample code failed with status of %d\n", status);
+        }
+
+        return status;
+
+    }
+
+}
 
 void startTest(int chainLength){
     CpaInstanceHandle instanceHandles[chainLength];
     CpaCySymSessionCtx sessionCtxs[chainLength];
     setupInstances(chainLength, instanceHandles, sessionCtxs);
+
+    tearDownInstances(chainLength, instanceHandles, sessionCtxs);
 }
