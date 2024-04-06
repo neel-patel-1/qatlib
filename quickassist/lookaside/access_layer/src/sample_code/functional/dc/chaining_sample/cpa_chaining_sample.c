@@ -605,7 +605,7 @@ void startTest(int chainLength){
     Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
     CpaCySymDpOpData *pOpData;
 
-    numAxs_g = 1;
+    numAxs_g = 2;
     Cpa32U numOps = 1;
     Cpa32U numBuffers = 1;
     Cpa32U bufferMetaSize = 0;
@@ -617,7 +617,7 @@ void startTest(int chainLength){
 
 
     symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-        pOpData, pSrcBufferLists[0]->pBuffers, pSrcBufferLists[0]->pBuffers, 1);
+        pOpData, pSrcBufferLists[0]->pBuffers, pSrcBufferLists[1]->pBuffers, 1);
 
     do
     {
@@ -629,7 +629,7 @@ void startTest(int chainLength){
         (globalDone == CPA_FALSE));
 
     for(int i=0; i< numBuffers; i++){
-        if (0 == memcmp(pSrcBufferLists[0]->pBuffers[i].pData, expectedOutput, bufferSize))
+        if (0 == memcmp(pSrcBufferLists[1]->pBuffers[i].pData, expectedOutput, bufferSize))
         {
             PRINT_DBG("Output matches expected output\n");
         }
