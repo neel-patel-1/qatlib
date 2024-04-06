@@ -87,12 +87,10 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
     pOpData->sessionCtx = toSubSessionCtx;
 
     if(cbArg->mIdx == (numAxs_g - 1)){
-        PRINT_DBG("Op %d received at final ax: %d\n", cbArg->bufIdx, cbArg->mIdx);
         if(cbArg->bufIdx == cbArg->numBufs - 1){
             globalDone = CPA_TRUE;
         }
     } else {
-        PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx+1);
         struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
         PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
         newCbArg->mIdx = cbArg->mIdx + 1;
@@ -111,14 +109,14 @@ Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
     CpaPhysicalAddr pPhySrcBuffer;
     CpaPhysicalAddr pPhyDstBuffer;
     pOpData->cryptoStartSrcOffsetInBytes = 0;
-    pOpData->messageLenToCipherInBytes = sizeof(sampleAlgChainingSrc);
+    pOpData->messageLenToCipherInBytes = bufferSize;
     pOpData->iv =
         virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pIvBuffer,
                           cyInstHandle,
                           CPA_ACC_SVC_TYPE_CRYPTO);
     pOpData->pIv = pIvBuffer;
     pOpData->hashStartSrcOffsetInBytes = 0;
-    pOpData->messageLenToHashInBytes = sizeof(sampleAlgChainingSrc);
+    pOpData->messageLenToHashInBytes = bufferSize;
     /* Even though MAC follows immediately after the region to hash
        digestIsAppended is set to false in this case due to
        errata number IXA00378322 */
@@ -130,7 +128,7 @@ Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
         virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pDstBuffer,
                           cyInstHandle,
                           CPA_ACC_SVC_TYPE_CRYPTO);
-    pOpData->digestResult = pPhySrcBuffer + sizeof(sampleAlgChainingSrc);
+    pOpData->digestResult = pPhyDstBuffer + sizeof(sampleAlgChainingSrc);
     pOpData->instanceHandle = cyInstHandle;
     pOpData->sessionCtx = sessionCtx;
     pOpData->ivLenInBytes = sizeof(sampleCipherIv);
@@ -157,8 +155,9 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
     int sub = 0;
-    int numRetries = 3;
+    int numRetries = 10;
     for(sub=bufIdx; sub<(bufIdx+numOps)-1; sub++){
+        numRetries = 10;
         struct cbArg *cbArg = NULL;
         PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
         cbArg->mIdx = 0;
@@ -180,9 +179,15 @@ retry:
         if (CPA_STATUS_SUCCESS != status)
         {
             PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
+            PRINT_ERR("OpInfo: %d %d %d %d %d\n", sub, pOpData[sub]->cryptoStartSrcOffsetInBytes,
+                pOpData[sub]->messageLenToCipherInBytes,
+                pOpData[sub]->hashStartSrcOffsetInBytes,
+                pOpData[sub]->messageLenToHashInBytes);
+            PRINT_ERR("cbArg: %d %d %d %d\n", cbArg->mIdx, cbArg->bufIdx, cbArg->numBufs, cbArg->kickTail);
             exit(-1);
         }
     }
+    numRetries = 10;
     struct cbArg *cbArg = NULL;
     PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
     cbArg->mIdx = 0;
@@ -204,6 +209,12 @@ retry_kick_tail:
     if (CPA_STATUS_SUCCESS != status)
     {
         PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
+        PRINT_ERR("cpaCySymDpEnqueueOp failed. (status = %d)\n", status);
+        PRINT_ERR("OpInfo: %d %d %d %d %d\n", sub, pOpData[sub]->cryptoStartSrcOffsetInBytes,
+            pOpData[sub]->messageLenToCipherInBytes,
+            pOpData[sub]->hashStartSrcOffsetInBytes,
+            pOpData[sub]->messageLenToHashInBytes);
+        PRINT_ERR("cbArg: %d %d %d %d\n", cbArg->mIdx, cbArg->bufIdx, cbArg->numBufs, cbArg->kickTail);
         exit(-1);
     }
 }
@@ -443,9 +454,11 @@ static void dedicatedRRPoller(void *arg){
     struct pollerArg *pArg = (struct pollerArg *)arg;
     int mIdx = pArg->mIdx;
     int rBS = pArg->rBS;
+    PRINT_DBG("Poller Thread %d started\n", mIdx);
     while(doPoll[mIdx] == CPA_TRUE){
         status = icp_sal_CyPollDpInstance(instanceHandles[mIdx], rBS);
     }
+    PRINT_DBG("Poller Thread %d stopped\n", mIdx);
 }
 
 static inline void hostSubmitOnly(int chainLength,
@@ -642,7 +655,6 @@ for each callback function - we will test this
 void runExps(){
     int numBufferses[] = {1, 2, 4, 8, 16, 32};
     int bufferSizes[] = {1*1024*1024, 512* 1024, 256*1024, 128*1024, 64*1024, 32*1024};
-    gDebugParam = 0;
     for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
         int maxAllowedBatchSize = numBufferses[numBuffersIdx];
 
