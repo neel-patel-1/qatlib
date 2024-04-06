@@ -122,30 +122,7 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    int rpsTest = 1;
-    if(rpsTest){
-        printf("256KB Fragmentation BW\n");
-        printf("FragmentSize NumFragments numAxs\n");
-        int pSize = 1024 * 1024;
-        for(int cLen = 1; cLen < 5; cLen++){
-            printf("%d %d %d\n", 32*1024, pSize / (32*1024), 1);
-            requestGen(32*1024,pSize / (32*1024), 2);
-        }
-        return 0;
-        for(int i=pSize/4; i<=pSize; i*=2){
-            printf("%d %d\n", i, pSize / i);
-            requestGen(i,pSize / i, 7000);
-        }
-    }
-    // stat = syncSwHashOp();
-    if (CPA_STATUS_SUCCESS != stat)
-    {
-        PRINT_ERR("\nLegacy DC Chaining Sample Code App failed\n");
-    }
-    else
-    {
-        PRINT_DBG("\nLegacy DC Chaining Sample Code App finished\n");
-    }
+    startTest();
 
 
     icp_sal_userStop();
