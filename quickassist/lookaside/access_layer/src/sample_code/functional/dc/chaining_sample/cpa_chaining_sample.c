@@ -570,27 +570,17 @@ CpaStatus tearDownInstances(int desiredInstances,
     }
 
 }
-
-void startTest(int chainLength){
-    numAxs_g = chainLength;
-    OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
-    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
-    setupInstances(chainLength, instanceHandles, sessionCtxs_g);
-    Cpa8U *pSrcBuffer = NULL;
-    Cpa8U *pIvBuffer = NULL;
+void createEncTestBuffers(CpaBufferList ***ppBufferLists, Cpa32U numBufferLists, Cpa32U numBuffers, Cpa8U *pIvBuffer){
     CpaStatus status = CPA_STATUS_SUCCESS;
-    Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
-    CpaCySymDpOpData *pOpData;
-
-    CpaBufferList *pSrcBufferList = NULL;
-    CpaBufferList *pSrc1BufferList = NULL;
-    CpaBufferList *pDstBufferList = NULL;
-    Cpa32U numOps = 1;
-    Cpa32U bufferMetaSize = 0;
-
-    status = dcChainBuildBufferList(&pSrcBufferList, 1, bufferSize, 0);
-    status = dcChainBuildBufferList(&pSrc1BufferList, 1, bufferSize, 0);
-    status = dcChainBuildBufferList(&pDstBufferList, 1, bufferSize, 0);
+    CpaBufferList **pBufferLists = NULL;
+    PHYS_CONTIG_ALLOC(&pBufferLists, sizeof(CpaBufferList *) * numBufferLists);
+    for(int i=0; i<numBufferLists; i++){
+        PHYS_CONTIG_ALLOC(&pBufferLists[i], sizeof(CpaBufferList));
+        status = dcChainBuildBufferList(&(pBufferLists[i]), numBuffers, sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH, 0);
+        for(int j=0; j<numBuffers; j++){
+            memcpy((pBufferLists[i])[j].pBuffers->pData, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
+        }
+    }
 
     if (CPA_STATUS_SUCCESS == status)
     {
@@ -600,22 +590,32 @@ void startTest(int chainLength){
 
     if (CPA_STATUS_SUCCESS == status)
     {
-        /* Setup all test Buffers */
-        /* copy source into buffer */
-
-        /* copy IV into buffer */
         memcpy(pIvBuffer, sampleCipherIv, sizeof(sampleCipherIv));
-
-        /* Allocate memory for operational data. Note this needs to be
-         * 8-byte aligned, contiguous, resident in DMA-accessible
-         * memory.
-         */
-        status =
-            PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
     }
+    *ppBufferLists = pBufferLists;
+}
+
+void startTest(int chainLength){
+    numAxs_g = chainLength;
+    OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
+    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
+    setupInstances(chainLength, instanceHandles, sessionCtxs_g);
+    Cpa8U *pIvBuffer = NULL;
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
+    CpaCySymDpOpData *pOpData;
+
+    Cpa32U numOps = 1;
+    Cpa32U bufferMetaSize = 0;
+
+    CpaBufferList **pSrcBufferLists;
+    createEncTestBuffers(&pSrcBufferLists, numAxs_g, 1, pIvBuffer);
+    status =
+        PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
+
 
     symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-        pOpData, pSrcBufferList->pBuffers, pDstBufferList->pBuffers, 1);
+        pOpData, pSrcBufferLists[0]->pBuffers, pSrcBufferLists[0]->pBuffers, 1);
 
     do
     {
