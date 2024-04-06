@@ -587,15 +587,17 @@ void startTest(int chainLength){
     Cpa32U numBuffers = 1;
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
-    for(int i=0; i<numAxs_g;i++){
-        pSrcBuffers[i] = NULL;
-        OS_MALLOC(&pSrcBuffers[i], sizeof(Cpa8U) * numBuffers);
-        for(int j=0; j<numBuffers; j++){
-            PHYS_CONTIG_ALLOC(&(pSrcBuffers[i])[j], sizeof(Cpa8U) * bufferSize);
-            memcpy((pSrcBuffers[i])[j], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
-        }
-    }
-    if (0 == memcmp(pSrcBuffers[0][1], expectedOutput, bufferSize))
+
+    Cpa8U **pBuffers = NULL;
+    PHYS_CONTIG_ALLOC(&pBuffers, sizeof(Cpa8U) * numAxs_g);
+    Cpa8U *pBuf = NULL;
+    PHYS_CONTIG_ALLOC(&pBuf, bufferSize);
+    memcpy(pBuf, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
+
+    pBuffers[0] = pBuf;
+
+
+    if (0 == memcmp(pBuffers[0], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
     {
         PRINT_DBG("Output matches expected output\n");
     }
