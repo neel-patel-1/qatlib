@@ -357,8 +357,9 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
                                 CpaCySymSessionCtx sessionCtx,
                                 CpaCySymDpOpData *pOpData, /*Can we use
                                 the same pOpData for multiple submissions?*/
-                                CpaFlatBuffer *pSrcBufferList,
-                                CpaFlatBuffer *pDstBufferList,
+                                Cpa8U **pSrcBufferList,
+                                Cpa8U **pDstBufferList,
+                                Cpa32U bufferSize,
                                 Cpa32U numOps)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
@@ -369,9 +370,9 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
         cbArg->bufIdx = 0;
         cbArg->kickTail = CPA_TRUE;
         populateOpData(pOpData, cyInstHandle, sessionCtx,
-            pSrcBufferList[sub].pData, pDstBufferList[sub].pData,
-            pDstBufferList[sub].pData + sizeof(sampleAlgChainingSrc),
-            pSrcBufferList[sub].dataLenInBytes, cbArg);
+            pSrcBufferList[sub], pDstBufferList[sub],
+            pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
+            bufferSize, cbArg);
         status = cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
     }
     if (CPA_STATUS_SUCCESS != status)
@@ -570,30 +571,6 @@ CpaStatus tearDownInstances(int desiredInstances,
     }
 
 }
-void createEncTestBuffers(CpaBufferList ***ppBufferLists, Cpa32U numBufferLists, Cpa32U numBuffers, Cpa8U *pIvBuffer){
-    CpaStatus status = CPA_STATUS_SUCCESS;
-    CpaBufferList **pBufferLists = NULL;
-    PHYS_CONTIG_ALLOC(&pBufferLists, sizeof(CpaBufferList *) * numBufferLists);
-    for(int i=0; i<numBufferLists; i++){
-        PHYS_CONTIG_ALLOC(&pBufferLists[i], sizeof(CpaBufferList));
-        status = dcChainBuildBufferList(&(pBufferLists[i]), numBuffers, sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH, 0);
-        for(int j=0; j<numBuffers; j++){
-            memcpy((pBufferLists[i])[j].pBuffers->pData, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
-        }
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Allocate IV buffer */
-        status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-    }
-
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        memcpy(pIvBuffer, sampleCipherIv, sizeof(sampleCipherIv));
-    }
-    *ppBufferLists = pBufferLists;
-}
 
 void startTest(int chainLength){
     numAxs_g = chainLength;
@@ -609,15 +586,34 @@ void startTest(int chainLength){
     Cpa32U numOps = 1;
     Cpa32U numBuffers = 1;
     Cpa32U bufferMetaSize = 0;
+    Cpa8U **pSrcBuffers[numAxs_g];
+    for(int i=0; i<numAxs_g;i++){
+        pSrcBuffers[i] = NULL;
+        OS_MALLOC(&pSrcBuffers[i], sizeof(Cpa8U) * numBuffers);
+        for(int j=0; j<numBuffers; j++){
+            PHYS_CONTIG_ALLOC(&(pSrcBuffers[i])[j], sizeof(Cpa8U) * bufferSize);
+            memcpy((pSrcBuffers[i])[j], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
+        }
+    }
+    if (0 == memcmp(pSrcBuffers[0][1], expectedOutput, bufferSize))
+    {
+        PRINT_DBG("Output matches expected output\n");
+    }
+    else
+    {
+        PRINT_ERR("Output does not match expected output\n");
+        status = CPA_STATUS_FAIL;
+    }
 
-    CpaBufferList **pSrcBufferLists;
-    createEncTestBuffers(&pSrcBufferLists, numAxs_g, 1, pIvBuffer);
+    // CpaBufferList *pSrcBuffers;
+    // createEncTestBuffers(&pSrcBuffers, numAxs_g, 1, pIvBuffer);
     status =
         PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaCySymDpOpData), 8);
 
 
     symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-        pOpData, pSrcBufferLists[0]->pBuffers, pSrcBufferLists[1]->pBuffers, 1);
+        pOpData, pSrcBuffers[0], pSrcBuffers[1],
+        bufferSize, 1);
 
     do
     {
@@ -628,17 +624,17 @@ void startTest(int chainLength){
         ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
         (globalDone == CPA_FALSE));
 
-    for(int i=0; i< numBuffers; i++){
-        if (0 == memcmp(pSrcBufferLists[1]->pBuffers[i].pData, expectedOutput, bufferSize))
-        {
-            PRINT_DBG("Output matches expected output\n");
-        }
-        else
-        {
-            PRINT_ERR("Output does not match expected output\n");
-            status = CPA_STATUS_FAIL;
-        }
-    }
+    // for(int i=0; i< numBuffers; i++){
+    //     if (0 == memcmp(pSrcBuffers[1]->pBuffers[i].pData, expectedOutput, bufferSize))
+    //     {
+    //         PRINT_DBG("Output matches expected output\n");
+    //     }
+    //     else
+    //     {
+    //         PRINT_ERR("Output does not match expected output\n");
+    //         status = CPA_STATUS_FAIL;
+    //     }
+    // }
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
