@@ -81,10 +81,6 @@ int gDebugParam = 1;
 int useSw = 1;
 int useXstorExtensions = 0;
 
-extern CpaStatus dcChainSample(void);
-extern CpaStatus syncHWChainedOpPerf(void);
-extern CpaStatus syncSWChainedOpPerf(void);
-extern CpaStatus syncSwHashOp(void);
 
 int main(int argc, const char **argv)
 {
@@ -122,7 +118,7 @@ int main(int argc, const char **argv)
     }
 
     /* Legacy DC Chaining Sample Code */
-    startTest();
+    startTest(/*ChainLength=*/3);
 
 
     icp_sal_userStop();

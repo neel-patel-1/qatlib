@@ -11,10 +11,14 @@
 extern int gDebugParam;
 /* AES key, 256 bits long */
 
+int numAxs_g;
 volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
+CpaInstanceHandle *cyInst_g;
+CpaCySymDpSessionCtx *sessionCtxs_g;
+
 
 static Cpa8U sampleCipherKey[] = {
     0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
@@ -209,17 +213,42 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
     return status;
 }
 
-CpaStatus setupInstances(void){
+CpaStatus setupInstances(int desiredInstances, CpaInstanceHandle *cyInstHandles){
     CpaStatus status = CPA_STATUS_FAIL;
     CpaCySymSessionCtx sessionCtx = NULL;
     Cpa32U sessionCtxSize = 0;
     CpaInstanceHandle cyInstHandle = NULL;
     CpaCySymSessionSetupData sessionSetupData = {0};
     CpaInstanceInfo2 *info2 = NULL;
+    Cpa16U numInstances = 0;
+    status = OS_MALLOC(&info2, sizeof(CpaInstanceInfo2));
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Failed to allocate memory for info2");
+        return CPA_STATUS_FAIL;
+    }
+    status = cpaCyGetNumInstances(&numInstances);
+    if (numInstances >= desiredInstances)
+    {
+        numInstances = desiredInstances;
+    }
+    if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
+    {
+        status = cpaCyGetInstances(numInstances, cyInstHandles);
+    }
+    if (0 == numInstances)
+    {
+        PRINT_ERR("No instances found for 'SSL'\n");
+        PRINT_ERR("Please check your section names");
+        PRINT_ERR(" in the config file.\n");
+        PRINT_ERR("Also make sure to use config file version 2.\n");
+    }
+
 
 }
 
 
-void startTest(){
-
+void startTest(int chainLength){
+    CpaInstanceHandle instanceHandles[chainLength];
+    setupInstances(chainLength, instanceHandles);
 }
