@@ -428,6 +428,39 @@ static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32
     }
 }
 
+static inline void dedicatedRRPoller(int chainLength, Cpa8U ***ppBuffers,
+    int numBuffers, int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    for(int i=0; i<numAxs_g; i++){
+        status = icp_sal_CyPollDpInstance(instanceHandles[i], rBS);
+    }
+}
+
+static inline void hostSubmitOnly(int chainLength,
+Cpa8U ***ppBuffers,
+int numBuffers,
+int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
+    globalDone = 0;
+    CpaStatus status = CPA_STATUS_SUCCESS;
+
+    int startSubmitIdx = 0; int endSubmitIdx = rBS;
+
+    do
+    {
+        if(startSubmitIdx < numBuffers){
+            for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
+                symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
+                    pOpData, ppBuffers[0], ppBuffers[1],
+                    bufferSize, rBS, bufIdx);
+            }
+            startSubmitIdx = endSubmitIdx;
+            endSubmitIdx = startSubmitIdx + rBS;
+        }
+    } while (
+        ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
+        (globalDone == CPA_FALSE));
+}
+
 static inline void roundRobinSubmitAndPoll(int chainLength,
 Cpa8U ***ppBuffers,
 int numBuffers,
