@@ -390,7 +390,8 @@ static void bufArrayFactory(Cpa8U ***ppBuffers, Cpa32U numBuffers, Cpa32U buffer
     }
     *ppBuffers = pBuffers;
 }
-static void arrayOfBufArraysFactory(Cpa8U ****pppBuffers, Cpa32U numAxs, Cpa32U numBuffers, Cpa32U bufferSize){
+static void arrayOfBufArraysFactory(Cpa8U ****pppBuffers,
+Cpa32U numAxs, Cpa32U numBuffers, Cpa32U bufferSize){
     Cpa8U ***ppBuffers = NULL;
     PHYS_CONTIG_ALLOC(&ppBuffers, sizeof(Cpa8U**) * numAxs);
     for(int i=0; i<numAxs; i++){
@@ -431,6 +432,7 @@ static inline void roundRobinSubmitAndPoll(int chainLength,
 Cpa8U ***ppBuffers,
 int numBuffers,
 int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
+    globalDone = 0;
     CpaStatus status = CPA_STATUS_SUCCESS;
 
     int startSubmitIdx = 0; int endSubmitIdx = rBS;
@@ -454,15 +456,25 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
         ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
         (globalDone == CPA_FALSE));
 }
+static void genOpDataArray(CpaCySymDpOpData ***ppOpDatas, int numBuffers){
+    CpaCySymDpOpData ** pOpDatas = NULL;
+    PHYS_CONTIG_ALLOC(&pOpDatas, sizeof(CpaCySymDpOpData*) * numBuffers);
+    for(int i=0; i<numBuffers; i++){
+        CpaCySymDpOpData *pOpData = NULL;
+        PHYS_CONTIG_ALLOC(&pOpData, sizeof(CpaCySymDpOpData));
+        pOpDatas[i] = pOpData;
+    }
+    *ppOpDatas = pOpDatas;
+}
 
-void startTest(int chainLength, int numBuffers, int rBS){
+void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
     setupInstances(chainLength, instanceHandles, sessionCtxs_g);
     Cpa8U *pIvBuffer = NULL;
     CpaStatus status = CPA_STATUS_SUCCESS;
-    Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
+    // Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
     CpaCySymDpOpData *pOpData;
 
     numAxs_g = chainLength;
@@ -483,20 +495,15 @@ void startTest(int chainLength, int numBuffers, int rBS){
         pOpDatas[i] = pOpData;
     }
 
-    roundRobinSubmitAndPoll(chainLength, ppBuffers,
-    numBuffers, rBS, bufferSize, pOpDatas);
-
-    // for(int i=0; i< numBuffers; i++){
-    //     if (0 == memcmp(pSrcBuffers[1]->pBuffers[i].pData, expectedOutput, bufferSize))
-    //     {
-    //         PRINT_DBG("Output matches expected output\n");
-    //     }
-    //     else
-    //     {
-    //         PRINT_ERR("Output does not match expected output\n");
-    //         status = CPA_STATUS_FAIL;
-    //     }
-    // }
+    int numIterations = 10;
+    uint64_t start = sampleCoderdtsc();
+    for(int i=0; i<numIterations; i++){
+        roundRobinSubmitAndPoll(chainLength, ppBuffers,
+            numBuffers, rBS, bufferSize, pOpDatas);
+    }
+    uint64_t end = sampleCoderdtsc();
+    uint64_t cycles = end-start;
+    PRINT("Cycles: %lu\n", cycles);
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
