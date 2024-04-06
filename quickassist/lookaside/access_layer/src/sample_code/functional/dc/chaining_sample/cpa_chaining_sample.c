@@ -466,7 +466,15 @@ static void genOpDataArray(CpaCySymDpOpData ***ppOpDatas, int numBuffers){
     }
     *ppOpDatas = pOpDatas;
 }
+void printStats(int numBuffers, int rBS, int bufferSize, int chainLength, uint64_t avgCycles){
+    PRINT("NumBuffers: %d ", numBuffers);
+    PRINT("BufferSize: %d ", bufferSize);
+    PRINT("BatchSize: %d ", rBS);
+    PRINT("ChainLength: %d ", chainLength);
 
+    PRINT("AvgOffloadCycles: %lu ", avgCycles);
+    PRINT("AvgOffloadMicroseconds: %lu\n", (avgCycles/2000));
+}
 void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
@@ -499,16 +507,18 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     uint64_t avgCycles = cycles/numIterations;
     // uint64_t freqKHz = sampleCodeFreqKHz();
     uint64_t cpuFreqMHz = 2000;
-    PRINT("NumBuffers: %d ", numBuffers);
-    PRINT("BufferSize: %d ", bufferSize);
-    PRINT("BatchSize: %d ", rBS);
-    PRINT("ChainLength: %d ", chainLength);
 
-    PRINT("AvgOffloadCycles: %lu ", avgCycles);
-    PRINT("AvgOffloadMicroseconds: %lu\n", (avgCycles/cpuFreqMHz));
-
+    printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
+
+/*
+Tests:
+(1) SingleCPU-RR-Submit and poll
+- params: batch size
+(2) Submit and dedicated poll
+- params: number of dedicated pollers, per-cb-thread spinup on/off
+*/
 
 void runExps(){
     int numBufferses[] = {1, 2, 4, 8, 16, 32};
