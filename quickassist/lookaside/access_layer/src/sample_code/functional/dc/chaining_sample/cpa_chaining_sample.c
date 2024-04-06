@@ -605,7 +605,9 @@ void startTest(int chainLength){
     Cpa32U bufferSize = sizeof(sampleAlgChainingSrc) + DIGEST_LENGTH;
     CpaCySymDpOpData *pOpData;
 
+    numAxs_g = 1;
     Cpa32U numOps = 1;
+    Cpa32U numBuffers = 1;
     Cpa32U bufferMetaSize = 0;
 
     CpaBufferList **pSrcBufferLists;
@@ -625,6 +627,18 @@ void startTest(int chainLength){
     } while (
         ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
         (globalDone == CPA_FALSE));
+
+    for(int i=0; i< numBuffers; i++){
+        if (0 == memcmp(pSrcBufferLists[0]->pBuffers[i].pData, expectedOutput, bufferSize))
+        {
+            PRINT_DBG("Output matches expected output\n");
+        }
+        else
+        {
+            PRINT_ERR("Output does not match expected output\n");
+            status = CPA_STATUS_FAIL;
+        }
+    }
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
