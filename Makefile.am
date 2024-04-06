@@ -1,13 +1,13 @@
 ################################################################
 #   BSD LICENSE
-# 
+#
 #   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
 #   All rights reserved.
-# 
+#
 #   Redistribution and use in source and binary forms, with or without
 #   modification, are permitted provided that the following conditions
 #   are met:
-# 
+#
 #     * Redistributions of source code must retain the above copyright
 #       notice, this list of conditions and the following disclaimer.
 #     * Redistributions in binary form must reproduce the above copyright
@@ -17,7 +17,7 @@
 #     * Neither the name of Intel Corporation nor the names of its
 #       contributors may be used to endorse or promote products derived
 #       from this software without specific prior written permission.
-# 
+#
 #   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 #   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 #   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -29,7 +29,7 @@
 #   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 #   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-# 
+#
 ################################################################
 
 ACLOCAL_AMFLAGS = -Im4
@@ -352,6 +352,7 @@ COMMON_FLAGS = -Wformat \
 	       -D MAX_MR_ROUND=$(MAX_MR) \
 	       -D _FILE_OFFSET_BITS=64 \
 	       $(NO_UNUSED_CMDLINE_ARG_CFLAGS) \
+				 -g \
 	       $(MCX16_CFLAGS)
 
 if ICP_DEBUG_AC

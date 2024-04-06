@@ -88,6 +88,7 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
         newCbArg->mIdx = cbArg->mIdx + 1;
         newCbArg->bufIdx = cbArg->bufIdx;
         newCbArg->kickTail = cbArg->kickTail;
+        newCbArg->numBufs = cbArg->numBufs;
         pOpData->pCallbackTag = newCbArg;
         cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
     }
@@ -136,7 +137,7 @@ Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
 
 static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
                                 CpaCySymSessionCtx sessionCtx,
-                                CpaCySymDpOpData *pOpData, /*Can we use
+                                CpaCySymDpOpData **pOpData, /*Can we use
                                 the same pOpData for multiple submissions?*/
                                 Cpa8U **pSrcBufferList,
                                 Cpa8U **pDstBufferList,
@@ -154,12 +155,12 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
         cbArg->bufIdx = sub;
         cbArg->numBufs = numBufs_g;
         cbArg->kickTail = CPA_FALSE;
-        populateOpData(pOpData, cyInstHandle, sessionCtx,
+        populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
             pSrcBufferList[sub], pDstBufferList[sub],
             pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
             bufferSize, cbArg);
 retry:
-        status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
+        status = cpaCySymDpEnqueueOp(pOpData[sub], CPA_FALSE);
         if(CPA_STATUS_RETRY == status && numRetries > 0){
             if(numRetries > 0){
                 numRetries--;
@@ -176,13 +177,14 @@ retry:
     PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
     cbArg->mIdx = 0;
     cbArg->bufIdx = sub;
+    cbArg->numBufs = numBufs_g;
     cbArg->kickTail = CPA_TRUE;
-    populateOpData(pOpData, cyInstHandle, sessionCtx,
+    populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
         pSrcBufferList[sub], pDstBufferList[sub],
         pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
         bufferSize, cbArg);
 retry_kick_tail:
-    status = cpaCySymDpEnqueueOp(pOpData, CPA_TRUE);
+    status = cpaCySymDpEnqueueOp(pOpData[sub], CPA_TRUE);
     if(CPA_STATUS_RETRY == status && numRetries > 0){
         if(numRetries > 0){
             numRetries--;
@@ -438,7 +440,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
         if(startSubmitIdx < numBuffers){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
                 symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
-                    pOpData[bufIdx], ppBuffers[0], ppBuffers[1],
+                    pOpData, ppBuffers[0], ppBuffers[1],
                     bufferSize, rBS, bufIdx);
             }
             startSubmitIdx = endSubmitIdx;
