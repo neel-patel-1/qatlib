@@ -14,6 +14,7 @@ extern int gDebugParam;
 int numAxs_g;
 volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
+volatile CpaBoolean globalDone = 0;
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
 CpaInstanceHandle *instanceHandles;
@@ -73,9 +74,162 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
     CpaCySymSessionCtx toSubSessionCtx = sessionCtxs_g[cbArg->mIdx];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
-    PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx);
-    cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
-    pOpData->pCallbackTag = (void *)1;
+    printf("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx);
+
+    if(cbArg->mIdx == numAxs_g - 1){
+        // if(cbArg->bufIdx == numBufs_g - 1){
+            globalDone = CPA_TRUE;
+        // }
+    } else {
+        struct cbArg *newCbArg = NULL;
+        PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+        newCbArg->mIdx = cbArg->mIdx + 1;
+        newCbArg->bufIdx = cbArg->bufIdx;
+        newCbArg->kickTail = cbArg->kickTail;
+        pOpData->pCallbackTag = newCbArg;
+        cpaCySymDpEnqueueOp(pOpData, CPA_FALSE);
+    }
+}
+
+static inline void populateOpData(CpaCySymDpOpData *pOpData,
+CpaInstanceHandle cyInstHandle, CpaCySymSessionCtx sessionCtx,
+Cpa8U *pSrcBuffer, Cpa8U *pIvBuffer, Cpa32U bufferSize, void *pCallbackTag){
+    CpaPhysicalAddr pPhySrcBuffer;
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToCipherInBytes = sizeof(sampleAlgChainingSrc);
+    pOpData->iv =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pIvBuffer,
+                          cyInstHandle,
+                          CPA_ACC_SVC_TYPE_CRYPTO);
+    pOpData->pIv = pIvBuffer;
+    pOpData->hashStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToHashInBytes = sizeof(sampleAlgChainingSrc);
+    /* Even though MAC follows immediately after the region to hash
+       digestIsAppended is set to false in this case due to
+       errata number IXA00378322 */
+    pPhySrcBuffer =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer,
+                          cyInstHandle,
+                          CPA_ACC_SVC_TYPE_CRYPTO);
+    pOpData->digestResult = pPhySrcBuffer + sizeof(sampleAlgChainingSrc);
+    pOpData->instanceHandle = cyInstHandle;
+    pOpData->sessionCtx = sessionCtx;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->srcBuffer = pPhySrcBuffer;
+    pOpData->srcBufferLen = bufferSize;
+    pOpData->dstBuffer = pPhySrcBuffer;
+    pOpData->dstBufferLen = bufferSize;
+    pOpData->thisPhys =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
+                          cyInstHandle,
+                          CPA_ACC_SVC_TYPE_CRYPTO);
+    pOpData->pCallbackTag = (void *)pCallbackTag;
+}
+
+static void dcChainFreeBufferList(CpaBufferList **testBufferList)
+{
+    CpaBufferList *pBuffList = *testBufferList;
+    CpaFlatBuffer *pFlatBuff = NULL;
+    Cpa32U curBuff = 0;
+
+    if (NULL == pBuffList)
+    {
+        PRINT_ERR("testBufferList is NULL\n");
+        return;
+    }
+
+    pFlatBuff = pBuffList->pBuffers;
+    while (curBuff < pBuffList->numBuffers)
+    {
+        if (NULL != pFlatBuff->pData)
+        {
+            PHYS_CONTIG_FREE(pFlatBuff->pData);
+            pFlatBuff->pData = NULL;
+        }
+        pFlatBuff++;
+        curBuff++;
+    }
+
+    if (NULL != pBuffList->pPrivateMetaData)
+    {
+        PHYS_CONTIG_FREE(pBuffList->pPrivateMetaData);
+        pBuffList->pPrivateMetaData = NULL;
+    }
+
+    OS_FREE(pBuffList);
+    *testBufferList = NULL;
+}
+
+static CpaStatus dcChainBuildBufferList(CpaBufferList **testBufferList,
+                                        Cpa32U numBuffers,
+                                        Cpa32U bufferSize,
+                                        Cpa32U bufferMetaSize)
+{
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    CpaBufferList *pBuffList = NULL;
+    CpaFlatBuffer *pFlatBuff = NULL;
+    Cpa32U curBuff = 0;
+    Cpa8U *pMsg = NULL;
+    /*
+     * allocate memory for bufferlist and array of flat buffers in a contiguous
+     * area and carve it up to reduce number of memory allocations required.
+     */
+    Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+
+    status = OS_MALLOC(&pBuffList, bufferListMemSize);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("Error in allocating pBuffList\n");
+        return CPA_STATUS_FAIL;
+    }
+
+    pBuffList->numBuffers = numBuffers;
+
+    if (bufferMetaSize)
+    {
+        status =
+            PHYS_CONTIG_ALLOC(&pBuffList->pPrivateMetaData, bufferMetaSize);
+        if (CPA_STATUS_SUCCESS != status)
+        {
+            PRINT_ERR("Error in allocating pBuffList->pPrivateMetaData\n");
+            OS_FREE(pBuffList);
+            return CPA_STATUS_FAIL;
+        }
+    }
+    else
+    {
+        pBuffList->pPrivateMetaData = NULL;
+    }
+
+    pFlatBuff = (CpaFlatBuffer *)(pBuffList + 1);
+    pBuffList->pBuffers = pFlatBuff;
+    while (curBuff < numBuffers)
+    {
+        if (0 != bufferSize)
+        {
+            status = PHYS_CONTIG_ALLOC(&pMsg, bufferSize);
+            if (CPA_STATUS_SUCCESS != status || NULL == pMsg)
+            {
+                PRINT_ERR("Error in allocating pMsg\n");
+                dcChainFreeBufferList(&pBuffList);
+                return CPA_STATUS_FAIL;
+            }
+            memset(pMsg, 0, bufferSize);
+            pFlatBuff->pData = pMsg;
+        }
+        else
+        {
+            pFlatBuff->pData = NULL;
+        }
+        pFlatBuff->dataLenInBytes = bufferSize;
+        pFlatBuff++;
+        curBuff++;
+    }
+
+    *testBufferList = pBuffList;
+
+    return CPA_STATUS_SUCCESS;
 }
 
 static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
@@ -98,6 +252,7 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
 
     if (CPA_STATUS_SUCCESS == status)
     {
+        /* Setup all test Buffers */
         /* copy source into buffer */
         memcpy(pSrcBuffer, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
 
@@ -114,41 +269,16 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
 
     if (CPA_STATUS_SUCCESS == status)
     {
+        /* Setup all Op Datas */
         CpaPhysicalAddr pPhySrcBuffer;
-        /** Populate the structure containing the operational data that is
-         * needed to run the algorithm
-         */
-        //<snippet name="opDataDp">
-        pOpData->cryptoStartSrcOffsetInBytes = 0;
-        pOpData->messageLenToCipherInBytes = sizeof(sampleAlgChainingSrc);
-        pOpData->iv =
-            virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pIvBuffer,
-                              cyInstHandle,
-                              CPA_ACC_SVC_TYPE_CRYPTO);
-        pOpData->pIv = pIvBuffer;
-        pOpData->hashStartSrcOffsetInBytes = 0;
-        pOpData->messageLenToHashInBytes = sizeof(sampleAlgChainingSrc);
-        /* Even though MAC follows immediately after the region to hash
-           digestIsAppended is set to false in this case due to
-           errata number IXA00378322 */
-        pPhySrcBuffer =
-            virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer,
-                              cyInstHandle,
-                              CPA_ACC_SVC_TYPE_CRYPTO);
-        pOpData->digestResult = pPhySrcBuffer + sizeof(sampleAlgChainingSrc);
-        pOpData->instanceHandle = cyInstHandle;
-        pOpData->sessionCtx = sessionCtx;
-        pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-        pOpData->srcBuffer = pPhySrcBuffer;
-        pOpData->srcBufferLen = bufferSize;
-        pOpData->dstBuffer = pPhySrcBuffer;
-        pOpData->dstBufferLen = bufferSize;
-        pOpData->thisPhys =
-            virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
-                              cyInstHandle,
-                              CPA_ACC_SVC_TYPE_CRYPTO);
-        pOpData->pCallbackTag = (void *)0;
-        //</snippet>
+        struct cbArg *cbArg = NULL;
+        PHYS_CONTIG_ALLOC(&cbArg,sizeof(struct cbArg));
+        cbArg->mIdx = 0;
+        cbArg->bufIdx = 0;
+        cbArg->kickTail = CPA_TRUE;
+        populateOpData(pOpData,
+            cyInstHandle,
+            sessionCtx, pSrcBuffer, pIvBuffer, bufferSize, cbArg);
     }
 
     if (CPA_STATUS_SUCCESS == status)
@@ -191,17 +321,7 @@ static CpaStatus symDpPerformOp(CpaInstanceHandle cyInstHandle,
      * In this simple example we have no other work to do
      * */
 
-    if (CPA_STATUS_SUCCESS == status)
-    {
-        /* Poll for responses.
-         * Polling functions are implementation specific */
-        do
-        {
-            status = icp_sal_CyPollDpInstance(cyInstHandle, 1);
-        } while (
-            ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
-            (pOpData->pCallbackTag == (void *)0));
-    }
+
 
     /* Check result */
     if (CPA_STATUS_SUCCESS == status)
@@ -406,12 +526,22 @@ CpaStatus tearDownInstances(int desiredInstances,
 }
 
 void startTest(int chainLength){
+    num_Axs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymSessionCtx) * chainLength);
     setupInstances(chainLength, instanceHandles, sessionCtxs_g);
     for(int i=0; i<chainLength; i++){
         symDpPerformOp(instanceHandles[i], sessionCtxs_g[i]);
     }
+    CpaStatus status = CPA_STATUS_SUCCESS;
+        do
+        {
+            for(int i=0; i<numAxs_g; i++){
+                status = icp_sal_CyPollDpInstance(instanceHandles[i], 1);
+            }
+        } while (
+            ((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
+            (globalDone == CPA_FALSE));
 
     tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
 }
