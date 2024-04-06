@@ -589,22 +589,26 @@ void startTest(int chainLength){
     Cpa8U **pSrcBuffers[numAxs_g];
 
     Cpa8U **pBuffers = NULL;
-    PHYS_CONTIG_ALLOC(&pBuffers, sizeof(Cpa8U) * numAxs_g);
-    Cpa8U *pBuf = NULL;
-    PHYS_CONTIG_ALLOC(&pBuf, bufferSize);
-    memcpy(pBuf, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
-
-    pBuffers[0] = pBuf;
-
-
-    if (0 == memcmp(pBuffers[0], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
-    {
-        PRINT_DBG("Output matches expected output\n");
+    PHYS_CONTIG_ALLOC(&pBuffers, sizeof(Cpa8U*) * numBuffers);
+    for(int i=0; i<numBuffers; i++){
+        Cpa8U *pBuf = NULL;
+        PHYS_CONTIG_ALLOC(&pBuf, bufferSize);
+        memcpy(pBuf, sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc));
+        pBuffers[i] = pBuf;
     }
-    else
-    {
-        PRINT_ERR("Output does not match expected output\n");
-        status = CPA_STATUS_FAIL;
+
+    Cpa8U ***ppBuffers = NULL;
+    PHYS_CONTIG_ALLOC(&ppBuffers, sizeof(Cpa8U**) * numAxs_g);
+    for(int i=0; i<numAxs_g; i++){
+        ppBuffers[i] = pBuffers;
+    }
+
+    for(int i=0; i<numBuffers;i++){
+        if (0 != memcmp(ppBuffers[0][i], sampleAlgChainingSrc, sizeof(sampleAlgChainingSrc)))
+        {
+            PRINT_ERR("Output does not match expected output\n");
+            status = CPA_STATUS_FAIL;
+        }
     }
 
     // CpaBufferList *pSrcBuffers;
