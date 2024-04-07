@@ -383,7 +383,6 @@ CpaStatus setupInstances(int desiredInstances,
             sessionSetupData.verifyDigest = CPA_FALSE;
 
             /* Determine size of session context to allocate */
-            PRINT_DBG("cpaCySymDpSessionCtxGetSize\n");
             status = cpaCySymDpSessionCtxGetSize(
                 cyInstHandle, &sessionSetupData, &sessionCtxSize);
         }
@@ -396,15 +395,10 @@ CpaStatus setupInstances(int desiredInstances,
         if (CPA_STATUS_SUCCESS == status)
         {
             /* Initialize the session */
-            PRINT_DBG("cpaCySymDpInitSession\n");
             status =
                 cpaCySymDpInitSession(cyInstHandle, &sessionSetupData, sessionCtx);
         }
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            PRINT_DBG("Sample code ran successfully\n");
-        }
-        else
+        if (CPA_STATUS_SUCCESS != status)
         {
             PRINT_DBG("Sample code failed with status of %d\n", status);
         }
@@ -496,8 +490,9 @@ static void validateBufferArray(Cpa8U **pBuffers, Cpa32U numBuffers, Cpa32U buff
             copiedCorrectly = CPA_FALSE;
         }
     }
-    if(copiedCorrectly){
-        PRINT_DBG("Buffers copied correctly\n");
+    if(!copiedCorrectly){
+        PRINT_ERR("Buffers copied incorrectly\n");
+        exit(-1);
     }
 }
 static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32U numBuffers, Cpa32U bufferSize){
@@ -510,8 +505,9 @@ static void validateArrayOfBufferArrays(Cpa8U ***ppBuffers, Cpa32U numAxs, Cpa32
                 copiedCorrectly = CPA_FALSE;
             }
         }
-        if(copiedCorrectly){
-            PRINT_DBG("Buffers copied correctly\n");
+        if(!copiedCorrectly){
+            PRINT_ERR("Buffers copied correctly\n");
+            exit(-1);
         }
     }
 }
@@ -629,11 +625,15 @@ static void genOpDataArray(CpaCySymDpOpData ***ppOpDatas, int numBuffers){
     }
     *ppOpDatas = pOpDatas;
 }
-void printStats(int numBuffers, int rBS, int bufferSize, int chainLength, uint64_t avgCycles){
+void printStats(int numBuffers, int rBS, int bufferSize, int chainLength,
+uint64_t avgCycles, CpaBoolean withSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     PRINT("NumBuffers: %d ", numBuffers);
     PRINT("BufferSize: %d ", bufferSize);
     PRINT("BatchSize: %d ", rBS);
     PRINT("ChainLength: %d ", chainLength);
+    PRINT("WithSpt: %d ", withSpt);
+    PRINT("CallbackIntensity: %d ", cbIntensity);
+    PRINT("CallbackIsDependent: %d ", cbIsDep);
 
     PRINT("AvgOffloadCycles: %lu ", avgCycles);
     PRINT("AvgOffloadMicroseconds: %lu\n", (avgCycles/2000));
@@ -674,7 +674,7 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     // uint64_t freqKHz = sampleCodeFreqKHz();
     uint64_t cpuFreqMHz = 2000;
 
-    printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
+    printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles, useSpt, cbIntensity, cbIsDep);
     tearDownInstances(chainLength, instanceHandles, dpSessionCtxs_g);
 }
 void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int bufferSize){
@@ -712,7 +712,7 @@ void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int buff
     // uint64_t freqKHz = sampleCodeFreqKHz();
     uint64_t cpuFreqMHz = 2000;
 
-    printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
+    printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles, CPA_FALSE, 0, CPA_FALSE);
     killPollingThreads(chainLength, tid);
     tearDownInstances(chainLength, instanceHandles, dpSessionCtxs_g);
 }

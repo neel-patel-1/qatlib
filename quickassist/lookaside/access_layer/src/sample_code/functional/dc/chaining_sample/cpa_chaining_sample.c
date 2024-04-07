@@ -20,8 +20,28 @@ for each callback function - we will test this
 1 - which configuration can achieve the lowest latency?
 
 */
+void runSptComparison(){
 
-void runExps(){
+    startTest(
+    /*ChainLength=*/3,
+    /*numBuffers*/32,
+    /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
+    /*bufferSize=*/ 128*1024, /*Best size for aes and hash*/
+    /*useSpt*/ CPA_FALSE,
+    /* intensity = */0,
+    /*cbs are dependent*/ CPA_TRUE);
+
+    startTest(
+    /*ChainLength=*/3,
+    /*numBuffers*/32,
+    /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
+    /*bufferSize=*/ 128*1024, /*Best size for aes and hash*/
+    /*useSpt*/ CPA_TRUE,
+    /* intensity = */0,
+    /*cbs are dependent*/ CPA_TRUE);
+}
+
+void fwdingGranularityImpact(){
     int numBufferses[] = {1, 2, 4, 8, 16, 32};
     int bufferSizes[] = {1*1024*1024, 512* 1024, 256*1024, 128*1024, 64*1024, 32*1024};
     for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
@@ -30,8 +50,14 @@ void runExps(){
 
         for(int batchSize = 1; batchSize<=maxAllowedBatchSize; batchSize*=2){
             startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
-                /*bufferSize=*/bufferSizes[numBuffersIdx], /*useSpt*/ CPA_TRUE,
-                /* intensity = */10, /*cbs are dependent*/ CPA_TRUE);
+                /*bufferSize=*/bufferSizes[numBuffersIdx], /*useSpt*/ CPA_FALSE,
+                /* intensity = */0, /*cbs are dependent*/ CPA_TRUE);
         }
     }
 }
+
+
+void runExps(){
+    runSptComparison();
+}
+
