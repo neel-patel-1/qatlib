@@ -19,10 +19,8 @@ int numAxs_g;
 volatile CpaBoolean globalDone = 0;
 volatile CpaBoolean doPoll[10];
 
-CpaBufferList **pSrcBufferList_g = NULL;
-CpaBufferList **pDstBufferList_g = NULL;
 CpaInstanceHandle instanceHandles[10];
-CpaCySymDpSessionCtx sessionCtxs_g[10];
+CpaCySymDpSessionCtx dpSessionCtxs_g[10];
 
 struct cbArg{
     Cpa16U mIdx;
@@ -82,7 +80,7 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
 {
     struct cbArg *cbArg = (struct cbArg *)pOpData->pCallbackTag;
     CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx+1];
-    CpaCySymDpSessionCtx toSubSessionCtx = sessionCtxs_g[cbArg->mIdx+1];
+    CpaCySymDpSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx+1];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
 
@@ -474,7 +472,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
     {
         if(startSubmitIdx < numBuffers){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
-                symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
+                symDpSubmitBatch(instanceHandles[0], dpSessionCtxs_g[0],
                     pOpData, ppBuffers[0], ppBuffers[1],
                     bufferSize, rBS, bufIdx);
             }
@@ -499,7 +497,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
     {
         if(startSubmitIdx < numBuffers){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
-                symDpSubmitBatch(instanceHandles[0], sessionCtxs_g[0],
+                symDpSubmitBatch(instanceHandles[0], dpSessionCtxs_g[0],
                     pOpData, ppBuffers[0], ppBuffers[1],
                     bufferSize, rBS, bufIdx);
             }
@@ -573,8 +571,8 @@ void printStats(int numBuffers, int rBS, int bufferSize, int chainLength, uint64
 void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
-    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
-    setupInstances(chainLength, instanceHandles, sessionCtxs_g);
+    OS_MALLOC(&dpSessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
+    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g);
     Cpa8U *pIvBuffer = NULL;
     CpaStatus status = CPA_STATUS_SUCCESS;
     CpaCySymDpOpData *pOpData;
@@ -604,13 +602,13 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     uint64_t cpuFreqMHz = 2000;
 
     printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
-    tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
+    tearDownInstances(chainLength, instanceHandles, dpSessionCtxs_g);
 }
 void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
-    OS_MALLOC(&sessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
-    setupInstances(chainLength, instanceHandles, sessionCtxs_g);
+    OS_MALLOC(&dpSessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
+    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g);
     pthread_t *tid = NULL;
     spawnPollingThreads(chainLength, &tid, rBS);
     Cpa8U *pIvBuffer = NULL;
@@ -643,7 +641,7 @@ void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int buff
 
     printStats(numBuffers, rBS, bufferSize, chainLength, avgCycles);
     killPollingThreads(chainLength, tid);
-    tearDownInstances(chainLength, instanceHandles, sessionCtxs_g);
+    tearDownInstances(chainLength, instanceHandles, dpSessionCtxs_g);
 }
 
 
