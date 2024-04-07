@@ -95,13 +95,13 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
     CpaCySymSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
-    Cpa16U intensity = cbArg->intensity;
+    Cpa16U intensity = intensity_g;
     char *dBuffer = (char *)(cbArg->operandBuffer);
     while(intensity > 0){
-        for(int i=0; i<cbArg->operandBufferSize; i++){
+        for(int i=0; i<cbArg->operandBufferSize; i+=64){
             dBuffer[i] += 1;
         }
-        cbArg->intensity--;
+        intensity--;
     }
 
     if(cbArg->mIdx == (numAxs_g - 1)){

@@ -104,12 +104,9 @@
 
 struct spinUpTdArgs
 {
-    CpaCySymCbFunc pSymCb;
+    CpaCySymDpCbFunc pSymCb;
+    CpaCySymDpOpData *pResponse;
     CpaStatus status;
-    void *pCallbackTag;
-    CpaCySymOp operationType;
-    CpaCySymOpData *pOpData;
-    CpaBufferList *pDstBuffer;
     CpaBoolean qatRespStatusOkFlag;
     lac_session_desc_t *pSessionDesc;
 };
@@ -117,14 +114,8 @@ struct spinUpTdArgs
 static void performCB(void *arg){
     struct spinUpTdArgs *targs;
     targs = (struct spinUpTdArgs *)arg;
-    targs->pSymCb(targs->pCallbackTag,
-           targs->status,
-           targs->operationType,
-           targs->pOpData,
-           targs->pDstBuffer,
-           targs->qatRespStatusOkFlag);
-    osalAtomicDec(&(targs->pSessionDesc->u.pendingCbCount));
-    osalThreadExit();
+    targs->pSymCb(targs->pResponse, targs->status, targs->qatRespStatusOkFlag);
+    targs->pSessionDesc->u.pendingDpCbCount--;
 }
 /*
 *******************************************************************************
@@ -359,31 +350,6 @@ STATIC void LacSymCb_ProcessCallbackInternal(lac_sym_bulk_cookie_t *pCookie,
     /* user callback function is the last thing to be called */
 
     LAC_ASSERT_NOT_NULL(pSymCb);
-#define APP_LOGICAL_CORE 4
-    OsalThread *cbTd;
-    LAC_OS_MALLOC(&cbTd, sizeof(OsalThread));
-    struct spinUpTdArgs *targs;
-    LAC_OS_MALLOC(&targs, sizeof(struct spinUpTdArgs));
-    targs->pSymCb = pSymCb;
-    targs->pCallbackTag = pCallbackTag;
-    targs->pOpData = pOpData;
-    targs->pDstBuffer = pDstBuffer;
-    targs->qatRespStatusOkFlag = qatRespStatusOkFlag;
-    targs->pSessionDesc = pSessionDesc;
-
-    CpaBoolean useSpt = CPA_TRUE;
-    if( useSpt ){
-        osalThreadCreate(cbTd, NULL, performCB, targs);
-        osalThreadBind(cbTd, APP_LOGICAL_CORE);
-    } else {
-        pSymCb(pCallbackTag,
-           status,
-           operationType,
-           pOpData,
-           pDstBuffer,
-           qatRespStatusOkFlag);
-    }
-
 }
 
 /**
@@ -431,7 +397,27 @@ STATIC void LacSymCb_ProcessDpCallback(CpaCySymDpOpData *pResponse,
 
     LAC_ASSERT_NOT_NULL(pSymDpCb);
 
-    pSymDpCb(pResponse, status, qatRespStatusOkFlag);
+    #define APP_LOGICAL_CORE 4
+
+
+    CpaBoolean useSpt = CPA_FALSE;
+    if( useSpt == CPA_TRUE ){
+        OsalThread *cbTd;
+        LAC_OS_MALLOC(&cbTd, sizeof(OsalThread));
+        struct spinUpTdArgs *targs;
+        LAC_OS_MALLOC(&targs, sizeof(struct spinUpTdArgs));
+        targs->pSymCb = pSymDpCb;
+        targs->pResponse = pResponse;
+        targs->status = status;
+        targs->pSessionDesc = pSessionDesc;
+        targs->qatRespStatusOkFlag = qatRespStatusOkFlag;
+        osalThreadCreate(cbTd, NULL, performCB, targs);
+        osalThreadBind(cbTd, APP_LOGICAL_CORE);
+    } else {
+        pSymDpCb(pResponse, status, qatRespStatusOkFlag);
+        --pSessionDesc->u.pendingDpCbCount;
+    }
+
 
     /*
      * Decrement the number of pending CB.
@@ -448,7 +434,6 @@ STATIC void LacSymCb_ProcessDpCallback(CpaCySymDpOpData *pResponse,
      * So in order to avoid the risk, we decrease the @pendingDpCbCount after
      * the @->pSymDpCb() callback.
      */
-    --pSessionDesc->u.pendingDpCbCount;
 }
 
 /**
