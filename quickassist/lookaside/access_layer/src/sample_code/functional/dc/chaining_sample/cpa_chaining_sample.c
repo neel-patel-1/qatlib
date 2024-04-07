@@ -21,8 +21,8 @@ volatile CpaBoolean doPoll[10];
 
 CpaBufferList **pSrcBufferList_g = NULL;
 CpaBufferList **pDstBufferList_g = NULL;
-CpaInstanceHandle *instanceHandles;
-CpaCySymDpSessionCtx *sessionCtxs_g;
+volatile CpaInstanceHandle instanceHandles[10];
+volatile CpaCySymDpSessionCtx sessionCtxs_g[10];
 
 struct cbArg{
     Cpa16U mIdx;
@@ -669,7 +669,7 @@ void runExps(){
 
 
         for(int batchSize = 1; batchSize<=maxAllowedBatchSize; batchSize*=2){
-            startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
+            startDedicatedPollerTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
                 /*bufferSize=*/bufferSizes[numBuffersIdx]);
         }
     }
