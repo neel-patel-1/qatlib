@@ -87,10 +87,12 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
     pOpData->sessionCtx = toSubSessionCtx;
 
     if(cbArg->mIdx == (numAxs_g - 1)){
+        PRINT_DBG("Op %d received at final ax: %d\n", cbArg->bufIdx, cbArg->mIdx);
         if(cbArg->bufIdx == cbArg->numBufs - 1){
             globalDone = CPA_TRUE;
         }
     } else {
+        PRINT_DBG("Op %d received, Submitting to %d\n", cbArg->bufIdx, cbArg->mIdx+1);
         struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
         PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
         newCbArg->mIdx = cbArg->mIdx + 1;
@@ -170,7 +172,7 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
             bufferSize, cbArg);
 retry:
         status = cpaCySymDpEnqueueOp(pOpData[sub], CPA_FALSE);
-        if(CPA_STATUS_RETRY == status && numRetries > 0){
+        if(CPA_STATUS_RETRY == status){
             if(numRetries > 0){
                 numRetries--;
             }
@@ -200,7 +202,7 @@ retry:
         bufferSize, cbArg);
 retry_kick_tail:
     status = cpaCySymDpEnqueueOp(pOpData[sub], CPA_TRUE);
-    if(CPA_STATUS_RETRY == status && numRetries > 0){
+    if(CPA_STATUS_RETRY == status){
         if(numRetries > 0){
             numRetries--;
         }
@@ -620,11 +622,12 @@ void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int buff
     CpaCySymDpOpData **pOpDatas = NULL;
     genOpDataArray(&pOpDatas, numBuffers);
 
-    int numIterations = 1000;
+    int numIterations = 10000;
     uint64_t start = sampleCoderdtsc();
     for(int i=0; i<numIterations; i++){
         hostSubmitOnly(chainLength, ppBuffers,
             numBuffers, rBS, bufferSize, pOpDatas);
+        globalDone=0;
     }
     uint64_t end = sampleCoderdtsc();
     uint64_t cycles = end-start;
@@ -655,12 +658,12 @@ for each callback function - we will test this
 void runExps(){
     int numBufferses[] = {1, 2, 4, 8, 16, 32};
     int bufferSizes[] = {1*1024*1024, 512* 1024, 256*1024, 128*1024, 64*1024, 32*1024};
-    for(int numBuffersIdx = 0; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
+    for(int numBuffersIdx = 2; numBuffersIdx<sizeof(numBufferses)/sizeof(int); numBuffersIdx++){
         int maxAllowedBatchSize = numBufferses[numBuffersIdx];
 
 
         for(int batchSize = 1; batchSize<=maxAllowedBatchSize; batchSize*=2){
-            startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
+            startDedicatedPollerTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
                 /*bufferSize=*/bufferSizes[numBuffersIdx]);
         }
     }

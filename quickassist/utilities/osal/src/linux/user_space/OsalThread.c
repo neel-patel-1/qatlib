@@ -187,7 +187,7 @@ OSAL_PUBLIC OSAL_STATUS osalThreadCreate(OsalThread *thread,
     }
 
     status =
-        pthread_create(thread, &attr, (void *(*)(void *))startRoutine, arg);
+        pthread_create(thread, NULL, (void *(*)(void *))startRoutine, arg);
     if (status)
     {
         switch (status)
