@@ -522,6 +522,8 @@ static void spawnPollingThreads(int chainLength, pthread_t **ptid, int batchSize
     PHYS_CONTIG_ALLOC(&tid, sizeof(pthread_t) * chainLength);
     uint32_t coreMap[19] = {41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
                             51, 52, 53, 54, 55, 56, 57, 58, 59};
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
     for(int i=0; i<chainLength; i++){
         struct pollerArg *axIdx = NULL;
         PHYS_CONTIG_ALLOC(&axIdx, sizeof(struct pollerArg));
@@ -530,6 +532,12 @@ static void spawnPollingThreads(int chainLength, pthread_t **ptid, int batchSize
         axIdx->rBS = batchSize;
         doPoll[i] = CPA_TRUE;
         sampleThreadCreate(&tid[i], dedicatedRRPoller, (void *)axIdx);
+        CPU_SET(coreMap[i], &cpuset);
+        int status = pthread_setaffinity_np(tid[i], sizeof(cpuset), &cpuset);
+        if(status != 0){
+            PRINT_ERR("Error setting affinity\n");
+            exit(-1);
+        }
         // osalThreadCreate(&tid[i], NULL, dedicatedRRPoller,
         // (void *)axIdx);
         // osalThreadBind(&tid[i], coreMap[i]);
