@@ -79,6 +79,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <immintrin.h>
+#include "Osal.h"
 
 
 #define MAX_AXS 10
@@ -94,6 +95,8 @@ extern struct timespec hashStartTime_g;
 extern volatile int test_complete;
 volatile Cpa16U numSamples_g;
 volatile CpaBoolean processingInFlights = CPA_FALSE;
+extern Cpa16U intensity_g;
+extern Cpa16U cbIsDep_g;
 
 // Repeatedly encrypt for balanced chain
 extern int numAxs_g;
@@ -576,6 +579,45 @@ void startPollingAllAxs()
 
 }
 
+static void fullPayloadPassthrough(){
+    CpaStatus status;
+    status = PHYS_CONTIG_ALLOC(&cIvBuffer, sizeof(sampleCipherIv));
+    CpaCySymOpData *pOpData = NULL;
+    status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+    pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+    pOpData->pIv = cIvBuffer;
+    pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+    pOpData->cryptoStartSrcOffsetInBytes = 0;
+    pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
+    struct cbArg *arg=NULL;
+
+    int bufIdx = 0;
+    for(int i=0; i<numBufs_g; i++){ /* Submit Everything */
+        status = OS_MALLOC(&arg, sizeof(struct cbArg));
+        int axIdx = 0; /* getNextRequestHandle Updated */
+        arg->mIdx = axIdx;
+        arg->bufIdx = bufIdx;
+        pOpData->sessionCtx = sessionCtxs_g[axIdx];
+retry:
+        status = cpaCySymPerformOp(
+            cyInst_g[axIdx],
+            (void *)arg,
+            pOpData,
+            pSrcBufferList_g[bufIdx],     /* source buffer list */
+            pDstBufferList_g[bufIdx],     /* destination buffer list */
+            NULL);
+        if(status == CPA_STATUS_RETRY){
+            goto retry;
+        }
+        bufIdx = (bufIdx + 1) % numBufs_g;
+        for(int axIdx = 0; axIdx < numAxs_g; axIdx++){
+            while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
+        }
+    }
+    while(!complete){
+    }
+}
+
 /*
 Receive requests following some distribution. Dequeue the requests and submit them to the first accelerator
 
@@ -617,14 +659,65 @@ retry:
     }
 }
 
-/*
-callback best location to fwd?
-- direct access to payload before/after restructuring
-- requires deciding whether to forward at each stage of the pipeline
-- host should decide when to batch / forward and must know how many fragments from a given
-ax have been accumulated
-- if 4
-*/
+static void startFullPayloadBlockBetweenEachAcceleratorSingleHost(int chainLength, int numBuffers, int rBS, int bufferSize,
+CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
+    struct timespec start, end;
+    CpaStatus status;
+    numAxs_g = chainLength;
+    numAxs_g = chainLength;
+    numBufs_g = numBuffers;
+    intensity_g = cbIntensity;
+    cbIsDep_g = cbIsDep;
+
+    printf("spawning %d axs\n", numAxs_g);
+    spawnAxs(chainLength_g);
+    startPollingAllAxs();
+
+    int numIterations = 10000;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    for(int i=0; i<numIterations; i++){
+        complete = 0;
+        fullPayloadPassthrough();
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+
+
+    uint64_t nanos =
+        (end.tv_sec - start.tv_sec) * 1000000000 +
+        (end.tv_nsec - start.tv_nsec);
+    uint64_t avg = nanos / numIterations;
+    uint64_t us = avg / 1000;
+    if (us == 0)
+    {
+        printf("AvgLatency: %lu\n", us);
+    }
+    else
+    {
+        printf("AvgLatency: %lu\n", us);
+    }
+
+    for(int i=0; i<numAxs_g; i++){
+        gPollingCys[i] = 0;
+        CpaBoolean sessionInUse = CPA_TRUE;
+        processingInFlights = CPA_TRUE;
+        do{
+            status = icp_sal_CyPollInstance(cyInst_g[i], 1);
+            if(status == CPA_STATUS_SUCCESS){
+                printf("Out of order responses found\n");
+            }
+            cpaCySymSessionInUse(sessionCtxs_g[i], &sessionInUse);
+        } while(sessionInUse);
+
+        // symSessionWaitForInflightReq(sessionCtxs_g[i]);
+        status = cpaCySymRemoveSession(cyInst_g[i], sessionCtxs_g[i]);
+        if(status != CPA_STATUS_SUCCESS){
+            printf("Failed to remove session: %d\n", status);
+            exit(-1);
+        }
+    }
+    printf("Test Complete\n");
+}
+
 
 static void startExp(){
     struct timespec start, end;
@@ -1101,7 +1194,6 @@ CpaStatus requestGen(int fragmentSize, int numFragments, int testIter){
     chainLength_g = testIter;
 
     // sampleCyStartPolling(cyInstHandle);
-    startExp();
     return 0;
 
     /* Run Tests */
