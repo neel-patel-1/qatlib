@@ -529,9 +529,10 @@ static void spawnPollingThreads(int chainLength, pthread_t **ptid, int batchSize
         axIdx->mIdx = i;
         axIdx->rBS = batchSize;
         doPoll[i] = CPA_TRUE;
-        osalThreadCreate(&tid[i], NULL, dedicatedRRPoller,
-        (void *)axIdx);
-        osalThreadBind(&tid[i], coreMap[i]);
+        sampleThreadCreate(&tid[i], dedicatedRRPoller, (void *)axIdx);
+        // osalThreadCreate(&tid[i], NULL, dedicatedRRPoller,
+        // (void *)axIdx);
+        // osalThreadBind(&tid[i], coreMap[i]);
     }
     *ptid = tid;
 
