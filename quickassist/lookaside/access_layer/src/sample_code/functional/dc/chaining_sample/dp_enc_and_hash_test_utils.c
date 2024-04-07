@@ -15,6 +15,8 @@ extern int gDebugParam;
 volatile Cpa32U fragmentSize_g;
 volatile Cpa16U numBufs_g = 0;
 int numAxs_g;
+CpaBoolean cbIsDep_g = 0;
+Cpa16U intensity_g = 0;
 
 volatile CpaBoolean globalDone = 0;
 volatile CpaBoolean doPoll[10];
@@ -27,6 +29,8 @@ struct cbArg{
     Cpa16U bufIdx;
     Cpa16U numBufs;
     CpaBoolean kickTail;
+    Cpa16U intensity;
+    CpaBoolean dependent;
 };
 
 struct pollerArg{
@@ -74,15 +78,29 @@ static Cpa8U expectedOutput[] = {
     0xE7, 0xF0, 0x5D, 0x15, 0x5E, 0x61, 0x16, 0x13, 0x83, 0x1A, 0xD6, 0x56,
     0x44, 0xA7, 0xF6, 0xA2, 0x6D, 0xAB, 0x1A, 0xF2};
 
-static void symDpCallback(CpaCySymDpOpData *pOpData,
+struct sptArg{
+    CpaCySymDpOpData *pOpData;
+    CpaStatus status;
+    CpaBoolean verifyResult;
+};
+
+static inline void symDpCallback(CpaCySymDpOpData *pOpData,
                           CpaStatus status,
                           CpaBoolean verifyResult)
 {
     struct cbArg *cbArg = (struct cbArg *)pOpData->pCallbackTag;
     CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx+1];
-    CpaCySymDpSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx+1];
+    CpaCySymSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
+    Cpa16U intensity = cbArg->intensity;
+    char *dBuffer = (char *)pOpData->dstBuffer;
+    while(intensity > 0){
+        for(int i=0; i<pOpData->dstBufferLen; i++){
+            dBuffer[i] += 1;
+        }
+        cbArg->intensity--;
+    }
 
     if(cbArg->mIdx == (numAxs_g - 1)){
         if(cbArg->bufIdx == cbArg->numBufs - 1){
@@ -97,6 +115,40 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
         newCbArg->numBufs = cbArg->numBufs;
         pOpData->pCallbackTag = newCbArg;
         cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+    }
+}
+
+
+void *sptCallback(void *arg){
+    struct sptArg *pArg = (struct sptArg *)arg;
+    symDpCallback(pArg->pOpData, pArg->status, pArg->verifyResult);
+}
+
+/* You can have a dedicated polling thread on a separate physical core executing in r2c.
+You can also have a spt on a separate physical core, spinning up and assigning threads to to the colocated hw thread
+calling thread of the first callback is the SPT thread
+pthread is the app thread.
+*/
+static inline void callback(CpaCySymDpOpData *pOpData,
+                          CpaStatus status,
+                          CpaBoolean verifyResult){
+    pthread_t tid;
+    struct sptArg *pArg = NULL;
+    PHYS_CONTIG_ALLOC(&pArg, sizeof(struct sptArg));
+    pArg->pOpData = pOpData;
+    pArg->status = status;
+    pArg->verifyResult = verifyResult;
+
+    struct cArg * cArg = pOpData->pCallbackTag;
+    int appCore = 19;
+    int sptCore = 59;
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(appCore, &cpuset);
+    status = sampleThreadCreate(&tid, sptCallback, (void *)pArg);
+    if(0 != pthread_setaffinity_np(tid, sizeof(cpuset), &cpuset)){
+        PRINT_ERR("Error setting affinity\n");
+        exit(-1);
     }
 }
 
@@ -149,7 +201,9 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
                                 Cpa8U **pDstBufferList,
                                 Cpa32U bufferSize,
                                 Cpa32U numOps,
-                                Cpa32U bufIdx)
+                                Cpa32U bufIdx,
+                                Cpa16U intensity,
+                                CpaBoolean cbIsDep)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
     int sub = 0;
@@ -162,6 +216,8 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
         cbArg->bufIdx = sub;
         cbArg->numBufs = numBufs_g;
         cbArg->kickTail = CPA_FALSE;
+        cbArg->intensity = intensity;
+        cbArg->dependent = cbIsDep;
         populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
             pSrcBufferList[sub], pDstBufferList[sub],
             pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
@@ -192,6 +248,8 @@ retry:
     cbArg->bufIdx = sub;
     cbArg->numBufs = numBufs_g;
     cbArg->kickTail = CPA_TRUE;
+    cbArg->intensity = intensity;
+    cbArg->dependent = cbIsDep;
     populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
         pSrcBufferList[sub], pDstBufferList[sub],
         pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
@@ -219,7 +277,8 @@ retry_kick_tail:
 
 CpaStatus setupInstances(int desiredInstances,
     CpaInstanceHandle *cyInstHandles,
-    CpaCySymDpSessionCtx *sessionCtxs){
+    CpaCySymDpSessionCtx *sessionCtxs,
+    CpaBoolean sptEnabled){
 
     CpaStatus status = CPA_STATUS_FAIL;
     Cpa32U sessionCtxSize = 0;
@@ -279,7 +338,11 @@ CpaStatus setupInstances(int desiredInstances,
         {
             /* Register callback function for the instance */
             //<snippet name="regCb">
-            status = cpaCySymDpRegCbFunc(cyInstHandle, symDpCallback);
+            if(sptEnabled){
+                status = cpaCySymDpRegCbFunc(cyInstHandle, callback);
+            } else {
+                status = cpaCySymDpRegCbFunc(cyInstHandle, symDpCallback);
+            }
             //</snippet>
         }
         if (CPA_STATUS_SUCCESS == status)
@@ -459,6 +522,7 @@ static void dedicatedRRPoller(void *arg){
     PRINT_DBG("Poller Thread %d stopped\n", mIdx);
 }
 
+/* These can use _g's */
 static inline void hostSubmitOnly(int chainLength,
 Cpa8U ***ppBuffers,
 int numBuffers,
@@ -474,7 +538,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
                 symDpSubmitBatch(instanceHandles[0], dpSessionCtxs_g[0],
                     pOpData, ppBuffers[0], ppBuffers[1],
-                    bufferSize, rBS, bufIdx);
+                    bufferSize, rBS, bufIdx, intensity_g, cbIsDep_g);
             }
             startSubmitIdx = endSubmitIdx;
             endSubmitIdx = startSubmitIdx + rBS;
@@ -499,7 +563,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
                 symDpSubmitBatch(instanceHandles[0], dpSessionCtxs_g[0],
                     pOpData, ppBuffers[0], ppBuffers[1],
-                    bufferSize, rBS, bufIdx);
+                    bufferSize, rBS, bufIdx, intensity_g, cbIsDep_g);
             }
             startSubmitIdx = endSubmitIdx;
             endSubmitIdx = startSubmitIdx + rBS;
@@ -572,7 +636,7 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&dpSessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
-    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g);
+    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g, CPA_TRUE);
     Cpa8U *pIvBuffer = NULL;
     CpaStatus status = CPA_STATUS_SUCCESS;
     CpaCySymDpOpData *pOpData;
@@ -608,7 +672,7 @@ void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int buff
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&dpSessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
-    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g);
+    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g, CPA_FALSE);
     pthread_t *tid = NULL;
     spawnPollingThreads(chainLength, &tid, rBS);
     Cpa8U *pIvBuffer = NULL;
