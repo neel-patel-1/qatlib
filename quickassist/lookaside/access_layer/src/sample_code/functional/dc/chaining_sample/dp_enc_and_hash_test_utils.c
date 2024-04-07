@@ -632,11 +632,11 @@ void printStats(int numBuffers, int rBS, int bufferSize, int chainLength, uint64
     PRINT("AvgOffloadCycles: %lu ", avgCycles);
     PRINT("AvgOffloadMicroseconds: %lu\n", (avgCycles/2000));
 }
-void startTest(int chainLength, int numBuffers, int rBS, int bufferSize){
+void startTest(int chainLength, int numBuffers, int rBS, int bufferSize, CpaBoolean useSpt){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&dpSessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
-    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g, CPA_TRUE);
+    setupInstances(chainLength, instanceHandles, dpSessionCtxs_g, useSpt);
     Cpa8U *pIvBuffer = NULL;
     CpaStatus status = CPA_STATUS_SUCCESS;
     CpaCySymDpOpData *pOpData;
