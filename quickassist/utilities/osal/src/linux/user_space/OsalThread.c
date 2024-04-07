@@ -74,95 +74,95 @@ OSAL_PUBLIC OSAL_STATUS osalThreadCreate(OsalThread *thread,
      * POSIX. It is not required to set it explicitly before setting the
      * scheduling policy */
 
-    // if (threadAttr == NULL)
-    // {
-    //     if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0)
-    //     {
-    //         osalLog(OSAL_LOG_LVL_ERROR,
-    //                 OSAL_LOG_DEV_STDOUT,
-    //                 "\nosalThreadCreate:"
-    //                 "Failed to set inherit sched for thread!\n");
-    //         pthread_attr_destroy(&attr);
-    //         return OSAL_FAIL;
-    //     }
+    if (threadAttr == NULL)
+    {
+        if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0)
+        {
+            osalLog(OSAL_LOG_LVL_ERROR,
+                    OSAL_LOG_DEV_STDOUT,
+                    "\nosalThreadCreate:"
+                    "Failed to set inherit sched for thread!\n");
+            pthread_attr_destroy(&attr);
+            return OSAL_FAIL;
+        }
 
-    //     if (pthread_attr_setschedpolicy(
-    //             &attr, OSAL_OS_THREAD_DEFAULT_SCHED_POLICY) != 0)
-    //     {
-    //         osalLog(OSAL_LOG_LVL_ERROR,
-    //                 OSAL_LOG_DEV_STDOUT,
-    //                 "\nosalThreadCreate:"
-    //                 "Failed to set scheduling policy for thread!\n");
-    //         pthread_attr_destroy(&attr);
-    //         return OSAL_FAIL;
-    //     }
+        if (pthread_attr_setschedpolicy(
+                &attr, OSAL_OS_THREAD_DEFAULT_SCHED_POLICY) != 0)
+        {
+            osalLog(OSAL_LOG_LVL_ERROR,
+                    OSAL_LOG_DEV_STDOUT,
+                    "\nosalThreadCreate:"
+                    "Failed to set scheduling policy for thread!\n");
+            pthread_attr_destroy(&attr);
+            return OSAL_FAIL;
+        }
 
-    //     /* Set priority based on value in threadAttr */
-    //     osalMemSet(&param, 0, sizeof(param));
-    //     param.sched_priority = OSAL_OS_DEFAULT_THREAD_PRIORITY;
+        /* Set priority based on value in threadAttr */
+        osalMemSet(&param, 0, sizeof(param));
+        param.sched_priority = OSAL_OS_DEFAULT_THREAD_PRIORITY;
 
-    //     if (pthread_attr_setschedparam(&attr, &param) != 0)
-    //     {
-    //         osalLog(OSAL_LOG_LVL_ERROR,
-    //                 OSAL_LOG_DEV_STDOUT,
-    //                 "\nosalThreadCreate:"
-    //                 "Failed to set the sched parameters attribute!\n");
-    //         pthread_attr_destroy(&attr);
-    //         return OSAL_FAIL;
-    //     }
-    // }
-    // else
-    // {
-    //     /* Set scheduling policy based on value in threadAttr */
+        if (pthread_attr_setschedparam(&attr, &param) != 0)
+        {
+            osalLog(OSAL_LOG_LVL_ERROR,
+                    OSAL_LOG_DEV_STDOUT,
+                    "\nosalThreadCreate:"
+                    "Failed to set the sched parameters attribute!\n");
+            pthread_attr_destroy(&attr);
+            return OSAL_FAIL;
+        }
+    }
+    else
+    {
+        /* Set scheduling policy based on value in threadAttr */
 
-    //     if ((threadAttr->policy != SCHED_RR) &&
-    //         (threadAttr->policy != SCHED_FIFO) &&
-    //         (threadAttr->policy != SCHED_OTHER))
-    //     {
-    //         osalLog(OSAL_LOG_LVL_DEBUG3,
-    //                 OSAL_LOG_DEV_STDOUT,
-    //                 "\nosalThreadCreate: Invalid policy type! "
-    //                 "Changing to OSAL_THREAD_DEFAULT_SCHED_POLICY\n");
-    //         threadAttr->policy = OSAL_THREAD_DEFAULT_SCHED_POLICY;
-    //     }
+        if ((threadAttr->policy != SCHED_RR) &&
+            (threadAttr->policy != SCHED_FIFO) &&
+            (threadAttr->policy != SCHED_OTHER))
+        {
+            osalLog(OSAL_LOG_LVL_DEBUG3,
+                    OSAL_LOG_DEV_STDOUT,
+                    "\nosalThreadCreate: Invalid policy type! "
+                    "Changing to OSAL_THREAD_DEFAULT_SCHED_POLICY\n");
+            threadAttr->policy = OSAL_THREAD_DEFAULT_SCHED_POLICY;
+        }
 
-    //     if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0)
-    //     {
-    //         osalLog(OSAL_LOG_LVL_ERROR,
-    //                 OSAL_LOG_DEV_STDOUT,
-    //                 "\nosalThreadCreate:"
-    //                 "Failed to set inherit sched for thread!\n");
-    //         pthread_attr_destroy(&attr);
-    //         return OSAL_FAIL;
-    //     }
+        if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0)
+        {
+            osalLog(OSAL_LOG_LVL_ERROR,
+                    OSAL_LOG_DEV_STDOUT,
+                    "\nosalThreadCreate:"
+                    "Failed to set inherit sched for thread!\n");
+            pthread_attr_destroy(&attr);
+            return OSAL_FAIL;
+        }
 
-    //     if (pthread_attr_setschedpolicy(&attr, threadAttr->policy) != 0)
-    //     {
-    //         osalLog(OSAL_LOG_LVL_ERROR,
-    //                 OSAL_LOG_DEV_STDOUT,
-    //                 "\nosalThreadCreate:"
-    //                 "Failed to set scheduling policy for thread!\n");
-    //         pthread_attr_destroy(&attr);
-    //         return OSAL_FAIL;
-    //     }
+        if (pthread_attr_setschedpolicy(&attr, threadAttr->policy) != 0)
+        {
+            osalLog(OSAL_LOG_LVL_ERROR,
+                    OSAL_LOG_DEV_STDOUT,
+                    "\nosalThreadCreate:"
+                    "Failed to set scheduling policy for thread!\n");
+            pthread_attr_destroy(&attr);
+            return OSAL_FAIL;
+        }
 
-    //     /* Set priority based on value in threadAttr */
-    //     osalMemSet(&param, 0, sizeof(param));
-    //     param.sched_priority = threadAttr->priority;
+        /* Set priority based on value in threadAttr */
+        osalMemSet(&param, 0, sizeof(param));
+        param.sched_priority = threadAttr->priority;
 
-    //     if (threadAttr->policy != SCHED_OTHER)
-    //     {
-    //         if (pthread_attr_setschedparam(&attr, &param) != 0)
-    //         {
-    //             osalLog(OSAL_LOG_LVL_ERROR,
-    //                     OSAL_LOG_DEV_STDOUT,
-    //                     "\nosalThreadCreate:"
-    //                     "Failed to set the sched parameters attribute!\n");
-    //             pthread_attr_destroy(&attr);
-    //             return OSAL_FAIL;
-    //         }
-    //     }
-    // } /* end of if(threadAttr == NULL) */
+        if (threadAttr->policy != SCHED_OTHER)
+        {
+            if (pthread_attr_setschedparam(&attr, &param) != 0)
+            {
+                osalLog(OSAL_LOG_LVL_ERROR,
+                        OSAL_LOG_DEV_STDOUT,
+                        "\nosalThreadCreate:"
+                        "Failed to set the sched parameters attribute!\n");
+                pthread_attr_destroy(&attr);
+                return OSAL_FAIL;
+            }
+        }
+    } /* end of if(threadAttr == NULL) */
 
     /* Always create detached thread as JOINABLE thread is not needed by
      * any of the OSAL users currently */

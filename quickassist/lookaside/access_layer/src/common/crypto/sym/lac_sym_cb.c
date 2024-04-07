@@ -116,6 +116,7 @@ static void performCB(void *arg){
     targs = (struct spinUpTdArgs *)arg;
     targs->pSymCb(targs->pResponse, targs->status, targs->qatRespStatusOkFlag);
     targs->pSessionDesc->u.pendingDpCbCount--;
+    osalThreadExit();
 }
 /*
 *******************************************************************************
@@ -400,7 +401,7 @@ STATIC void LacSymCb_ProcessDpCallback(CpaCySymDpOpData *pResponse,
     #define APP_LOGICAL_CORE 4
 
 
-    CpaBoolean useSpt = CPA_FALSE;
+    CpaBoolean useSpt = CPA_TRUE;
     if( useSpt == CPA_TRUE ){
         OsalThread *cbTd;
         LAC_OS_MALLOC(&cbTd, sizeof(OsalThread));
