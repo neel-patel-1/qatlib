@@ -187,7 +187,7 @@ OSAL_PUBLIC OSAL_STATUS osalThreadCreate(OsalThread *thread,
     }
 
     status =
-        pthread_create(thread, &attr, (void *(*)(void *))startRoutine, arg);
+        pthread_create(thread, NULL, (void *(*)(void *))startRoutine, arg);
     if (status)
     {
         switch (status)
@@ -260,7 +260,7 @@ OSAL_PUBLIC void osalThreadBind(OsalThread *pTid, UINT32 cpu)
                 OSAL_LOG_DEV_STDOUT,
                 "\nosalThreadBind: Failed to bind the thread to requested "
                 "core!\n");
-        exit(-1);
+        return;
     }
     /* Obtain actual thread CPU affinity */
     if (pthread_getaffinity_np(*pTid, sizeof(cpuSet), &cpuSet) != 0)
@@ -269,7 +269,7 @@ OSAL_PUBLIC void osalThreadBind(OsalThread *pTid, UINT32 cpu)
                 OSAL_LOG_DEV_STDOUT,
                 "\nosalThreadBind: Failed to obtain bounded thread "
                 "affinity!\n");
-        exit(-1);
+        return;
     }
     /* Check if thread is bound as requested */
     if (!CPU_ISSET(cpu, &cpuSet))
@@ -277,7 +277,7 @@ OSAL_PUBLIC void osalThreadBind(OsalThread *pTid, UINT32 cpu)
         osalLog(OSAL_LOG_LVL_WARNING,
                 OSAL_LOG_DEV_STDOUT,
                 "\nosalThreadBind: thread is not bound with requested core!\n");
-        exit(-1);
+        return;
     }
 #endif
 }

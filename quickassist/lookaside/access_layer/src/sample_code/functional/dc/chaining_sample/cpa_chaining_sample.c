@@ -31,14 +31,6 @@ void runSptComparison(){
     /* intensity = */0,
     /*cbs are dependent*/ CPA_TRUE);
 
-    startTest(
-    /*ChainLength=*/3,
-    /*numBuffers*/32,
-    /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
-    /*bufferSize=*/ 128*1024, /*Best size for aes and hash*/
-    /*useSpt*/ CPA_TRUE,
-    /* intensity = */0,
-    /*cbs are dependent*/ CPA_TRUE);
 }
 
 void fwdingGranularityImpact(){
