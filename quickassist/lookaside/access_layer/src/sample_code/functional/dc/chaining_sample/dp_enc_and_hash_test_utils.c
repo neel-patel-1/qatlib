@@ -96,9 +96,9 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
     Cpa16U intensity = cbArg->intensity;
-    char *dBuffer = (char *)(pOpData->dstBuffer);
+    char *dBuffer = (char *)(cbArg->operandBuffer);
     while(intensity > 0){
-        for(int i=0; i<pOpData->dstBufferLen; i++){
+        for(int i=0; i<cbArg->operandBufferSize; i++){
             dBuffer[i] += 1;
         }
         cbArg->intensity--;
@@ -220,6 +220,8 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
         cbArg->kickTail = CPA_FALSE;
         cbArg->intensity = intensity;
         cbArg->dependent = cbIsDep;
+        cbArg->operandBuffer = pDstBufferList[sub];
+        cbArg->operandBufferSize = bufferSize;
         populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
             pSrcBufferList[sub], pDstBufferList[sub],
             pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
@@ -252,6 +254,8 @@ retry:
     cbArg->kickTail = CPA_TRUE;
     cbArg->intensity = intensity;
     cbArg->dependent = cbIsDep;
+    cbArg->operandBuffer = pDstBufferList[sub];
+    cbArg->operandBufferSize = bufferSize;
     populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
         pSrcBufferList[sub], pDstBufferList[sub],
         pDstBufferList[sub] + sizeof(sampleAlgChainingSrc),
