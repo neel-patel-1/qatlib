@@ -31,6 +31,8 @@ struct cbArg{
     CpaBoolean kickTail;
     Cpa16U intensity;
     CpaBoolean dependent;
+    char *operandBuffer;
+    Cpa32U operandBufferSize;
 };
 
 struct pollerArg{
@@ -94,7 +96,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
     Cpa16U intensity = cbArg->intensity;
-    char *dBuffer = (char *)pOpData->dstBuffer;
+    char *dBuffer = (char *)(pOpData->dstBuffer);
     while(intensity > 0){
         for(int i=0; i<pOpData->dstBufferLen; i++){
             dBuffer[i] += 1;
@@ -632,7 +634,8 @@ void printStats(int numBuffers, int rBS, int bufferSize, int chainLength, uint64
     PRINT("AvgOffloadCycles: %lu ", avgCycles);
     PRINT("AvgOffloadMicroseconds: %lu\n", (avgCycles/2000));
 }
-void startTest(int chainLength, int numBuffers, int rBS, int bufferSize, CpaBoolean useSpt){
+void startTest(int chainLength, int numBuffers, int rBS, int bufferSize,
+CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     numAxs_g = chainLength;
     OS_MALLOC(&instanceHandles, sizeof(CpaInstanceHandle) * chainLength);
     OS_MALLOC(&dpSessionCtxs_g, sizeof(CpaCySymDpSessionCtx) * chainLength);
@@ -643,6 +646,8 @@ void startTest(int chainLength, int numBuffers, int rBS, int bufferSize, CpaBool
 
     numAxs_g = chainLength;
     numBufs_g = numBuffers;
+    intensity_g = cbIntensity;
+    cbIsDep_g = cbIsDep;
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
 

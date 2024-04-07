@@ -30,8 +30,8 @@ void runExps(){
 
         for(int batchSize = 1; batchSize<=maxAllowedBatchSize; batchSize*=2){
             startTest(/*ChainLength=*/3, numBufferses[numBuffersIdx], batchSize,
-                /*bufferSize=*/bufferSizes[numBuffersIdx], /*useSpt*/ CPA_TRUE);
+                /*bufferSize=*/bufferSizes[numBuffersIdx], /*useSpt*/ CPA_TRUE,
+                /* intensity = */10, /*cbs are dependent*/ CPA_TRUE);
         }
     }
 }
-
