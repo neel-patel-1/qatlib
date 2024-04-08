@@ -352,6 +352,7 @@ COMMON_FLAGS = -Wformat \
 	       -D MAX_MR_ROUND=$(MAX_MR) \
 	       -D _FILE_OFFSET_BITS=64 \
 	       $(NO_UNUSED_CMDLINE_ARG_CFLAGS) \
+				 -g \
 	       $(MCX16_CFLAGS)
 
 if ICP_DEBUG_AC
