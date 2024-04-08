@@ -116,6 +116,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
             newCbArg->bufIdx = cbArg->bufIdx;
             newCbArg->kickTail = cbArg->kickTail;
             newCbArg->numBufs = cbArg->numBufs;
+            newCbArg->dependent = cbArg->dependent;
             pOpData->pCallbackTag = newCbArg;
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         } else {
@@ -174,6 +175,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
             newCbArg->bufIdx = cbArg->bufIdx;
             newCbArg->kickTail = cbArg->kickTail;
             newCbArg->numBufs = cbArg->numBufs;
+            newCbArg->dependent = cbArg->dependent;
             pOpData->pCallbackTag = newCbArg;
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         }
