@@ -3,6 +3,7 @@
 #include "cpa_cy_sym_dp.h"
 #include "icp_sal_poll.h"
 #include "cpa_sample_utils.h"
+#include "assert.h"
 #include "Osal.h"
 
 /* The digest length must be less than or equal to SHA256 digest
@@ -109,7 +110,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
 
     if(cbArg->dependent){ /* spt callback didn't submit, so thread needs to */
         PRINT_DBG("Dependent host operation\n");
-        if(cbArg->mIdx < (numAxs_g)){
+        if(cbArg->mIdx < (numAxs_g-1)){
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
             newCbArg->mIdx = cbArg->mIdx + 1;
@@ -118,6 +119,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
             newCbArg->numBufs = cbArg->numBufs;
             newCbArg->dependent = cbArg->dependent;
             pOpData->pCallbackTag = newCbArg;
+            assert(cbArg->mIdx < numAxs_g);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         } else {
             if(cbArg->bufIdx == cbArg->numBufs - 1){
@@ -167,7 +169,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
 
     struct cbArg * cbArg = pOpData->pCallbackTag;
     if(!cbArg->dependent){
-        if(cbArg->mIdx < (numAxs_g)){
+        if(cbArg->mIdx < (numAxs_g-1)){
             PRINT_DBG("Independent Callback\n");
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
@@ -177,6 +179,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
             newCbArg->numBufs = cbArg->numBufs;
             newCbArg->dependent = cbArg->dependent;
             pOpData->pCallbackTag = newCbArg;
+            assert(cbArg->mIdx < numAxs_g);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         }
     }
