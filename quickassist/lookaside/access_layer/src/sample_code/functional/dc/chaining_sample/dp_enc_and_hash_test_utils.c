@@ -99,7 +99,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
     char *dBuffer = (char *)(cbArg->operandBuffer);
     while(intensity > 0){
         for(int i=0; i<cbArg->operandBufferSize; i+=64){
-            dBuffer[i] += 1;
+            dBuffer[i] = dBuffer[(i+1)%cbArg->operandBufferSize] + dBuffer[(i+2)%cbArg->operandBufferSize];
         }
         intensity--;
     }
