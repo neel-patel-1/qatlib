@@ -21,24 +21,24 @@ for each callback function - we will test this
 
 */
 void runSptComparison(){
-
-    for( int cI=0; cI<3; cI++){
+    int intensities[] = {32, 64};
+    // int intensities[] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256};
+    for( int cI=0; cI<(sizeof(intensities)/sizeof(int)); cI++){
         startTest(
         /*ChainLength=*/3,
-        /*numBuffers*/32,
+        /*numBuffers*/(1<<3),
         /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
-        /*bufferSize=*/ 128*1024, /*Best size for aes and hash*/
-        /*useSpt*/ CPA_TRUE,
-        /* intensity = */cI,
+        /*bufferSize=*/ (1<<17), /*Best size for aes and hash*/
+        /*useSpt*/ CPA_FALSE,
+        /* intensity = */intensities[cI],
         /*cbs are dependent*/ CPA_TRUE);
-
         startTest(
         /*ChainLength=*/3,
-        /*numBuffers*/32,
+        /*numBuffers*/(1<<3),
         /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
-        /*bufferSize=*/ 128*1024, /*Best size for aes and hash*/
+        /*bufferSize=*/ (1<<17), /*Best size for aes and hash*/
         /*useSpt*/ CPA_TRUE,
-        /* intensity = */cI,
+        /* intensity = */intensities[cI],
         /*cbs are dependent*/ CPA_TRUE);
     }
 

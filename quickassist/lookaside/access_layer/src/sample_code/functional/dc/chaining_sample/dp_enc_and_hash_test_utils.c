@@ -20,6 +20,8 @@ Cpa16U intensity_g = 0;
 
 volatile CpaBoolean globalDone = 0;
 volatile CpaBoolean doPoll[10];
+_Atomic int totalHostOps;
+_Atomic int expectedHostOps;
 
 CpaInstanceHandle instanceHandles[10];
 CpaCySymDpSessionCtx dpSessionCtxs_g[10];
@@ -90,6 +92,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
                           CpaStatus status,
                           CpaBoolean verifyResult)
 {
+
     struct cbArg *cbArg = (struct cbArg *)pOpData->pCallbackTag;
     CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx+1];
     CpaCySymSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx];
@@ -104,25 +107,44 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
         intensity--;
     }
 
-    if(cbArg->mIdx == (numAxs_g - 1)){
-        if(cbArg->bufIdx == cbArg->numBufs - 1){
-            globalDone = CPA_TRUE;
+    if(cbArg->dependent){ /* spt callback didn't submit, so thread needs to */
+        PRINT_DBG("Dependent host operation\n");
+        if(cbArg->mIdx < (numAxs_g - 1)){
+            struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
+            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+            newCbArg->mIdx = cbArg->mIdx + 1;
+            newCbArg->bufIdx = cbArg->bufIdx;
+            newCbArg->kickTail = cbArg->kickTail;
+            newCbArg->numBufs = cbArg->numBufs;
+            pOpData->pCallbackTag = newCbArg;
+            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+        } else {
+            if(cbArg->bufIdx == cbArg->numBufs - 1){
+                PRINT_DBG("Final host operation\n");
+                globalDone = CPA_TRUE;
+            }
         }
     } else {
-        struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
-        PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-        newCbArg->mIdx = cbArg->mIdx + 1;
-        newCbArg->bufIdx = cbArg->bufIdx;
-        newCbArg->kickTail = cbArg->kickTail;
-        newCbArg->numBufs = cbArg->numBufs;
-        pOpData->pCallbackTag = newCbArg;
-        cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+        /* Update a shared counter atomically */
+        PRINT_DBG("Independent host operation\n");
+        totalHostOps++;
+        if(cbArg->mIdx < (numAxs_g - 1)){
+            PRINT_DBG("Final host operation\n");
+            /*
+                block until all host ops are completed (number of expected host ops has been reached)
+                can the atomic-inc-host-op-notification approach be extended to synchronize operations for arbitrary dependency graphs?
+            */
+            if(cbArg->bufIdx == cbArg->numBufs - 1){
+                while( totalHostOps != expectedHostOps ){}
+            }
+        }
     }
 }
 
 
-void *sptCallback(void *arg){
+void sptCallback(void *arg){
     struct sptArg *pArg = (struct sptArg *)arg;
+    /* Executing */
     symDpCallback(pArg->pOpData, pArg->status, pArg->verifyResult);
     osalThreadExit();
 }
@@ -142,12 +164,27 @@ static inline void callback(CpaCySymDpOpData *pOpData,
     pArg->status = status;
     pArg->verifyResult = verifyResult;
 
-    struct cArg * cArg = pOpData->pCallbackTag;
+    struct cbArg * cbArg = pOpData->pCallbackTag;
+    if(!cbArg->dependent){
+        if(cbArg->mIdx < (numAxs_g-1)){
+            PRINT_DBG("Independent Callback\n");
+            struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
+            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+            newCbArg->mIdx = cbArg->mIdx + 1;
+            newCbArg->bufIdx = cbArg->bufIdx;
+            newCbArg->kickTail = cbArg->kickTail;
+            newCbArg->numBufs = cbArg->numBufs;
+            pOpData->pCallbackTag = newCbArg;
+            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+        }
+    }
+
+
     int appCore = 19;
     int sptCore = 59;
     PRINT_DBG("Spawning Thread from SPT\n");
     status = osalThreadCreate(&tid, NULL, sptCallback, (void *)pArg);
-    osalThreadBind(tid, appCore);
+    osalThreadBind(&tid, appCore);
 }
 
 static inline void populateOpData(CpaCySymDpOpData *pOpData,
@@ -425,7 +462,7 @@ CpaStatus tearDownInstances(int desiredInstances,
         CpaStatus sessionStatus = CPA_STATUS_SUCCESS;
 
         /* Wait for inflight requests to complete */
-        symSessionWaitForInflightReq(sessionCtx);
+        // symSessionWaitForInflightReq(sessionCtx);
 
         //<snippet name="removeSession">
         sessionStatus = cpaCySymDpRemoveSession(cyInstHandle, sessionCtx);
@@ -648,6 +685,11 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     numBufs_g = numBuffers;
     intensity_g = cbIntensity;
     cbIsDep_g = cbIsDep;
+    if(cbIsDep_g == CPA_TRUE){
+        totalHostOps = 0;
+        expectedHostOps = (numAxs_g * numBufs_g) - 1; /* one dependent host op per buffer executed for each accelerator in the chain.
+        since the last op doesn't check (- 1)*/
+    }
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];
 
