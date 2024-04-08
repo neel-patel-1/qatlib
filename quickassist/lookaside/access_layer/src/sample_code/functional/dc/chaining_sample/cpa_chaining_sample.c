@@ -5,22 +5,33 @@
 #include "cpa_sample_utils.h"
 #include "Osal.h"
 
-/*
-Tests:
-(1) SingleCPU-RR-Submit and poll
-- params: batch size
-(2) Submit and dedicated poll
-- params: number of dedicated pollers, per-cb-thread spinup on/off
 
-Which configurations are truly comparable?:
-(1) a dedicated polling thread per accelerator could spin up new threads
-for each callback function - we will test this
-(2) a single-host request-poller could spin up new threads as well
-- does the removal of cb's from the critical path
-1 - which configuration can achieve the lowest latency?
 
-*/
-void runSptComparison(){
+void indVsDepSpt(){
+    int intensities[] = {256};
+    // int intensities[] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256};
+    int bufSizeShift = 7;
+    for( int cI=0; cI<(sizeof(intensities)/sizeof(int)); cI++){
+        startTest(
+        /*ChainLength=*/3,
+        /*numBuffers*/(1<<bufSizeShift),
+        /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
+        /*bufferSize=*/ (1<<20 - bufSizeShift), /*Best size for aes and hash*/
+        /*useSpt*/ CPA_FALSE,
+        /* intensity = */intensities[cI],
+        /*cbs are dependent*/ CPA_TRUE);
+        startTest(
+        /*ChainLength=*/3,
+        /*numBuffers*/(1<<bufSizeShift),
+        /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
+        /*bufferSize=*/ (1<<20 - bufSizeShift), /*Best size for aes and hash*/
+        /*useSpt*/ CPA_TRUE,
+        /* intensity = */intensities[cI],
+        /*cbs are dependent*/ CPA_FALSE);
+    }
+
+}
+void singleCallbackProcessingThreadSPTComparison(){
     int intensities[] = {32, 64};
     // int intensities[] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256};
     for( int cI=0; cI<(sizeof(intensities)/sizeof(int)); cI++){
@@ -61,6 +72,6 @@ void fwdingGranularityImpact(){
 
 
 void runExps(){
-    runSptComparison();
+    indVsDepSpt();
 }
 

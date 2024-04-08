@@ -109,7 +109,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
 
     if(cbArg->dependent){ /* spt callback didn't submit, so thread needs to */
         PRINT_DBG("Dependent host operation\n");
-        if(cbArg->mIdx < (numAxs_g - 1)){
+        if(cbArg->mIdx < (numAxs_g)){
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
             newCbArg->mIdx = cbArg->mIdx + 1;
@@ -129,7 +129,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
         /* Update a shared counter atomically */
         PRINT_DBG("Independent host operation\n");
         totalHostOps++;
-        if(cbArg->mIdx < (numAxs_g - 1)){
+        if(cbArg->mIdx == (numAxs_g - 1)){
             PRINT_DBG("Final host operation\n");
             /*
                 block until all host ops are completed (number of expected host ops has been reached)
@@ -167,7 +167,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
 
     struct cbArg * cbArg = pOpData->pCallbackTag;
     if(!cbArg->dependent){
-        if(cbArg->mIdx < (numAxs_g-1)){
+        if(cbArg->mIdx < (numAxs_g)){
             PRINT_DBG("Independent Callback\n");
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
@@ -687,9 +687,9 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     numBufs_g = numBuffers;
     intensity_g = cbIntensity;
     cbIsDep_g = cbIsDep;
-    if(cbIsDep_g == CPA_TRUE){
+    if(cbIsDep_g == CPA_FALSE){
         totalHostOps = 0;
-        expectedHostOps = (numAxs_g * numBufs_g) - 1; /* one dependent host op per buffer executed for each accelerator in the chain.
+        expectedHostOps = (chainLength * numBuffers) - 1; /* one dependent host op per buffer executed for each accelerator in the chain.
         since the last op doesn't check (- 1)*/
     }
     Cpa32U bufferMetaSize = 0;
