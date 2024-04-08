@@ -124,6 +124,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
 void *sptCallback(void *arg){
     struct sptArg *pArg = (struct sptArg *)arg;
     symDpCallback(pArg->pOpData, pArg->status, pArg->verifyResult);
+    osalThreadExit();
 }
 
 /* You can have a dedicated polling thread on a separate physical core executing in r2c.
@@ -144,6 +145,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
     struct cArg * cArg = pOpData->pCallbackTag;
     int appCore = 19;
     int sptCore = 59;
+    PRINT_DBG("Spawning Thread from SPT\n");
     status = osalThreadCreate(&tid, NULL, sptCallback, (void *)pArg);
     osalThreadBind(tid, appCore);
 }
