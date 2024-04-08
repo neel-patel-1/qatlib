@@ -144,14 +144,8 @@ static inline void callback(CpaCySymDpOpData *pOpData,
     struct cArg * cArg = pOpData->pCallbackTag;
     int appCore = 19;
     int sptCore = 59;
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(appCore, &cpuset);
-    status = sampleThreadCreate(&tid, sptCallback, (void *)pArg);
-    if(0 != pthread_setaffinity_np(tid, sizeof(cpuset), &cpuset)){
-        PRINT_ERR("Error setting affinity\n");
-        exit(-1);
-    }
+    status = osalThreadCreate(&tid, NULL, sptCallback, (void *)pArg);
+    osalThreadBind(tid, appCore);
 }
 
 static inline void populateOpData(CpaCySymDpOpData *pOpData,

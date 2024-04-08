@@ -22,12 +22,12 @@ for each callback function - we will test this
 */
 void runSptComparison(){
 
-    startFullPayloadBlockBetweenEachAcceleratorSingleHost(
+    startTest(
     /*ChainLength=*/3,
     /*numBuffers*/32,
     /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
     /*bufferSize=*/ 128*1024, /*Best size for aes and hash*/
-    /*useSpt*/ CPA_FALSE,
+    /*useSpt*/ CPA_TRUE,
     /* intensity = */0,
     /*cbs are dependent*/ CPA_TRUE);
 
