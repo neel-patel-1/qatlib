@@ -457,11 +457,11 @@ static void spawnAxs(int numAxs){
                 status = PHYS_CONTIG_ALLOC(&pBufferMeta, bufferMetaSize);
             printf("Meta Size: %d\n", bufferMetaSize);
             for(int i=0; i<numBufs_g;i++){
-                dcChainBuildBufferList(&pSrcBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
-                dcChainBuildBufferList(&pDstBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
+                dcChainBuildBufferList(&pSrcBufferList_g[i], 1, bufSize_g, bufferMetaSize);
+                dcChainBuildBufferList(&pDstBufferList_g[i], 1, bufSize_g, bufferMetaSize);
             }
             for(int i=0; i<numBufs_g;i++){
-                populateBufferList(&pSrcBufferList_g[i], 1, fragmentSize_g, bufferMetaSize);
+                populateBufferList(&pSrcBufferList_g[i], 1, bufSize_g, bufferMetaSize);
             }
 
         }
@@ -477,35 +477,9 @@ static void spawnAxs(int numAxs){
             printf("Failed to poll instance: %d\n", i);
             exit(-1);
         }
-        // Cpa8U *pIvBuffer = NULL;
-        // status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-        // CpaCySymOpData *pOpData = NULL;
-        // status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
-        // pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-        // pOpData->pIv = pIvBuffer;
-        // pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-        // pOpData->cryptoStartSrcOffsetInBytes = 0;
-        // pOpData->sessionCtx = sessionCtx;
-        // pOpData->messageLenToCipherInBytes = pSrcBufferList_g[0]->pBuffers->dataLenInBytes;
-        // printf("%d\n", pOpData->messageLenToCipherInBytes);
-        // status = cpaCySymPerformOp(
-        //     cyInst_g[i],
-        //     (void *)(),
-        //     pOpData,
-        //     pSrcBufferList_g[0],     /* source buffer list */
-        //     pDstBufferList_g[0],     /* destination buffer list */
-        //     NULL);
-        // if(status != CPA_STATUS_SUCCESS){
-        //     printf("Failed to submit request: %d\n", status);
-        //     exit(-1);
-        // }
-        // while(icp_sal_CyPollInstance(cyInst_g[i], 0) != CPA_STATUS_SUCCESS){}
-        // printf("Request to ax %d submitted and rcvd\n", i);
+
         sessionCtxs_g[i] = sessionCtx;
     }
-    numAxs_g = numAxs;
-    // printf("Chain Configured\n");
-    // exit(0);
 }
 
 /*
@@ -608,7 +582,11 @@ retry:
             NULL);
         if(status == CPA_STATUS_RETRY){
             goto retry;
+        } else if(status != CPA_STATUS_SUCCESS){
+            printf("Failed to submit request: %d\n", status);
+            exit(-1);
         }
+        PRINT_DBG("Submitted\n");
         bufIdx = (bufIdx + 1) % numBufs_g;
         for(int axIdx = 0; axIdx < numAxs_g; axIdx++){
             while(icp_sal_CyPollInstance(cyInst_g[axIdx], 0) != CPA_STATUS_SUCCESS){}
@@ -659,19 +637,18 @@ retry:
     }
 }
 
-static void startFullPayloadBlockBetweenEachAcceleratorSingleHost(int chainLength, int numBuffers, int rBS, int bufferSize,
+void startFullPayloadBlockBetweenEachAcceleratorSingleHost(int chainLength, int numBuffers, int rBS, int bufferSize,
 CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     struct timespec start, end;
     CpaStatus status;
     numAxs_g = chainLength;
-    numAxs_g = chainLength;
     numBufs_g = numBuffers;
+    bufSize_g = bufferSize;
     intensity_g = cbIntensity;
     cbIsDep_g = cbIsDep;
 
     printf("spawning %d axs\n", numAxs_g);
-    spawnAxs(chainLength_g);
-    startPollingAllAxs();
+    spawnAxs(numAxs_g);
 
     int numIterations = 10000;
     clock_gettime(CLOCK_MONOTONIC, &start);

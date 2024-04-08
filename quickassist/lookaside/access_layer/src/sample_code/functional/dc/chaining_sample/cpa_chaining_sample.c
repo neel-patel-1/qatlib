@@ -22,7 +22,7 @@ for each callback function - we will test this
 */
 void runSptComparison(){
 
-    startTest(
+    startFullPayloadBlockBetweenEachAcceleratorSingleHost(
     /*ChainLength=*/3,
     /*numBuffers*/32,
     /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
