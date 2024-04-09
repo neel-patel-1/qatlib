@@ -771,7 +771,7 @@ void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int buff
     CpaCySymDpOpData **pOpDatas = NULL;
     genOpDataArray(&pOpDatas, numBuffers);
 
-    int numIterations = 1000;
+    int numIterations = 100000;
     uint64_t start = sampleCoderdtsc();
     for(int i=0; i<numIterations; i++){
         hostSubmitOnly(chainLength, ppBuffers,
