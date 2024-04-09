@@ -171,6 +171,7 @@ void sptCallback(void *arg){
     struct sptArg *pArg = (struct sptArg *)arg;
     /* Executing */
     symDpCallback(pArg->pOpData, pArg->status, pArg->verifyResult);
+    PRINT_DBG("Forwarding to %d\n", ((struct cbArg *)(pArg->pOpData->pCallbackTag))->mIdx);
     osalThreadExit();
 }
 
@@ -179,7 +180,7 @@ You can also have a spt on a separate physical core, spinning up and assigning t
 calling thread of the first callback is the SPT thread
 pthread is the app thread.
 */
-static inline void callback(CpaCySymDpOpData *pOpData,
+static void callback(CpaCySymDpOpData *pOpData,
                           CpaStatus status,
                           CpaBoolean verifyResult){
     pthread_t tid;
@@ -193,8 +194,9 @@ static inline void callback(CpaCySymDpOpData *pOpData,
     if(!cbArg->dependent){
         if(cbArg->mIdx < (numAxs_g-1)){
             PRINT_DBG("Independent Callback\n");
-            struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
+            struct cbArg *newCbArg = NULL;
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+            pOpData->pCallbackTag = newCbArg;
             fwdCallbackArgtoNextAccel(cbArg, newCbArg);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         }
