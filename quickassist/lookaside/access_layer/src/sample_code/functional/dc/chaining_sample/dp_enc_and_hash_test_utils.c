@@ -5,6 +5,7 @@
 #include "cpa_sample_utils.h"
 #include "assert.h"
 #include "Osal.h"
+#include <stdatomic.h>
 
 /* The digest length must be less than or equal to SHA256 digest
    length (16) for this example */
@@ -18,11 +19,12 @@ volatile Cpa16U numBufs_g = 0;
 int numAxs_g;
 CpaBoolean cbIsDep_g = 0;
 Cpa16U intensity_g = 0;
+CpaBoolean useSPT_g = CPA_FALSE;
 
 volatile CpaBoolean globalDone = 0;
 volatile CpaBoolean doPoll[10];
-_Atomic int totalHostOps;
-_Atomic int expectedHostOps;
+atomic_int  totalHostOps;
+atomic_int  expectedHostOps;
 
 CpaInstanceHandle instanceHandles[10];
 CpaCySymDpSessionCtx dpSessionCtxs_g[10];
@@ -36,6 +38,7 @@ struct cbArg{
     CpaBoolean dependent;
     char *operandBuffer;
     Cpa32U operandBufferSize;
+    CpaBoolean useSpt;
 };
 
 struct pollerArg{
@@ -101,6 +104,39 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
     pOpData->sessionCtx = toSubSessionCtx;
     Cpa16U intensity = intensity_g;
     char *dBuffer = (char *)(cbArg->operandBuffer);
+    CpaBoolean dependent = cbArg->dependent;
+    CpaBoolean useSPT = cbArg->useSpt;
+
+    if(!dependent) {
+        /* Update a shared counter atomically */
+        PRINT_DBG("Independent host operation\n");
+        totalHostOps++;
+        if(!useSPT && cbArg->mIdx < (numAxs_g - 1)){ /* Independent host op forwards immediately, but if we are using SPT, this was done already */
+            struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
+            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+            newCbArg->mIdx = cbArg->mIdx + 1;
+            newCbArg->bufIdx = cbArg->bufIdx;
+            newCbArg->kickTail = cbArg->kickTail;
+            newCbArg->numBufs = cbArg->numBufs;
+            newCbArg->dependent = cbArg->dependent;
+            newCbArg->useSpt = useSPT;
+            pOpData->pCallbackTag = newCbArg;
+            assert(cbArg->mIdx < numAxs_g);
+            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+        }
+        if(cbArg->mIdx == (numAxs_g - 1)){
+            PRINT_DBG("Final host operation\n");
+            /*
+                block until all host ops are completed (number of expected host ops has been reached)
+                can the atomic-inc-host-op-notification approach be extended to synchronize operations for arbitrary dependency graphs?
+            */
+            if(cbArg->bufIdx == cbArg->numBufs - 1){
+                while( totalHostOps < expectedHostOps ){}
+                globalDone = CPA_TRUE;
+            }
+        }
+    }
+
     while(intensity > 0){
         for(int i=0; i<cbArg->operandBufferSize; i+=64){
             dBuffer[i] = dBuffer[(i+1)%cbArg->operandBufferSize] + dBuffer[(i+2)%cbArg->operandBufferSize];
@@ -117,6 +153,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
             newCbArg->bufIdx = cbArg->bufIdx;
             newCbArg->kickTail = cbArg->kickTail;
             newCbArg->numBufs = cbArg->numBufs;
+            newCbArg->useSpt = useSPT;
             newCbArg->dependent = cbArg->dependent;
             pOpData->pCallbackTag = newCbArg;
             assert(cbArg->mIdx < numAxs_g);
@@ -125,20 +162,6 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
             if(cbArg->bufIdx == cbArg->numBufs - 1){
                 PRINT_DBG("Final host operation\n");
                 globalDone = CPA_TRUE;
-            }
-        }
-    } else {
-        /* Update a shared counter atomically */
-        PRINT_DBG("Independent host operation\n");
-        totalHostOps++;
-        if(cbArg->mIdx == (numAxs_g - 1)){
-            PRINT_DBG("Final host operation\n");
-            /*
-                block until all host ops are completed (number of expected host ops has been reached)
-                can the atomic-inc-host-op-notification approach be extended to synchronize operations for arbitrary dependency graphs?
-            */
-            if(cbArg->bufIdx == cbArg->numBufs - 1){
-                while( totalHostOps != expectedHostOps ){}
             }
         }
     }
@@ -178,6 +201,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
             newCbArg->kickTail = cbArg->kickTail;
             newCbArg->numBufs = cbArg->numBufs;
             newCbArg->dependent = cbArg->dependent;
+            newCbArg->useSpt = cbArg->useSpt;
             pOpData->pCallbackTag = newCbArg;
             assert(cbArg->mIdx < numAxs_g);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
@@ -243,7 +267,8 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
                                 Cpa32U numOps,
                                 Cpa32U bufIdx,
                                 Cpa16U intensity,
-                                CpaBoolean cbIsDep)
+                                CpaBoolean cbIsDep,
+                                CpaBoolean useSPT)
 {
     CpaStatus status = CPA_STATUS_SUCCESS;
     int sub = 0;
@@ -258,6 +283,7 @@ static CpaStatus symDpSubmitBatch(CpaInstanceHandle cyInstHandle,
         cbArg->kickTail = CPA_FALSE;
         cbArg->intensity = intensity;
         cbArg->dependent = cbIsDep;
+        cbArg->useSpt = useSPT;
         cbArg->operandBuffer = pDstBufferList[sub];
         cbArg->operandBufferSize = bufferSize;
         populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
@@ -292,6 +318,7 @@ retry:
     cbArg->kickTail = CPA_TRUE;
     cbArg->intensity = intensity;
     cbArg->dependent = cbIsDep;
+    cbArg->useSpt = useSPT;
     cbArg->operandBuffer = pDstBufferList[sub];
     cbArg->operandBufferSize = bufferSize;
     populateOpData(pOpData[sub], cyInstHandle, sessionCtx,
@@ -578,7 +605,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
                 symDpSubmitBatch(instanceHandles[0], dpSessionCtxs_g[0],
                     pOpData, ppBuffers[0], ppBuffers[1],
-                    bufferSize, rBS, bufIdx, intensity_g, cbIsDep_g);
+                    bufferSize, rBS, bufIdx, intensity_g, cbIsDep_g, useSPT_g);
             }
             startSubmitIdx = endSubmitIdx;
             endSubmitIdx = startSubmitIdx + rBS;
@@ -603,7 +630,7 @@ int rBS, int bufferSize, CpaCySymDpOpData **pOpData){
             for(int bufIdx=startSubmitIdx; bufIdx<endSubmitIdx; bufIdx+=rBS){
                 symDpSubmitBatch(instanceHandles[0], dpSessionCtxs_g[0],
                     pOpData, ppBuffers[0], ppBuffers[1],
-                    bufferSize, rBS, bufIdx, intensity_g, cbIsDep_g);
+                    bufferSize, rBS, bufIdx, intensity_g, cbIsDep_g, useSPT_g);
             }
             startSubmitIdx = endSubmitIdx;
             endSubmitIdx = startSubmitIdx + rBS;
@@ -690,10 +717,11 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     numBufs_g = numBuffers;
     intensity_g = cbIntensity;
     cbIsDep_g = cbIsDep;
+    useSPT_g = useSpt;
     if(cbIsDep_g == CPA_FALSE){
         totalHostOps = 0;
-        expectedHostOps = (chainLength * numBuffers) - 1; /* one dependent host op per buffer executed for each accelerator in the chain.
-        since the last op doesn't check (- 1)*/
+        expectedHostOps = (chainLength * numBuffers) ; /* one dependent host op per buffer executed for each accelerator in the chain.
+        Spt Callback seems to be getting called twice*/
     }
     Cpa32U bufferMetaSize = 0;
     Cpa8U **pSrcBuffers[numAxs_g];

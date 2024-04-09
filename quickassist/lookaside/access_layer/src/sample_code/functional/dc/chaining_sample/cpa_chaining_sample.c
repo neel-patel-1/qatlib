@@ -12,15 +12,14 @@ void indVsDepSpt(){
     // int intensities[] = {0, 1, 2, 4, 8, 16, 32, 64, 128, 256};
     int bufSizeShift = 7;
     for( int cI=0; cI<(sizeof(intensities)/sizeof(int)); cI++){
-        startTest(
-        /*ChainLength=*/3,
-        /*numBuffers*/(1<<bufSizeShift),
-        /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
-        /*bufferSize=*/ (1<<20 - bufSizeShift), /*Best size for aes and hash*/
-        /*useSpt*/ CPA_FALSE,
-        /* intensity = */intensities[cI],
-        /*cbs are dependent*/ CPA_TRUE);
-<<<<<<< Updated upstream
+        // startTest(
+        // /*ChainLength=*/3,
+        // /*numBuffers*/(1<<bufSizeShift),
+        // /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
+        // /*bufferSize=*/ (1<<20 - bufSizeShift), /*Best size for aes and hash*/
+        // /*useSpt*/ CPA_FALSE,
+        // /* intensity = */intensities[cI],
+        // /*cbs are dependent*/ CPA_TRUE);
         startTest(
         /*ChainLength=*/3,
         /*numBuffers*/(1<<bufSizeShift),
@@ -29,16 +28,6 @@ void indVsDepSpt(){
         /*useSpt*/ CPA_FALSE,
         /* intensity = */intensities[cI],
         /*cbs are dependent*/ CPA_FALSE);
-=======
-        // startTest(
-        // /*ChainLength=*/3,
-        // /*numBuffers*/(1<<bufSizeShift),
-        // /*batchSize*/1, /*Minimum fwding granularity shown optimal*/
-        // /*bufferSize=*/ (1<<20 - bufSizeShift), /*Best size for aes and hash*/
-        // /*useSpt*/ CPA_FALSE,
-        // /* intensity = */intensities[cI],
-        // /*cbs are dependent*/ CPA_FALSE);
->>>>>>> Stashed changes
     }
 
 }
