@@ -705,7 +705,7 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     CpaCySymDpOpData **pOpDatas = NULL;
     genOpDataArray(&pOpDatas, numBuffers);
 
-    int numIterations = 1000;
+    int numIterations = 10;
     uint64_t start = sampleCoderdtsc();
     for(int i=0; i<numIterations; i++){
         roundRobinSubmitAndPoll(chainLength, ppBuffers,
