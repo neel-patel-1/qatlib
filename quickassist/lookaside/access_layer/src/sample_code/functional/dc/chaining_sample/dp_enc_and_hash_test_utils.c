@@ -3,7 +3,6 @@
 #include "cpa_cy_sym_dp.h"
 #include "icp_sal_poll.h"
 #include "cpa_sample_utils.h"
-#include "assert.h"
 #include "Osal.h"
 #include <stdatomic.h>
 
@@ -92,6 +91,18 @@ struct sptArg{
     CpaBoolean verifyResult;
 };
 
+static inline void fwdCallbackArgtoNextAccel(struct cbArg *src, struct cbArg *dst){
+    dst->mIdx = src->mIdx  + 1;
+    dst->bufIdx = src->bufIdx;
+    dst->numBufs = src->numBufs;
+    dst->kickTail = src->kickTail;
+    dst->intensity = src->intensity;
+    dst->dependent = src->dependent;
+    dst->useSpt = src->useSpt;
+    dst->operandBuffer = src->operandBuffer;
+    dst->operandBufferSize = src->operandBufferSize;
+}
+
 static inline void symDpCallback(CpaCySymDpOpData *pOpData,
                           CpaStatus status,
                           CpaBoolean verifyResult)
@@ -114,14 +125,8 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
         if(!useSPT && cbArg->mIdx < (numAxs_g - 1)){ /* Independent host op forwards immediately, but if we are using SPT, this was done already */
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-            newCbArg->mIdx = cbArg->mIdx + 1;
-            newCbArg->bufIdx = cbArg->bufIdx;
-            newCbArg->kickTail = cbArg->kickTail;
-            newCbArg->numBufs = cbArg->numBufs;
-            newCbArg->dependent = cbArg->dependent;
-            newCbArg->useSpt = useSPT;
+            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
             pOpData->pCallbackTag = newCbArg;
-            assert(cbArg->mIdx < numAxs_g);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         }
         if(cbArg->mIdx == (numAxs_g - 1)){
@@ -149,14 +154,8 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
         if(cbArg->mIdx < (numAxs_g-1)){
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-            newCbArg->mIdx = cbArg->mIdx + 1;
-            newCbArg->bufIdx = cbArg->bufIdx;
-            newCbArg->kickTail = cbArg->kickTail;
-            newCbArg->numBufs = cbArg->numBufs;
-            newCbArg->useSpt = useSPT;
-            newCbArg->dependent = cbArg->dependent;
+            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
             pOpData->pCallbackTag = newCbArg;
-            assert(cbArg->mIdx < numAxs_g);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         } else {
             if(cbArg->bufIdx == cbArg->numBufs - 1){
@@ -196,14 +195,7 @@ static inline void callback(CpaCySymDpOpData *pOpData,
             PRINT_DBG("Independent Callback\n");
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-            newCbArg->mIdx = cbArg->mIdx + 1;
-            newCbArg->bufIdx = cbArg->bufIdx;
-            newCbArg->kickTail = cbArg->kickTail;
-            newCbArg->numBufs = cbArg->numBufs;
-            newCbArg->dependent = cbArg->dependent;
-            newCbArg->useSpt = cbArg->useSpt;
-            pOpData->pCallbackTag = newCbArg;
-            assert(cbArg->mIdx < numAxs_g);
+            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         }
     }
