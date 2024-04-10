@@ -198,24 +198,34 @@ static void callback(CpaCySymDpOpData *pOpData,
                           CpaStatus status,
                           CpaBoolean verifyResult){
     pthread_t tid;
+    struct cbArg * cbArg = pOpData->pCallbackTag;
+
+    /* generate a copy of the cbArg */
+    struct cbArg * cbCopy = NULL;
+    PHYS_CONTIG_ALLOC(&cbCopy, sizeof(struct cbArg));
+    memcpy(cbCopy, cbArg, sizeof(struct cbArg));
+
+    CpaCySymDpOpData *pOpDataCpy = NULL;
+    PHYS_CONTIG_ALLOC(&pOpDataCpy, sizeof(CpaCySymOpData));
+    pOpDataCpy->pCallbackTag = cbCopy;
+
     struct sptArg *pArg = NULL;
     PHYS_CONTIG_ALLOC(&pArg, sizeof(struct sptArg));
-    pArg->pOpData = pOpData;
+    pArg->pOpData = pOpDataCpy;
     pArg->status = status;
     pArg->verifyResult = verifyResult;
 
-    // struct cbArg * cbArg = pOpData->pCallbackTag;
-    // if(!cbArg->dependent){
-    //     if(cbArg->mIdx < (numAxs_g-1)){
-    //         PRINT_DBG("Independent Callback\n");
-    //         struct cbArg *newCbArg = NULL;
-    //         PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-    //         pOpData->pCallbackTag = newCbArg;
-    //         fwdCallbackArgtoNextAccel(cbArg, newCbArg);
-    //         PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
-    //         cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
-    //     }
-    // }
+    if(!cbArg->dependent){
+        if(cbArg->mIdx < (numAxs_g-1)){
+            PRINT_DBG("Independent Callback\n");
+            struct cbArg *newCbArg = NULL;
+            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+            pOpData->pCallbackTag = newCbArg;
+            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
+            PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
+            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+        }
+    }
 
 
     int appCore = 19;
