@@ -110,7 +110,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
 
     struct cbArg *cbArg = (struct cbArg *)pOpData->pCallbackTag;
     CpaInstanceHandle toSubInst = instanceHandles[cbArg->mIdx+1];
-    CpaCySymSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx];
+    CpaCySymSessionCtx toSubSessionCtx = dpSessionCtxs_g[cbArg->mIdx+1];
     pOpData->instanceHandle = toSubInst;
     pOpData->sessionCtx = toSubSessionCtx;
     Cpa16U intensity = intensity_g;
@@ -120,13 +120,14 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
 
     if(!dependent) {
         /* Update a shared counter atomically */
-        PRINT_DBG("Independent host operation\n");
+        PRINT_DBG("Independent host operation Fwding from %d to %d\n", cbArg->mIdx, cbArg->mIdx+1);
         totalHostOps++;
         if(!useSPT && cbArg->mIdx < (numAxs_g - 1)){ /* Independent host op forwards immediately, but if we are using SPT, this was done already */
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
             fwdCallbackArgtoNextAccel(cbArg, newCbArg);
             pOpData->pCallbackTag = newCbArg;
+            PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
         }
         if(cbArg->mIdx == (numAxs_g - 1)){
@@ -150,7 +151,7 @@ static inline void symDpCallback(CpaCySymDpOpData *pOpData,
     }
 
     if(cbArg->dependent){ /* spt callback didn't submit, so thread needs to */
-        PRINT_DBG("Dependent host operation\n");
+        PRINT_DBG("Dependent host operation Fwding from %d to %d\n", cbArg->mIdx, cbArg->mIdx+1);
         if(cbArg->mIdx < (numAxs_g-1)){
             struct cbArg *newCbArg = (struct cbArg *)(pOpData->pCallbackTag);
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
@@ -172,6 +173,19 @@ void sptCallback(void *arg){
     /* Executing */
     symDpCallback(pArg->pOpData, pArg->status, pArg->verifyResult);
     PRINT_DBG("Forwarding to %d\n", ((struct cbArg *)(pArg->pOpData->pCallbackTag))->mIdx);
+    struct cbArg * cbArg = pArg->pOpData->pCallbackTag;
+    CpaCySymDpOpData *pOpData = pArg->pOpData;
+    if(!cbArg->dependent){
+        if(cbArg->mIdx < (numAxs_g-1)){
+            PRINT_DBG("Independent Callback\n");
+            struct cbArg *newCbArg = NULL;
+            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+            pOpData->pCallbackTag = newCbArg;
+            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
+            PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
+            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+        }
+    }
     osalThreadExit();
 }
 
@@ -190,17 +204,18 @@ static void callback(CpaCySymDpOpData *pOpData,
     pArg->status = status;
     pArg->verifyResult = verifyResult;
 
-    struct cbArg * cbArg = pOpData->pCallbackTag;
-    if(!cbArg->dependent){
-        if(cbArg->mIdx < (numAxs_g-1)){
-            PRINT_DBG("Independent Callback\n");
-            struct cbArg *newCbArg = NULL;
-            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-            pOpData->pCallbackTag = newCbArg;
-            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
-            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
-        }
-    }
+    // struct cbArg * cbArg = pOpData->pCallbackTag;
+    // if(!cbArg->dependent){
+    //     if(cbArg->mIdx < (numAxs_g-1)){
+    //         PRINT_DBG("Independent Callback\n");
+    //         struct cbArg *newCbArg = NULL;
+    //         PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
+    //         pOpData->pCallbackTag = newCbArg;
+    //         fwdCallbackArgtoNextAccel(cbArg, newCbArg);
+    //         PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
+    //         cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
+    //     }
+    // }
 
 
     int appCore = 19;
@@ -727,7 +742,7 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     CpaCySymDpOpData **pOpDatas = NULL;
     genOpDataArray(&pOpDatas, numBuffers);
 
-    int numIterations = 10;
+    int numIterations = 1000;
     uint64_t start = sampleCoderdtsc();
     for(int i=0; i<numIterations; i++){
         roundRobinSubmitAndPoll(chainLength, ppBuffers,
