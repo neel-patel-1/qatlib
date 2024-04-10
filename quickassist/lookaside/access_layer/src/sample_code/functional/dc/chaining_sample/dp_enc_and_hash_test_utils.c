@@ -24,6 +24,7 @@ volatile CpaBoolean globalDone = 0;
 volatile CpaBoolean doPoll[10];
 atomic_int  totalHostOps;
 atomic_int  expectedHostOps;
+Cpa8U **pSrcBufferList;
 
 CpaInstanceHandle instanceHandles[10];
 CpaCySymDpSessionCtx dpSessionCtxs_g[10];
@@ -175,17 +176,7 @@ void sptCallback(void *arg){
     PRINT_DBG("Forwarding to %d\n", ((struct cbArg *)(pArg->pOpData->pCallbackTag))->mIdx);
     struct cbArg * cbArg = pArg->pOpData->pCallbackTag;
     CpaCySymDpOpData *pOpData = pArg->pOpData;
-    if(!cbArg->dependent){
-        if(cbArg->mIdx < (numAxs_g-1)){
-            PRINT_DBG("Independent Callback\n");
-            struct cbArg *newCbArg = NULL;
-            PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
-            pOpData->pCallbackTag = newCbArg;
-            fwdCallbackArgtoNextAccel(cbArg, newCbArg);
-            PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
-            cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
-        }
-    }
+
     osalThreadExit();
 }
 
@@ -208,6 +199,7 @@ static void callback(CpaCySymDpOpData *pOpData,
     CpaCySymDpOpData *pOpDataCpy = NULL;
     PHYS_CONTIG_ALLOC(&pOpDataCpy, sizeof(CpaCySymOpData));
     pOpDataCpy->pCallbackTag = cbCopy;
+    memcpy(pOpDataCpy, pOpData, sizeof(pOpData));
 
     struct sptArg *pArg = NULL;
     PHYS_CONTIG_ALLOC(&pArg, sizeof(struct sptArg));
@@ -221,6 +213,14 @@ static void callback(CpaCySymDpOpData *pOpData,
             struct cbArg *newCbArg = NULL;
             PHYS_CONTIG_ALLOC(&newCbArg, sizeof(struct cbArg));
             pOpData->pCallbackTag = newCbArg;
+            Cpa8U *pSrcBuffer = NULL;
+            PHYS_CONTIG_ALLOC(&pSrcBuffer, cbArg->operandBufferSize);
+            CpaInstanceHandle cyInstHandle = instanceHandles[cbArg->mIdx+1];
+            CpaPhysicalAddr ppBuffers =
+                virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer,
+                                cyInstHandle,
+                                CPA_ACC_SVC_TYPE_CRYPTO);
+            pOpData->srcBuffer = ppBuffers;
             fwdCallbackArgtoNextAccel(cbArg, newCbArg);
             PRINT_DBG("PopData: sessionCtx: %p instanceHandle: %p\n", pOpData->sessionCtx, pOpData->instanceHandle);
             cpaCySymDpEnqueueOp(pOpData, cbArg->kickTail);
@@ -748,6 +748,7 @@ CpaBoolean useSpt, Cpa16U cbIntensity, CpaBoolean cbIsDep){
     Cpa8U ***ppBuffers = NULL;
     arrayOfBufArraysFactory(&ppBuffers, numAxs_g, numBuffers, bufferSize);
     validateArrayOfBufferArrays(ppBuffers, numAxs_g, numBuffers, bufferSize);
+    pSrcBufferList = ppBuffers[0];
 
     CpaCySymDpOpData **pOpDatas = NULL;
     genOpDataArray(&pOpDatas, numBuffers);
@@ -786,6 +787,7 @@ void startDedicatedPollerTest(int chainLength, int numBuffers, int rBS, int buff
     Cpa8U ***ppBuffers = NULL;
     arrayOfBufArraysFactory(&ppBuffers, numAxs_g, numBuffers, bufferSize);
     validateArrayOfBufferArrays(ppBuffers, numAxs_g, numBuffers, bufferSize);
+    pSrcBufferList = ppBuffers[0];
 
     CpaCySymDpOpData **pOpDatas = NULL;
     genOpDataArray(&pOpDatas, numBuffers);
