@@ -1398,8 +1398,9 @@ int main(int argc, char *argv[])
             dynamicHuffmanEnabled(NULL, &dynamicEnabled);
 
 #if !defined(_KERNEL)
-            PRINT("CPA_DC_CRC32\n");
+            PRINT("Latency deflate-CPA_DC_CRC32\n");
             setChecksum(CPA_DC_CRC32);
+            latency_enable = 1;
             status = setupDcTest(CPA_DC_DEFLATE,
                         CPA_DC_DIR_COMPRESS,
                         SAMPLE_CODE_CPA_DC_L1,
@@ -1421,7 +1422,106 @@ int main(int argc, char *argv[])
                 retStatus = CPA_STATUS_FAIL;
             }
 
+            PRINT("Latency LZ4-xxhash32\n");
             setChecksum(CPA_DC_XXHASH32);
+            latency_enable = 1;
+            setupDcLZ4Test(CPA_DC_LZ4,
+                        CPA_DC_DIR_COMPRESS,
+                        SAMPLE_CODE_CPA_DC_L1,
+                        CPA_DC_STATELESS,
+                        BUFFER_SIZE_8192,
+                        sampleCorpus,
+                        CPA_DC_MIN_4_BYTE_MATCH,
+                        CPA_DC_LZ4_MAX_BLOCK_SIZE_64K,
+                        ASYNC,
+                        dcLoops);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error calling setupDcTest\n");
+                return CPA_STATUS_FAIL;
+            }
+            status = createStartandWaitForCompletion(COMPRESSION);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
+
+            PRINT("Latency deflate-CPA_DC_NONE\n");
+            setChecksum(CPA_DC_NONE);
+            latency_enable = 1;
+            status = setupDcTest(CPA_DC_DEFLATE,
+                        CPA_DC_DIR_COMPRESS,
+                        SAMPLE_CODE_CPA_DC_L1,
+                        CPA_DC_HT_FULL_DYNAMIC,
+                        CPA_DC_STATELESS,
+                        DEFAULT_COMPRESSION_WINDOW_SIZE,
+                        BUFFER_SIZE_8192,
+                        sampleCorpus,
+                        ASYNC,
+                        dcLoops);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error calling setupDcTest\n");
+                return CPA_STATUS_FAIL;
+            }
+            status = createStartandWaitForCompletion(COMPRESSION);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
+
+            PRINT("Latency LZ4-CPA_DC_NONE\n");
+            setChecksum(CPA_DC_NONE);
+            latency_enable = 1;
+            setupDcLZ4Test(CPA_DC_LZ4,
+                        CPA_DC_DIR_COMPRESS,
+                        SAMPLE_CODE_CPA_DC_L1,
+                        CPA_DC_STATELESS,
+                        BUFFER_SIZE_8192,
+                        sampleCorpus,
+                        CPA_DC_MIN_4_BYTE_MATCH,
+                        CPA_DC_LZ4_MAX_BLOCK_SIZE_64K,
+                        ASYNC,
+                        dcLoops);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error calling setupDcTest\n");
+                return CPA_STATUS_FAIL;
+            }
+            status = createStartandWaitForCompletion(COMPRESSION);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
+
+
+            PRINT("Throughput lz4-CPA_DC_XXHASH32\n");
+            setChecksum(CPA_DC_XXHASH32);
+            latency_enable = 0;
+            status = setupDcTest(CPA_DC_DEFLATE,
+                        CPA_DC_DIR_COMPRESS,
+                        SAMPLE_CODE_CPA_DC_L1,
+                        CPA_DC_HT_FULL_DYNAMIC,
+                        CPA_DC_STATELESS,
+                        DEFAULT_COMPRESSION_WINDOW_SIZE,
+                        BUFFER_SIZE_8192,
+                        sampleCorpus,
+                        ASYNC,
+                        dcLoops);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("Error calling setupDcTest\n");
+                return CPA_STATUS_FAIL;
+            }
+            status = createStartandWaitForCompletion(COMPRESSION);
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                retStatus = CPA_STATUS_FAIL;
+            }
+
+            PRINT("Throughput lz4-CPA_DC_NONE\n");
+            setChecksum(CPA_DC_XXHASH32);
+            latency_enable = 0;
             setupDcLZ4Test(CPA_DC_LZ4,
                             CPA_DC_DIR_COMPRESS,
                             SAMPLE_CODE_CPA_DC_L1,
@@ -1443,7 +1543,8 @@ int main(int argc, char *argv[])
                 retStatus = CPA_STATUS_FAIL;
             }
 
-            PRINT("CPA_DC_NONE\n");
+            PRINT("Throughput deflate-CPA_DC_NONE\n");
+            latency_enable = 0;
             setChecksum(CPA_DC_NONE);
             status = setupDcTest(CPA_DC_DEFLATE,
                         CPA_DC_DIR_COMPRESS,
@@ -1466,6 +1567,8 @@ int main(int argc, char *argv[])
                 retStatus = CPA_STATUS_FAIL;
             }
 
+            PRINT("Throughput LZ4-CPA_DC_NONE\n");
+            latency_enable = 0;
             setupDcLZ4Test(CPA_DC_LZ4,
                             CPA_DC_DIR_COMPRESS,
                             SAMPLE_CODE_CPA_DC_L1,
