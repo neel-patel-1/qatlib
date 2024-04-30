@@ -107,6 +107,12 @@ cpa_sample_code_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_compression_main.c \
 	quickassist/lookaside/access_layer/src/sample_code/performance/compression/qat_chaining_main.c \
 	quickassist/lookaside/access_layer/src/sample_code/performance/common/qat_perf_latency.c \
+	$(srcdir)/idxd/test/libaccfg.c \
+	$(srcdir)/idxd/test/core.c \
+	$(srcdir)/idxd/test/dsa.c \
+	$(srcdir)/idxd/util/log.c \
+	$(srcdir)/idxd/test/accel_test.c \
+	$(srcdir)/idxd/test/dsa_prep.c \
 	quickassist/lookaside/access_layer/src/sample_code/busy_loop/busy_loop.c
 cpa_sample_code_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance \
 	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/performance/crypto/ \
@@ -114,7 +120,7 @@ cpa_sample_code_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS) \
 	-DSAMPLE_CODE_CORPUS_PATH="\"$(datadir)/qat/\""
-cpa_sample_code_LDADD = $(COMMON_SAMPLE_LDFLAGS)
+cpa_sample_code_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config
 
 noinst_LTLIBRARIES += libcpa_sample_code_s.la
 libcpa_sample_code_s_la_SOURCES = \
@@ -192,7 +198,7 @@ chaining_sample_SOURCES = \
 	$(srcdir)/idxd/test/dsa.c \
 	$(srcdir)/idxd/util/log.c \
 	$(srcdir)/idxd/test/accel_test.c \
-$(srcdir)/idxd/test/dsa_prep.c \
+	$(srcdir)/idxd/test/dsa_prep.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample/cpa_chaining_sample.c
 chaining_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/dc/chaining_sample \
