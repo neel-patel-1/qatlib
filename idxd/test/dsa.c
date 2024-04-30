@@ -1824,7 +1824,7 @@ int task_result_verify_crcgen(struct task *tsk, int mismatch_expected)
 		seed = tsk->crc_seed;
 	expected_crc = dsa_calculate_crc32((void *)tsk->desc->src_addr,
 					   data_size, seed, tsk->dflags);
-	printf("expected crc = %x\n", expected_crc);
+	// printf("expected crc = %x\n", expected_crc);
 
 	if (!mismatch_expected) {
 		if (tsk->comp->crc_val != expected_crc) {
