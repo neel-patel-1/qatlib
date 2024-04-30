@@ -195,39 +195,44 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
             pPerfData->submissions);
         pPerfData->threadReturnStatus = CPA_STATUS_FAIL;
     }
-    CpaBufferList *dstBufferList = test_struct->dstBuffer;
-    CpaFlatBuffer * dstBuffer = dstBufferList->pBuffers;
-    Cpa8U *dstBufferData = dstBuffer->pData;
 
-    struct task_node *tsk_node = test_struct->next_task;
-    struct acctest_context * dsa = test_struct->dsa;
-    // printf("complen: %d\n", test_struct->dstBuffer->pBuffers[0].dataLenInBytes);
-    if(tsk_node == NULL){
-        tsk_node = dsa->multi_task_node;
-    }
-    struct task *tsk  = tsk_node->tsk;
-    tsk->src1 = dstBufferData;
-    tsk->crc_seed = 0x12345678;
-    tsk->xfer_size = test_struct->dcDestBufferSize;
-    dsa_prep_crcgen(tsk);
-    struct hw_desc *hw = tsk->desc;
 
-    struct timespec start, end;
 
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    acctest_desc_submit(dsa, hw);
-
-    if(test_struct->next_task == NULL){
-        test_struct->next_task = dsa->multi_task_node;
-    } else {
-        test_struct->next_task = test_struct->next_task->next;
-    }
     if (latency_enable)
     {
-        /*mwait on desc*/
-        acctest_wait_on_desc_timeout(tsk->comp, dsa, 3000);
-        clock_gettime(CLOCK_MONOTONIC, &end);
-        printf("latency: %ld\n", (end.tv_sec - start.tv_sec) * 1000000000 + end.tv_nsec - start.tv_nsec);
+        if(dsa_enable){
+            CpaBufferList *dstBufferList = test_struct->dstBuffer;
+            CpaFlatBuffer * dstBuffer = dstBufferList->pBuffers;
+            Cpa8U *dstBufferData = dstBuffer->pData;
+
+            struct task_node *tsk_node = test_struct->next_task;
+            struct acctest_context * dsa = test_struct->dsa;
+            // printf("complen: %d\n", test_struct->dstBuffer->pBuffers[0].dataLenInBytes);
+            if(tsk_node == NULL){
+                tsk_node = dsa->multi_task_node;
+            }
+
+            struct task *tsk  = tsk_node->tsk;
+            tsk->src1 = dstBufferData;
+            tsk->crc_seed = 0x12345678;
+            uint64_t payloadSize = test_struct->dstBuffer->pBuffers[0].dataLenInBytes;
+            tsk->xfer_size = payloadSize;
+            dsa_prep_crcgen(tsk);
+            struct hw_desc *hw = tsk->desc;
+            // struct timespec start, end;
+            // clock_gettime(CLOCK_MONOTONIC, &start);
+            acctest_desc_submit(dsa, hw);
+
+            /*mwait on desc*/
+            acctest_wait_on_desc_timeout(tsk->comp, dsa, 3000);
+            if(test_struct->next_task == NULL){
+                test_struct->next_task = dsa->multi_task_node;
+            } else {
+                test_struct->next_task = test_struct->next_task->next;
+            }
+            // clock_gettime(CLOCK_MONOTONIC, &end);
+            // printf("latency: %ld\n", (end.tv_sec - start.tv_sec) * 1000000000 + end.tv_nsec - start.tv_nsec);
+        }
         /* Did we setup the array pointer? */
         QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
             pPerfData->response_times, pPerfData->threadReturnStatus);
