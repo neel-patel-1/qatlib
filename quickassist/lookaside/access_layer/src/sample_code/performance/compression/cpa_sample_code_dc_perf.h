@@ -84,6 +84,8 @@
 #endif
 #include "cpa_cy_sym.h"
 #include "cpa_sample_code_framework.h"
+#include "dsa.h"
+#include "accel_test.h"
 #include "../common/qat_perf_utils.h"
 /*
  *******************************************************************************
@@ -277,6 +279,7 @@ typedef struct compression_test_params_s
     Cpa32U sleepTime;
     CpaBoolean specific_sleeptime_flag;
     CpaBoolean adjustSleepTimeEnabled;
+    Cpa32U dsaSetHint;
     /* Request type (Batch or Enqueue) */
     dp_request_type_t dpTestType;
     /* Number of requests to submit before processing */
@@ -341,6 +344,8 @@ typedef struct compression_test_params_s
      * Compress Bound API, for Compress operation */
     Cpa32U dcDestBufferSize;
     CpaBufferList *dstBuffer; /* handle for later crc32 */
+    struct task_node *next_task;
+    struct acctest_context *dsa;
 } compression_test_params_t;
 
 /**

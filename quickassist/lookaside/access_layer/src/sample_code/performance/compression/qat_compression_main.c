@@ -76,6 +76,7 @@ extern void dcPerformCallback(void *pCallbackTag, CpaStatus status);
 
 extern CpaStatus createStartandWaitForCompletion(Cpa32U instType);
 
+extern struct acctest_context *dsa;
 
 #define COUNT_RESPONSES dcPerformCallback(setup, status)
 
@@ -187,6 +188,10 @@ CpaStatus setupDcTest(CpaDcCompType algorithm,
                                corpusType,
                                syncFlag,
                                numLoops);
+
+    // dcSetup = (compression_test_params_t *)&thread_setup_g[testTypeCount_g][0];
+    // dcSetup->dsa = dsa;
+    // dcSetup->next_task = dsa->multi_task_node;
 
     return status;
 }
@@ -340,6 +345,9 @@ static CpaStatus setupDcCommonTest(compression_test_params_t *dcSetup,
     dcSetup->setupData.autoSelectBestHuffmanTree = gAutoSelectBestMode;
     dcSetup->setupData.checksum = gChecksum;
     dcSetup->passCriteria = getPassCriteria();
+    dcSetup->dsa = dsa;
+    dcSetup->dsaSetHint = 100;
+    dcSetup->next_task = dsa->multi_task_node;
     return status;
 }
 
@@ -374,6 +382,9 @@ void dcPerformance(single_thread_test_data_t *testSetup)
     dcSetup.setNsRequest = tmpSetup->setNsRequest;
     dcSetup.useE2E = tmpSetup->useE2E;
     dcSetup.useE2EVerify = tmpSetup->useE2EVerify;
+    dcSetup.dsa = tmpSetup->dsa;
+    dcSetup.dsaSetHint = tmpSetup->dsaSetHint;
+    dcSetup.next_task = tmpSetup->next_task;
 
     /*give our thread a unique memory location to store performance stats*/
     dcSetup.performanceStats = testSetup->performanceStats;

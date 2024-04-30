@@ -1434,12 +1434,25 @@ int main(int argc, char *argv[])
             }
 
             // rc = acctest_alloc_multiple_tasks(dsa, num_desc);
-            rc = dsa_crcgen_multi_task_nodes(dsa);
-            rc = task_result_verify_task_nodes(dsa, 0);
+            while (dsa_tsk_node) {
+                dsa_tsk_node->tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+                if ((dsa_tsk_node->tsk->test_flags & TEST_FLAGS_BOF) && dsa->bof)
+                    dsa_tsk_node->tsk->dflags |= IDXD_OP_FLAG_BOF;
+
+                dsa_prep_crcgen(dsa_tsk_node->tsk);
+                dsa_tsk_node = dsa_tsk_node->next;
+            }
+            // rc = dsa_crcgen_multi_task_nodes(dsa);
+            // rc = task_result_verify_task_nodes(dsa, 0);
             if(rc != ACCTEST_STATUS_OK){
                 printf("Failed to verify task results\n");
                 exit(-1);
             }
+
+            // compression_test_params_t *dcSetup = NULL;
+            // dcSetup = (compression_test_params_t *)&thread_setup_g[testTypeCount_g][0];
+            // dcSetup->dsa = dsa;
+            // dcSetup->next_task = dsa_tsk_node;
 
             PRINT("Throughput CPA_DC_CRC32-deflate-DSA_CPA_DC_CRC32\n");
             setChecksum(CPA_DC_CRC32);

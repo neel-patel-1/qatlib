@@ -198,6 +198,26 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
     CpaBufferList *dstBufferList = test_struct->dstBuffer;
     CpaFlatBuffer * dstBuffer = dstBufferList->pBuffers;
     Cpa8U *dstBufferData = dstBuffer->pData;
+
+    struct task_node *tsk_node = test_struct->next_task;
+    struct acctest_context * dsa = test_struct->dsa;
+    // printf("hint: %d\n", test_struct->dsaSetHint);
+    if(tsk_node == NULL){
+        tsk_node = dsa->multi_task_node;
+    }
+    struct task *tsk  = tsk_node->tsk;
+    tsk->src1 = dstBufferData;
+    tsk->crc_seed = 0x12345678;
+    tsk->xfer_size = test_struct->dcDestBufferSize;
+    struct hw_desc *hw = tsk->desc;
+
+    acctest_desc_submit(dsa, hw);
+
+    if(test_struct->next_task == NULL){
+        test_struct->next_task = dsa->multi_task_node;
+    } else {
+        test_struct->next_task = test_struct->next_task->next;
+    }
     if (latency_enable)
     {
         /* Did we setup the array pointer? */
@@ -258,7 +278,6 @@ EXPORT_SYMBOL(expansionFactor_g);
 CpaBoolean zeroByteLastRequest_g = CPA_FALSE;
 #endif
 extern int signOfLife;
-extern struct acctest_context * dsa;
 
 /* Global array of polling threads */
 sample_code_thread_t *dcPollingThread_g = NULL;
