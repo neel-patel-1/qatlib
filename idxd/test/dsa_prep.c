@@ -463,7 +463,7 @@ void dsa_prep_batch_ap_delta(struct batch_task *btsk)
 
 void dsa_prep_crcgen(struct task *tsk)
 {
-	info("preparing descriptor for crcgen\n");
+	// info("preparing descriptor for crcgen\n");
 
 	acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
 				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);

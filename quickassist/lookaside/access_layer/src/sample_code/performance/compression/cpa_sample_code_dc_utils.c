@@ -201,7 +201,7 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
 
     struct task_node *tsk_node = test_struct->next_task;
     struct acctest_context * dsa = test_struct->dsa;
-    // printf("hint: %d\n", test_struct->dsaSetHint);
+    // printf("complen: %d\n", test_struct->dstBuffer->pBuffers[0].dataLenInBytes);
     if(tsk_node == NULL){
         tsk_node = dsa->multi_task_node;
     }
@@ -209,8 +209,12 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
     tsk->src1 = dstBufferData;
     tsk->crc_seed = 0x12345678;
     tsk->xfer_size = test_struct->dcDestBufferSize;
+    dsa_prep_crcgen(tsk);
     struct hw_desc *hw = tsk->desc;
 
+    struct timespec start, end;
+
+    clock_gettime(CLOCK_MONOTONIC, &start);
     acctest_desc_submit(dsa, hw);
 
     if(test_struct->next_task == NULL){
@@ -220,6 +224,10 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
     }
     if (latency_enable)
     {
+        /*mwait on desc*/
+        acctest_wait_on_desc_timeout(tsk->comp, dsa, 3000);
+        clock_gettime(CLOCK_MONOTONIC, &end);
+        printf("latency: %ld\n", (end.tv_sec - start.tv_sec) * 1000000000 + end.tv_nsec - start.tv_nsec);
         /* Did we setup the array pointer? */
         QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
             pPerfData->response_times, pPerfData->threadReturnStatus);
@@ -242,6 +250,8 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
             pPerfData->nextCount += pPerfData->countIncrement;
             pPerfData->latencyCount++;
         }
+    } else {
+
     }
 
     if ((CPA_TRUE == gUseStatefulLite) ||
