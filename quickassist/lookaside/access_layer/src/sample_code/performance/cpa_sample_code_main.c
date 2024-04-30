@@ -318,7 +318,7 @@ CpaStatus checkSingleInstance()
 
 #include "dsa.h"
 #include "accel_test.h"
-struct acctest_context *dsa;
+struct acctest_context *dsa = NULL;
 
 int main(int argc, char *argv[])
 {
@@ -1403,21 +1403,44 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             int tflags = TEST_FLAGS_BOF;
-            int dsa_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-            int dsa_dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
+            int dsa_wq_id = 0;
+            int dsa_dev_id = 0;
             int wq_type = 0;
             int num_desc = dcLoops;
             int rc;
+            struct task_node *dsa_tsk_node;
+            struct acctest_context *dsa;
+
             dsa = acctest_init(tflags);
-            dsa->dev_type = ACCFG_DEVICE_DSA;
-            if (!dsa)
-                return -ENOMEM;
-
-            rc = acctest_alloc(dsa, wq_type, dsa_dev_id, dsa_wq_id);
-            if (rc < 0)
-                return -ENOMEM;
-
+            rc = acctest_alloc(dsa, 0, dsa_dev_id, dsa_wq_id);
+            if(ACCTEST_STATUS_OK != rc){
+                printf("Failed to allocate DSA\n");
+                exit(-1);
+            }
+            dsa->is_batch = 0;
             rc = acctest_alloc_multiple_tasks(dsa, num_desc);
+            if (rc != ACCTEST_STATUS_OK)
+                    return rc;
+            printf("Allocated tasks\n");
+
+            dsa_tsk_node = dsa->multi_task_node;
+            while (dsa_tsk_node) {
+                dsa_tsk_node->tsk->xfer_size = BUFFER_SIZE_8192;
+
+                rc = init_task(dsa_tsk_node->tsk, tflags, DSA_OPCODE_MEMMOVE, BUFFER_SIZE_8192);
+                if (rc != ACCTEST_STATUS_OK)
+                    return rc;
+                dsa_tsk_node = dsa_tsk_node->next;
+            }
+
+            // rc = acctest_alloc_multiple_tasks(dsa, num_desc);
+            rc = dsa_memcpy_multi_task_nodes(dsa);
+            rc = task_result_verify_task_nodes(dsa, 0);
+            if(rc != ACCTEST_STATUS_OK){
+                printf("Failed to verify task results\n");
+                exit(-1);
+            }
+
 
             PRINT("Throughput CPA_DC_CRC32-deflate-DSA_CPA_DC_CRC32\n");
             setChecksum(CPA_DC_CRC32);
