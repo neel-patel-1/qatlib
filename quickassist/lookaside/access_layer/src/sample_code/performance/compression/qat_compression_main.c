@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- * 
+ *
  *   GPL LICENSE SUMMARY
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- * 
+ *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- * 
+ *
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- * 
+ *
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- * 
+ *
  *   Contact Information:
  *   Intel Corporation
- * 
+ *
  *   BSD LICENSE
- * 
+ *
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- * 
+ *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- * 
+ *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- * 
+ *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
- * 
+ *
+ *
  *
  ***************************************************************************/
 
@@ -1112,6 +1112,11 @@ CpaStatus qatDcSubmitRequest(compression_test_params_t *setup,
 }
 EXPORT_SYMBOL(qatDcSubmitRequest);
 
+void computeSglChecksum(CpaBufferList *inputBuff,
+                        const Cpa32U computationSize,
+                        const CpaDcChecksum checksumType,
+                        Cpa32U *swChecksum);
+
 /*performance measurement function to compress a file for 'n' number of loops
  * */
 CpaStatus qatCompressData(compression_test_params_t *setup,
@@ -1198,6 +1203,11 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
     }
     if (status == CPA_STATUS_SUCCESS)
     {
+        CpaCrcData *crc_external = NULL;
+
+        /* Currently alloc'd from numa node 0 with 64-byte alignment, though may not be extensible */
+        crc_external = qaeMemAllocNUMA(sizeof(CpaCrcData), 0, 64);
+
         /* this Barrier will waits until all the threads get to this point
          * this is to ensure that all threads that we measure performance on
          * start submitting at the same time*/
@@ -1205,161 +1215,23 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         /* generate the start time stamps */
         setup->performanceStats->startCyclesTimestamp = sampleCodeTimestamp();
         /*loop over compressing a file numLoop times*/
+
+
         for (numLoops = 0; numLoops < setup->numLoops; numLoops++)
         {
-            /*loop over lists that store the file*/
-            for (listNum = 0; listNum < setup->numLists; listNum++)
-            {
-                /*exit loop mechanism to leave early if numLoops is large
-                 * note that this might not work if the we get stuck in the
-                 * do-while loop below*/
-                checkStopTestExitFlag(setup->performanceStats,
-                                      &setup->numLoops,
-                                      &setup->numLists,
-                                      numLoops);
-                qatCompressionSetFlushFlag(setup, listNum);
-                /* Always set the checksum equal to the previous
-                 * checksum. For stateless the previous checksum
-                 * will still be the default value which is what
-                 * we want to set it to anyway in that case.
-                 */
-                arrayOfResults[listNum].checksum = previousChecksum;
-                /*submit request*/
-                status = qatDcSubmitRequest(setup,
-                                            instanceInfo2,
-                                            compressDirection,
-                                            pSessionHandle,
-                                            arrayOfSrcBufferLists,
-                                            arrayOfDestBufferLists,
-                                            arrayOfCmpBufferLists,
-                                            listNum,
-                                            arrayOfResults);
-                /* Check submit status and update thread status*/
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("Data Compression Failed %d\n\n", status);
-                    setup->performanceStats->threadReturnStatus =
-                        CPA_STATUS_FAIL;
-                    /*break out  of inner loop*/
-                    break;
-                }
+            /* */
+            computeSglChecksum(arrayOfSrcBufferLists, arrayOfSrcBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
+            qatSwCompress(setup,
+                          arrayOfSrcBufferLists,
+                          arrayOfDestBufferLists,
+                          arrayOfResults);
+            if(setup->useE2E == CPA_TRUE){
+                computeSglChecksum(arrayOfSrcBufferLists, arrayOfDestBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.oCrc));
 
-                setup->performanceStats->submissions++;
-                qatLatencyPollForResponses(setup->performanceStats,
-                                           setup->performanceStats->submissions,
-                                           setup->dcInstanceHandle,
-                                           CPA_FALSE,
-                                           CPA_FALSE);
-                if (poll_inline_g && instanceInfo2->isPolled)
-                {
-                    /*poll every 'n' requests as set by
-                     * dcPollingInterval_g*/
-                    if (setup->performanceStats->submissions ==
-                        setup->performanceStats->nextPoll)
-                    {
-                        qatDcPollAndSetNextPollCounter(setup);
-                    }
-                }
-
-                /* check if synchronous flag is set,
-                 *  if set, invoke the callback API
-                 *  the driver does not use the callback in sync mode
-                 *  the sample code uses the callback function to count the
-                 *  responses and post the semaphore
-                 */
-                if (SYNC == setup->syncFlag)
-                {
-                    COUNT_RESPONSES;
-                } /* End of SYNC Flag Check */
-                else
-                {
-#if DC_API_VERSION_AT_LEAST(3, 2)
-                    if (reliability_g)
-#endif
-                    {
-                        if ((CPA_DC_STATELESS == setup->setupData.sessState) &&
-                            (CPA_TRUE == setup->useE2E ||
-                             CPA_TRUE == setup->useE2EVerify))
-                        {
-                            status = waitForSemaphore(setup->performanceStats);
-
-                            if (CPA_STATUS_SUCCESS != status)
-                            {
-                                PRINT_ERR("waitForSemaphore error\n");
-                                setup->performanceStats->threadReturnStatus =
-                                    CPA_STATUS_FAIL;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if ((CPA_TRUE == setup->useStatefulLite) ||
-                    (CPA_DC_STATEFUL == setup->setupData.sessState))
-                {
-                    status = waitForSemaphore(setup->performanceStats);
-                    if (CPA_STATUS_SUCCESS != status)
-                    {
-                        PRINT_ERR("waitForSemaphore error\n");
-                        setup->performanceStats->threadReturnStatus =
-                            CPA_STATUS_FAIL;
-                        break;
-                    }
-                    previousChecksum = arrayOfResults[listNum].checksum;
-                    /*check for unconsumed data*/
-                    if ((CPA_DC_DIR_DECOMPRESS == compressDirection) &&
-                        (arrayOfDestBufferLists[listNum]
-                             .pBuffers->dataLenInBytes !=
-                         arrayOfResults[listNum].consumed))
-                    {
-                        if (CPA_STATUS_SUCCESS !=
-                            qatCheckAndHandleUnconsumedData(
-                                setup,
-                                arrayOfDestBufferLists,
-                                arrayOfResults,
-                                listNum,
-                                (const char *)instanceInfo2->partName))
-                        {
-                            PRINT_ERR("Decomp did not consume all data\n");
-                            PRINT("Input Buffersize: %u\n",
-                                  arrayOfDestBufferLists[listNum]
-                                      .pBuffers[0]
-                                      .dataLenInBytes);
-                            PRINT("Amount Consumed:  %u\n",
-                                  arrayOfResults[listNum].consumed);
-                            PRINT("Amount Produced:  %u\n",
-                                  arrayOfResults[listNum].produced);
-                            setup->performanceStats->threadReturnStatus =
-                                CPA_STATUS_FAIL;
-                            setup->performanceStats->numOperations =
-                                setup->performanceStats->submissions;
-                            /*call the response thread so that the semaphore
-                             * gets posted*/
-                            dcPerformCallback(setup, status);
-                            break;
-                        }
-                    }
-                }
-                if (CPA_STATUS_SUCCESS == status)
-                {
-#if DC_API_VERSION_AT_LEAST(3, 2)
-                    if (reliability_g)
-#endif
-                    {
-                        status = qatCompressionE2EVerify(
-                            setup,
-                            &arrayOfSrcBufferLists[listNum],
-                            &arrayOfDestBufferLists[listNum],
-                            &arrayOfResults[listNum]);
-                    }
-                }
-                if (CPA_STATUS_SUCCESS != status)
-                {
-                    PRINT_ERR("%s returned status: %d\n",
-                              "qatCompressionE2EVerify",
-                              status);
-                    break;
-                }
             }
+            setup->performanceStats->submissions++;
+            /* we don't poll, so call callback function here*/
+            dcPerformCallback((void *)setup, CPA_STATUS_SUCCESS);
             /* number of lists/requests in a file */
             if (CPA_STATUS_SUCCESS != status)
             {
