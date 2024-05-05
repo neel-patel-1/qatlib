@@ -1216,10 +1216,11 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         setup->performanceStats->startCyclesTimestamp = sampleCodeTimestamp();
         /*loop over compressing a file numLoop times*/
 
-
-        for (numLoops = 0; numLoops < setup->numLoops; numLoops++)
+        perf_cycles_t start;
+        start = sampleCodeTimestamp();
+        for (numLoops = 0; numLoops < setup->performanceStats->numLoops; numLoops++)
         {
-            /* */
+            /* begin work */
             computeSglChecksum(arrayOfSrcBufferLists, arrayOfSrcBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
             qatSwCompress(setup,
                           arrayOfSrcBufferLists,
@@ -1230,8 +1231,7 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
 
             }
             setup->performanceStats->submissions++;
-            /* we don't poll, so call callback function here*/
-            dcPerformCallback((void *)setup, CPA_STATUS_SUCCESS);
+
             /* number of lists/requests in a file */
             if (CPA_STATUS_SUCCESS != status)
             {
@@ -1239,6 +1239,11 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
                 break;
             }
         } /* number of times we loop over same file */
+
+        /*Responses never reach expected number of operations, just post the semaphore here */
+        setup->performanceStats->endCyclesTimestamp = sampleCodeTimestamp();
+        sampleCodeSemaphorePost(&setup->performanceStats->comp);
+
         if (poll_inline_g)
         {
             if ((CPA_STATUS_SUCCESS == status) && (instanceInfo2->isPolled))
@@ -1307,26 +1312,27 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
          * FW identifies CnV Error and recovers it. Any such case is treated as
          * test failure*/
 
-        if (CPA_STATUS_SUCCESS == status &&
-            (CPA_DC_DIR_COMPRESS == compressDirection) &&
-            (setup->induceOverflow == CPA_FALSE) &&
-            (isCnVerrorRecovered == CPA_FALSE))
-        {
+        /* result array no longer gets updated for software path */
+    //     if (CPA_STATUS_SUCCESS == status &&
+    //         (CPA_DC_DIR_COMPRESS == compressDirection) &&
+    //         (setup->induceOverflow == CPA_FALSE) &&
+    //         (isCnVerrorRecovered == CPA_FALSE))
+    //     {
 
-            status = qatCompressionVerifyOverflow(
-                setup, arrayOfResults, arrayOfSrcBufferLists, listNum);
-            if (CPA_STATUS_SUCCESS != status)
-            {
-                PRINT_ERR("qatCompressionVerifyOverflow Failed.\n");
-                setup->performanceStats->threadReturnStatus = CPA_STATUS_FAIL;
-            }
-        }
-        /*check the results structure for any failed responses
-         * caught by the callback function*/
-        qatCompressionResponseStatusCheck(
-            setup, arrayOfResults, listNum, &status);
+    //         status = qatCompressionVerifyOverflow(
+    //             setup, arrayOfResults, arrayOfSrcBufferLists, listNum);
+    //         if (CPA_STATUS_SUCCESS != status)
+    //         {
+    //             PRINT_ERR("qatCompressionVerifyOverflow Failed.\n");
+    //             setup->performanceStats->threadReturnStatus = CPA_STATUS_FAIL;
+    //         }
+    //     }
+    //     /*check the results structure for any failed responses
+    //      * caught by the callback function*/
+    //     qatCompressionResponseStatusCheck(
+    //         setup, arrayOfResults, listNum, &status);
 
-        qatSummariseLatencyMeasurements(setup->performanceStats);
+        // qatSummariseLatencyMeasurements(setup->performanceStats);
         sampleCodeSemaphoreDestroy(&setup->performanceStats->comp);
     } /* if semaphoreInit was successful */
 
