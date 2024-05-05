@@ -71,6 +71,7 @@
 #include "busy_loop.h"
 #include "icp_sal_user.h"
 #include "qat_perf_utils.h"
+#include "cpa_sample_code_crypto_utils.h"
 
 extern void dcPerformCallback(void *pCallbackTag, CpaStatus status);
 
@@ -1243,6 +1244,42 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         /*Responses never reach expected number of operations, just post the semaphore here */
         setup->performanceStats->endCyclesTimestamp = sampleCodeTimestamp();
         sampleCodeSemaphorePost(&setup->performanceStats->comp);
+        qatSummariseLatencyMeasurements(setup->performanceStats);
+        perf_data_t *perfData = setup->performanceStats;
+
+        for(int i=0; i< arrayOfSrcBufferLists->numBuffers;i++){
+            perfData->bytesConsumedPerLoop += arrayOfSrcBufferLists->pBuffers[i].dataLenInBytes;
+        }
+
+        perf_cycles_t aveLatency = setup->performanceStats->aveLatency;
+        perf_cycles_t aveLatencyCycles = setup->performanceStats->aveLatency;
+        perf_cycles_t numOfCycles = (setup->performanceStats->endCyclesTimestamp - setup->performanceStats->startCyclesTimestamp);
+        Cpa32U bytesConsumed = setup->performanceStats->bytesConsumedPerLoop;
+        Cpa32U throughput;
+        Cpa32U freq;
+        Cpa32U time;
+
+
+        freq = sampleCodeGetCpuFreq();
+        throughput = bytesConsumed * setup->performanceStats->numLoops;
+        time = numOfCycles;
+        do_div(time, freq);
+        do_div(throughput, time);
+        throughput = throughput * NUM_BITS_IN_BYTE;
+        do_div(throughput, KILOBITS_IN_MEGABITS);
+
+        aveLatency = 1000* aveLatency;
+        do_div(aveLatency,freq);// = setup->performanceStats->aveLatency;
+
+        PRINT("Thread: %d\n", setup->threadID);
+        if(latency_enable){
+            PRINT("AvgLatency(us): %lld\n", aveLatency);
+            PRINT("AvgLatency(cycles): %lld\n", aveLatencyCycles);
+        }
+        PRINT("Throughput(Mbps): %d\n", throughput);
+
+        // qaeMemFree((void **)&perfData);
+        return CPA_STATUS_SUCCESS;
 
         if (poll_inline_g)
         {
