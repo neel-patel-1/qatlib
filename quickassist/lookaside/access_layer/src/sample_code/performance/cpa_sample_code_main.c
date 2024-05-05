@@ -1401,6 +1401,7 @@ int main(int argc, char *argv[])
 
 #if !defined(_KERNEL)
             /*STATIC L1 & L3 COMPRESSION*/
+            PRINT("QATDeflate CompCRC\n");
             dataIntegrity_g = 1;
             status = setupDcTest(CPA_DC_DEFLATE,
                                  CPA_DC_DIR_COMPRESS,
@@ -1423,6 +1424,7 @@ int main(int argc, char *argv[])
                 retStatus = CPA_STATUS_FAIL;
             }
 
+            PRINT("QATDeflate\n");
             dataIntegrity_g = 0;
             status = setupDcTest(CPA_DC_DEFLATE,
                                  CPA_DC_DIR_COMPRESS,
@@ -1444,6 +1446,8 @@ int main(int argc, char *argv[])
             {
                 retStatus = CPA_STATUS_FAIL;
             }
+
+            PRINT("SWDeflate CompCRC\n");
             return 0;
 
             status = setupDcTest(CPA_DC_DEFLATE,
