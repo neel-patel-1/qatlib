@@ -1021,8 +1021,8 @@ static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
         }
 
         /* crc is calculated over the entirety of the pBuffer */
-        computeSglChecksum(&(srcBuffListArray[j]), srcBuffListArray[j].pBuffers[0].dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
-        /* we assume deflate_compress does not compute the crc32 by default */
+        crc_external->crc32 = stream.adler;
+
         status = deflate_compress(&stream,
                                   srcBuffListArray[j].pBuffers->pData,
                                   srcBuffListArray[j].pBuffers->dataLenInBytes,
@@ -1039,8 +1039,10 @@ static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
         }
         cmpResults[j].consumed = stream.total_in;
         cmpResults[j].produced = stream.total_out;
-        if(setup->useE2E == CPA_TRUE)
-            computeSglChecksum(&(dstBuffListArray[j]), stream.total_out, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
+        if(setup->useE2E == CPA_TRUE){
+            Cpa64U crc = crc32(0L, Z_NULL, 0);
+            crc_external->integrityCrc.iCrc = crc32(crc, dstBuffListArray[j].pBuffers->pData, stream.total_out);
+        }
         deflate_destroy(&stream);
 
 

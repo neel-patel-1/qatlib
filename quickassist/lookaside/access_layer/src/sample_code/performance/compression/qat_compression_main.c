@@ -1217,8 +1217,6 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         setup->performanceStats->startCyclesTimestamp = sampleCodeTimestamp();
         /*loop over compressing a file numLoop times*/
 
-        perf_cycles_t start;
-        start = sampleCodeTimestamp();
         for (numLoops = 0; numLoops < setup->performanceStats->numLoops; numLoops++)
         {
             /* begin work */
@@ -1277,8 +1275,9 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
             PRINT("AvgLatency(cycles): %lld\n", aveLatencyCycles);
         }
         PRINT("Throughput(Mbps): %d\n", throughput);
+        clearPerfStats(setup->performanceStats);
 
-        // qaeMemFree((void **)&perfData);
+        qaeMemFree((void **)&(setup->performanceStats));
         return CPA_STATUS_SUCCESS;
 
         if (poll_inline_g)

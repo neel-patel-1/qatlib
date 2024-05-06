@@ -1432,7 +1432,7 @@ int main(int argc, char *argv[])
                                  CPA_DC_HT_STATIC,
                                  CPA_DC_STATELESS,
                                  DEFAULT_COMPRESSION_WINDOW_SIZE,
-                                 BUFFER_SIZE_32768,
+                                 BUFFER_SIZE_8192,
                                  sampleCorpus,
                                  ASYNC,
                                  dcLoops);
