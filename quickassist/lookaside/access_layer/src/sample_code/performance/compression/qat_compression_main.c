@@ -1272,6 +1272,9 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         do_div(aveLatency,freq);// = setup->performanceStats->aveLatency;
 
         PRINT("Thread: %d\n", setup->threadID);
+        PRINT("Frequency(kHz): %d\n", freq);
+        PRINT("NumCycles: %lld\n", numOfCycles);
+        PRINT("TotalTime(us): %d\n", time*1000);
         if(latency_enable){
             PRINT("AvgLatency(us): %lld\n", aveLatency);
             PRINT("AvgLatency(cycles): %lld\n", aveLatencyCycles);
