@@ -1253,9 +1253,9 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         perf_cycles_t aveLatencyCycles = setup->performanceStats->aveLatency;
         perf_cycles_t numOfCycles = (setup->performanceStats->endCyclesTimestamp - setup->performanceStats->startCyclesTimestamp);
         Cpa32U bytesConsumed = setup->performanceStats->bytesConsumedPerLoop;
-        Cpa32U throughput;
+        double throughput;
         Cpa32U freq;
-        Cpa32U time;
+        double time;
 
 
         freq = sampleCodeGetCpuFreq();
@@ -1264,7 +1264,8 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         time = numOfCycles;
         PRINT("TotalCycles: %lld\n", numOfCycles);
         do_div(time, freq);
-        PRINT("Time(us): %d\n", time*1000);
+        PRINT("Time(us): %f\n", time*1000);
+        // if(time > 0)
         do_div(throughput, time);
         throughput = throughput * NUM_BITS_IN_BYTE;
         do_div(throughput, KILOBITS_IN_MEGABITS);
@@ -1277,10 +1278,10 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
             PRINT("AvgLatency(us): %lld\n", aveLatency);
             PRINT("AvgLatency(cycles): %lld\n", aveLatencyCycles);
         }
-        PRINT("Throughput(Mbps): %d\n", throughput);
+        PRINT("Throughput(Mbps): %f\n", throughput);
         clearPerfStats(setup->performanceStats);
 
-        qaeMemFree((void **)&(setup->performanceStats));
+        // qaeMemFree((void **)&(setup->performanceStats));
         return CPA_STATUS_SUCCESS;
 
         if (poll_inline_g)
