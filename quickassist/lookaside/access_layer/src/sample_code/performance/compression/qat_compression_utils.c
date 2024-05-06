@@ -1044,6 +1044,9 @@ static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
             }
         }
     }
+    // for(int i=0; i<pPerfData->latencyCount; i++){
+    //     PRINT("Latency: %llu\n", pPerfData->response_times[i] - pPerfData->start_times[i]);
+    // }
     return status;
 }
 
