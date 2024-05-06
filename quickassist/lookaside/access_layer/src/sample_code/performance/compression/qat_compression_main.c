@@ -1259,9 +1259,12 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
 
 
         freq = sampleCodeGetCpuFreq();
+        PRINT("Freq: %d\n", freq);
         throughput = bytesConsumed * setup->performanceStats->numLoops;
         time = numOfCycles;
+        PRINT("TotalCycles: %lld\n", numOfCycles);
         do_div(time, freq);
+        PRINT("Time(us): %d\n", time*1000);
         do_div(throughput, time);
         throughput = throughput * NUM_BITS_IN_BYTE;
         do_div(throughput, KILOBITS_IN_MEGABITS);
