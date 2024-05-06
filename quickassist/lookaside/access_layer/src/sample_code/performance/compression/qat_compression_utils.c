@@ -971,6 +971,11 @@ CpaStatus qatCmpBuffers(compression_test_params_t *setup,
     return status;
 }
 
+void computeSglChecksum(CpaBufferList *inputBuff,
+                        const Cpa32U computationSize,
+                        const CpaDcChecksum checksumType,
+                        Cpa32U *swChecksum);
+
 
 static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
                                    CpaBufferList *srcBuffListArray,
@@ -982,6 +987,10 @@ static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
     Cpa32U j = 0;
     int zlibFlushflag;
     perf_data_t *pPerfData = setup->performanceStats;
+
+    CpaCrcData *crc_external = NULL;
+    /* Currently alloc'd from numa node 0 with 64-byte alignment, though may not be extensible */
+    crc_external = qaeMemAllocNUMA(sizeof(CpaCrcData), 0, 64);
 
     /* call the compress api */
     for (j = 0; j < setup->numLists; j++)
@@ -1010,12 +1019,17 @@ static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
         {
             zlibFlushflag = Z_FINISH;
         }
+
+        /* crc is calculated over the entirety of the pBuffer */
+        computeSglChecksum(&(srcBuffListArray[j]), srcBuffListArray[j].pBuffers[0].dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
+        /* we assume deflate_compress does not compute the crc32 by default */
         status = deflate_compress(&stream,
                                   srcBuffListArray[j].pBuffers->pData,
                                   srcBuffListArray[j].pBuffers->dataLenInBytes,
                                   dstBuffListArray[j].pBuffers->pData,
                                   dstBuffListArray[j].pBuffers->dataLenInBytes,
                                   zlibFlushflag);
+
         if (CPA_STATUS_SUCCESS != status)
         {
             PRINT("srcLen: %d, destLen: %d \n",
@@ -1025,6 +1039,8 @@ static CpaStatus qatSwZlibCompress(compression_test_params_t *setup,
         }
         cmpResults[j].consumed = stream.total_in;
         cmpResults[j].produced = stream.total_out;
+        if(setup->useE2E == CPA_TRUE)
+            computeSglChecksum(&(dstBuffListArray[j]), stream.total_out, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
         deflate_destroy(&stream);
 
 

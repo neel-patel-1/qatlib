@@ -1222,15 +1222,15 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
         for (numLoops = 0; numLoops < setup->performanceStats->numLoops; numLoops++)
         {
             /* begin work */
-            computeSglChecksum(arrayOfSrcBufferLists, arrayOfSrcBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
+            // computeSglChecksum(arrayOfSrcBufferLists, arrayOfSrcBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.iCrc));
             qatSwCompress(setup,
                           arrayOfSrcBufferLists,
                           arrayOfDestBufferLists,
                           arrayOfResults);
-            if(setup->useE2E == CPA_TRUE){
-                computeSglChecksum(arrayOfSrcBufferLists, arrayOfDestBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.oCrc));
+            // if(setup->useE2E == CPA_TRUE){
+            //     computeSglChecksum(arrayOfSrcBufferLists, arrayOfDestBufferLists->pBuffers->dataLenInBytes, CPA_DC_CRC32, &(crc_external->integrityCrc.oCrc));
 
-            }
+            // }
             setup->performanceStats->submissions++;
 
             /* number of lists/requests in a file */
