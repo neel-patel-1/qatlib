@@ -215,10 +215,12 @@ noinst_PROGRAMS += compress_crc
 compress_crc_SOURCES = \
 	chaining-demo/compress_crc.c \
 	chaining-demo/dc_inst_utils.c \
+	chaining-demo/thread_utils.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
 
 compress_crc_CFLAGS = \
 	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
+	-I$(srcdir)/chaining-demo \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS)

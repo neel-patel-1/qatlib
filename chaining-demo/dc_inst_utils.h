@@ -12,7 +12,6 @@
 #define SAMPLE_MAX_BUFF 1024
 
 extern int gDebugParam;
-extern _Atomic int gPollingDcs[MAX_INSTANCES];
 
 extern CpaDcHuffType huffmanType_g;
 extern CpaStatus qaeMemInit(void);
@@ -28,11 +27,3 @@ CpaStatus allocateIntermediateBuffers(CpaInstanceHandle dcInstHandle,
 
 CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
 CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle);
-
-typedef struct _thread_args{
-  CpaInstanceHandle dcInstHandle;
-  Cpa16U id;
-} thread_args;
-void *dc_polling(void *args);
-CpaStatus createThread(pthread_t *thread, void *func, void *arg);
-void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
