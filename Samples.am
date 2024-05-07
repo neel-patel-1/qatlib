@@ -211,13 +211,18 @@ chaining_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 chaining_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la
 
 noinst_PROGRAMS += compress_crc
+
 compress_crc_SOURCES = \
-	chaining-demo/compress_crc.c
+	chaining-demo/compress_crc.c \
+	chaining-demo/dc_inst_utils.c \
+	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
+
 compress_crc_CFLAGS = \
 	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS)
+
 compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la
 
 noinst_PROGRAMS += dc_stateless_multi_op_sample
