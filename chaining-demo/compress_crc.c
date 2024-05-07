@@ -14,7 +14,9 @@ int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
   CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
   CpaDcInstanceCapabilities cap = {0};
 
   stat = qaeMemInit();
@@ -46,7 +48,10 @@ int main(){
       createThread(&thread[0], dc_polling, (void *)&args);
   }
 
+  sessionHandle = sessionHandles[0];
+  prepareDcSession(dcInstHandle, &sessionHandle);
 
+  gPollingDcs[0] = 0;
 
 exit:
   icp_sal_userStop();

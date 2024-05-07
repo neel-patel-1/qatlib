@@ -6,6 +6,7 @@
 #include "cpa_sample_utils.h"
 
 #include "icp_sal_poll.h"
+#include "thread_utils.h"
 #include <pthread.h>
 
 #define MAX_INSTANCES 16

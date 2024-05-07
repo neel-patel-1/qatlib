@@ -113,3 +113,34 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle){
 
 
 }
+
+CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle){
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  CpaDcSessionSetupData sd = {0};
+  Cpa32U sess_size = 0;
+  Cpa32U ctx_size = 0;
+  CpaDcSessionHandle sessionHdl = NULL;
+  sd.compLevel = CPA_DC_L6;
+  sd.compType = CPA_DC_DEFLATE;
+  sd.huffType = CPA_DC_HT_FULL_DYNAMIC;
+  sd.autoSelectBestHuffmanTree = CPA_DC_ASB_ENABLED;
+  sd.sessDirection = CPA_DC_DIR_COMBINED;
+  sd.sessState = CPA_DC_STATELESS;
+  status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      /* Allocate session memory */
+      status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+  }
+  /* Initialize the Stateless session */
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = cpaDcInitSession(
+          dcInstHandle,
+          sessionHdl, /* session memory */
+          &sd,        /* session setup data */
+          NULL, /* pContexBuffer not required for stateless operations */
+          dcLatencyCallback); /* callback function */
+  }
+  *pSessionHandle = sessionHdl;
+}
