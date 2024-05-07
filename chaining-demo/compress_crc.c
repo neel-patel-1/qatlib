@@ -12,7 +12,63 @@
 int gDebugParam = 1;
 
 /* Single Flat Buffer BufferList with buffer of bufferSize */
-CpaStatus createSourceBufferList(CpaBufferList **ppBufferList, Cpa8U *buffer, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType, Cpa32U dstBufferSize){
+CpaStatus createDstBufferList(CpaBufferList **ppBufferList, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType){
+  Cpa32U numBuffers = 1;
+  Cpa8U *pBufferMetaSrc = NULL;
+  Cpa8U *pSrcBuffer = NULL;
+  CpaFlatBuffer *pFlatBuffer = NULL;
+  CpaBufferList *pBufferListSrc = NULL;
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+  Cpa32U bufferMetaSize = 0;
+  Cpa32U dstBufferSize = 0;
+
+  status =
+        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+
+  #if DC_API_VERSION_AT_LEAST(2, 5)
+  status = cpaDcDeflateCompressBound(
+      dcInstHandle, huffType, bufferSize, &dstBufferSize);
+  if (CPA_STATUS_SUCCESS != status)
+  {
+      PRINT_ERR("cpaDcDeflateCompressBound API failed. (status = %d)\n",
+                status);
+      return CPA_STATUS_FAIL;
+  }
+  #endif
+
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+  }
+  if(CPA_STATUS_SUCCESS == status){
+    /* Build source bufferList */
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+
+    pBufferListSrc->pBuffers = pFlatBuffer;
+    pBufferListSrc->numBuffers = 1;
+    pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+
+    pFlatBuffer->dataLenInBytes = dstBufferSize;
+    pFlatBuffer->pData = pSrcBuffer;
+  }
+
+  *ppBufferList = pBufferListSrc;
+
+  return CPA_STATUS_SUCCESS;
+}
+
+/* Single Flat Buffer BufferList with buffer of bufferSize */
+CpaStatus createSourceBufferList(CpaBufferList **ppBufferList, Cpa8U *buffer, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType){
   Cpa32U numBuffers = 1;
   Cpa8U *pBufferMetaSrc = NULL;
   Cpa8U *pSrcBuffer = NULL;
@@ -98,7 +154,6 @@ int main(){
   sessionHandle = sessionHandles[0];
   prepareDcSession(dcInstHandle, &sessionHandle);
 
-  Cpa8U *pBufferMetaDst = NULL;
   Cpa8U *pBufferMetaDst2 = NULL;
   Cpa32U bufferMetaSize = 0;
   CpaBufferList *pBufferListSrc = NULL;
@@ -129,7 +184,10 @@ int main(){
   INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
   status =
-    createSourceBufferList(&pBufferListSrc, sampleData, sampleDataSize, dcInstHandle, huffType, dstBufferSize);
+    createSourceBufferList(&pBufferListSrc, sampleData, sampleDataSize, dcInstHandle, huffType);
+
+  status =
+    createDstBufferList(&pBufferListDst, sampleDataSize, dcInstHandle, huffType);
 
   if(CPA_STATUS_SUCCESS != status){
     fprintf(stderr, "Failed to create source buffer list\n");
@@ -137,45 +195,11 @@ int main(){
   }
 
   status =
-        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+    cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
 
-  #if DC_API_VERSION_AT_LEAST(2, 5)
-    status = cpaDcDeflateCompressBound(
-        dcInstHandle, huffType, bufferSize, &dstBufferSize);
-    if (CPA_STATUS_SUCCESS != status)
-    {
-        PRINT_ERR("cpaDcDeflateCompressBound API failed. (status = %d)\n",
-                  status);
-        return CPA_STATUS_FAIL;
-    }
-  #endif
-
-
-  /* Allocate destination buffer the same size as source buffer */
-  if (CPA_STATUS_SUCCESS == status)
-  {
-      status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
-  }
-  if (CPA_STATUS_SUCCESS == status)
-  {
-      status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
-  }
-  if (CPA_STATUS_SUCCESS == status)
-  {
-      status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
-  }
 
   if(CPA_STATUS_SUCCESS == status){
 
-    /* Build destination bufferList */
-    pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
-
-    pBufferListDst->pBuffers = pFlatBuffer;
-    pBufferListDst->numBuffers = 1;
-    pBufferListDst->pPrivateMetaData = pBufferMetaDst;
-
-    pFlatBuffer->dataLenInBytes = dstBufferSize;
-    pFlatBuffer->pData = pDstBuffer;
 
     /*
       * Now, we initialize the completion variable which is used by the
