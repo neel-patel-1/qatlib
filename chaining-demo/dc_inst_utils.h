@@ -28,3 +28,5 @@ CpaStatus allocateIntermediateBuffers(CpaInstanceHandle dcInstHandle,
 
 CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
 CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle);
+
+CpaStatus prepareSampleBuffer(Cpa8U **ppBuffer, Cpa32U bufferSize);

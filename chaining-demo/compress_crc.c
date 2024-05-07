@@ -51,6 +51,44 @@ int main(){
   sessionHandle = sessionHandles[0];
   prepareDcSession(dcInstHandle, &sessionHandle);
 
+  Cpa8U *pBufferMetaSrc = NULL;
+  Cpa8U *pBufferMetaDst = NULL;
+  Cpa8U *pBufferMetaDst2 = NULL;
+  Cpa32U bufferMetaSize = 0;
+  CpaBufferList *pBufferListSrc = NULL;
+  CpaBufferList *pBufferListDst = NULL;
+  CpaBufferList *pBufferListDst2 = NULL;
+  CpaFlatBuffer *pFlatBuffer = NULL;
+  CpaDcOpData opData = {};
+  Cpa8U *sampleData = NULL;
+  Cpa32U sampleDataSize = 512;
+  if(!prepareSampleBuffer(&sampleData, sampleDataSize)){
+    fprintf(stderr, "Failed to prepare sample buffer\n");
+    goto exit;
+  }
+
+  Cpa32U bufferSize = sampleDataSize;
+  Cpa32U dstBufferSize = bufferSize;
+  Cpa32U checksum = 0;
+  Cpa32U numBuffers = 1;
+
+  Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+  Cpa8U *pSrcBuffer = NULL;
+  Cpa8U *pDstBuffer = NULL;
+  Cpa8U *pDst2Buffer = NULL;
+
+  CpaDcRqResults dcResults;
+  struct COMPLETION_STRUCT complete;
+  INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+
+
+  status =
+        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+
+
+
+
   gPollingDcs[0] = 0;
 
 exit:

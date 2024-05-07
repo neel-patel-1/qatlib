@@ -144,3 +144,16 @@ CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *p
   }
   *pSessionHandle = sessionHdl;
 }
+
+CpaStatus prepareSampleBuffer(Cpa8U **ppBuffer, Cpa32U bufferSize){
+    CpaStatus status = CPA_STATUS_SUCCESS;
+    Cpa8U *pBuffer = NULL;
+    status = PHYS_CONTIG_ALLOC(&pBuffer, bufferSize);
+    Cpa32U i = 0;
+    for (i = 0; i < bufferSize; i++)
+    {
+        pBuffer[i] = i % 256;
+    }
+    *ppBuffer = pBuffer;
+    return status;
+}
