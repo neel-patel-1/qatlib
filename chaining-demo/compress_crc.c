@@ -10,6 +10,54 @@
 #include "thread_utils.h"
 
 int gDebugParam = 1;
+
+/* Single Flat Buffer BufferList with buffer of bufferSize */
+CpaStatus createSourceBufferList(CpaBufferList **ppBufferList, Cpa8U *buffer, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType, Cpa32U dstBufferSize){
+  Cpa32U numBuffers = 1;
+  Cpa8U *pBufferMetaSrc = NULL;
+  Cpa8U *pSrcBuffer = NULL;
+  CpaFlatBuffer *pFlatBuffer = NULL;
+  CpaBufferList *pBufferListSrc = NULL;
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  Cpa32U bufferListMemSize =
+        sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+  Cpa32U bufferMetaSize = 0;
+
+  status =
+        cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
+
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+  }
+  if(CPA_STATUS_SUCCESS == status){
+    /* copy source into buffer */
+    memcpy(pSrcBuffer, buffer, bufferSize);
+
+    /* Build source bufferList */
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+
+    pBufferListSrc->pBuffers = pFlatBuffer;
+    pBufferListSrc->numBuffers = 1;
+    pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+
+    pFlatBuffer->dataLenInBytes = bufferSize;
+    pFlatBuffer->pData = pSrcBuffer;
+  }
+
+  *ppBufferList = pBufferListSrc;
+
+  return CPA_STATUS_SUCCESS;
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -50,7 +98,6 @@ int main(){
   sessionHandle = sessionHandles[0];
   prepareDcSession(dcInstHandle, &sessionHandle);
 
-  Cpa8U *pBufferMetaSrc = NULL;
   Cpa8U *pBufferMetaDst = NULL;
   Cpa8U *pBufferMetaDst2 = NULL;
   Cpa32U bufferMetaSize = 0;
@@ -74,7 +121,6 @@ int main(){
 
   Cpa32U bufferListMemSize =
         sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
-  Cpa8U *pSrcBuffer = NULL;
   Cpa8U *pDstBuffer = NULL;
   Cpa8U *pDst2Buffer = NULL;
 
@@ -82,6 +128,13 @@ int main(){
   struct COMPLETION_STRUCT complete;
   INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
+  status =
+    createSourceBufferList(&pBufferListSrc, sampleData, sampleDataSize, dcInstHandle, huffType, dstBufferSize);
+
+  if(CPA_STATUS_SUCCESS != status){
+    fprintf(stderr, "Failed to create source buffer list\n");
+    goto exit;
+  }
 
   status =
         cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
@@ -97,18 +150,6 @@ int main(){
     }
   #endif
 
-  if (CPA_STATUS_SUCCESS == status)
-  {
-      status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
-  }
-  if (CPA_STATUS_SUCCESS == status)
-  {
-      status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
-  }
-  if (CPA_STATUS_SUCCESS == status)
-  {
-      status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
-  }
 
   /* Allocate destination buffer the same size as source buffer */
   if (CPA_STATUS_SUCCESS == status)
@@ -125,18 +166,6 @@ int main(){
   }
 
   if(CPA_STATUS_SUCCESS == status){
-    /* copy source into buffer */
-    memcpy(pSrcBuffer, sampleData, sampleDataSize);
-
-    /* Build source bufferList */
-    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
-
-    pBufferListSrc->pBuffers = pFlatBuffer;
-    pBufferListSrc->numBuffers = 1;
-    pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
-
-    pFlatBuffer->dataLenInBytes = bufferSize;
-    pFlatBuffer->pData = pSrcBuffer;
 
     /* Build destination bufferList */
     pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
@@ -329,7 +358,7 @@ int main(){
                 }
 
                 /* Compare with original Src buffer */
-                if (0 == memcmp(pDst2Buffer, pSrcBuffer, sampleDataSize))
+                if (0 == memcmp(pDst2Buffer, pBufferListSrc->pBuffers[0].pData, sampleDataSize))
                 {
                     PRINT_DBG("Output matches expected output\n");
                 }
