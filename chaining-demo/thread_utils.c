@@ -80,4 +80,10 @@ void dcLatencyCallback(void *pCallbackTag, CpaStatus status){
   if(CPA_STATUS_SUCCESS != status){
     fprintf(stderr, "Error in callback\n");
   }
+
+  if(NULL != pCallbackTag){
+    callback_args *args = (callback_args *)pCallbackTag;
+    struct COMPLETION_STRUCT *completion = args->completion;
+    COMPLETE(completion);
+  }
 }

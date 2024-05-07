@@ -19,6 +19,11 @@ typedef struct _thread_args{
   CpaInstanceHandle dcInstHandle;
   Cpa16U id;
 } thread_args;
+
+typedef struct _callback_args{
+  struct COMPLETION_STRUCT *completion;
+} callback_args;
+
 void *dc_polling(void *args);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);

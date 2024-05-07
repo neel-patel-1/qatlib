@@ -30,3 +30,4 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
 CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle);
 
 CpaStatus prepareSampleBuffer(Cpa8U **ppBuffer, Cpa32U bufferSize);
+// CpaStatus buildBufferListFromSampleBuffer(Cpa8U *pBuffer, Cpa32U bufferSize, CpaBufferList **pBufferList);

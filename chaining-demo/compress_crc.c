@@ -62,6 +62,7 @@ int main(){
   CpaDcOpData opData = {};
   Cpa8U *sampleData = NULL;
   Cpa32U sampleDataSize = 512;
+  CpaDcHuffType huffType = CPA_DC_HT_FULL_DYNAMIC;
   if(!prepareSampleBuffer(&sampleData, sampleDataSize)){
     fprintf(stderr, "Failed to prepare sample buffer\n");
     goto exit;
@@ -86,7 +87,129 @@ int main(){
   status =
         cpaDcBufferListGetMetaSize(dcInstHandle, numBuffers, &bufferMetaSize);
 
+  #if DC_API_VERSION_AT_LEAST(2, 5)
+    status = cpaDcDeflateCompressBound(
+        dcInstHandle, huffType, bufferSize, &dstBufferSize);
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("cpaDcDeflateCompressBound API failed. (status = %d)\n",
+                  status);
+        return CPA_STATUS_FAIL;
+    }
+  #endif
 
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferMetaSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = OS_MALLOC(&pBufferListSrc, bufferListMemSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+  }
+
+  /* Allocate destination buffer the same size as source buffer */
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pBufferMetaDst, bufferMetaSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = OS_MALLOC(&pBufferListDst, bufferListMemSize);
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstBufferSize);
+  }
+
+  if(CPA_STATUS_SUCCESS == status){
+    /* copy source into buffer */
+    memcpy(pSrcBuffer, sampleData, sizeof(sampleData));
+
+    /* Build source bufferList */
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
+
+    pBufferListSrc->pBuffers = pFlatBuffer;
+    pBufferListSrc->numBuffers = 1;
+    pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+
+    pFlatBuffer->dataLenInBytes = bufferSize;
+    pFlatBuffer->pData = pSrcBuffer;
+
+    /* Build destination bufferList */
+    pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst + 1);
+
+    pBufferListDst->pBuffers = pFlatBuffer;
+    pBufferListDst->numBuffers = 1;
+    pBufferListDst->pPrivateMetaData = pBufferMetaDst;
+
+    pFlatBuffer->dataLenInBytes = dstBufferSize;
+    pFlatBuffer->pData = pDstBuffer;
+
+    /*
+      * Now, we initialize the completion variable which is used by the
+      * callback
+      * function to indicate that the operation is complete.  We then perform
+      * the
+      * operation.
+      */
+    PRINT_DBG("cpaDcCompressData2\n");
+
+    //<snippet name="perfOp">
+    COMPLETION_INIT(&complete);
+
+    status = cpaDcCompressData2(
+        dcInstHandle,
+        sessionHandle,
+        pBufferListSrc,     /* source buffer list */
+        pBufferListDst,     /* destination buffer list */
+        &opData,            /* Operational data */
+        &dcResults,         /* results structure */
+        (void *)&complete); /* data sent as is to the callback function*/
+                                //</snippet>
+
+    if (CPA_STATUS_SUCCESS != status)
+    {
+        PRINT_ERR("cpaDcCompressData2 failed. (status = %d)\n", status);
+    }
+
+    /*
+      * We now wait until the completion of the operation.  This uses a macro
+      * which can be defined differently for different OSes.
+      */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        if (!COMPLETION_WAIT(&complete, TIMEOUT_MS))
+        {
+            PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
+            status = CPA_STATUS_FAIL;
+        }
+    }
+
+    /*
+      * We now check the results
+      */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        if (dcResults.status != CPA_DC_OK)
+        {
+            PRINT_ERR("Results status not as expected (status = %d)\n",
+                      dcResults.status);
+            status = CPA_STATUS_FAIL;
+        }
+        else
+        {
+            PRINT_DBG("Data consumed %d\n", dcResults.consumed);
+            PRINT_DBG("Data produced %d\n", dcResults.produced);
+            PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+        }
+        /* To compare the checksum with decompressed output */
+        checksum = dcResults.checksum;
+    }
+  }
 
 
   gPollingDcs[0] = 0;
