@@ -86,3 +86,17 @@ void dcLatencyCallback(void *pCallbackTag, CpaStatus status){
     COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
   }
 }
+
+void dcPerfCallback(void *pCallbackTag, CpaStatus status){
+  if(CPA_STATUS_SUCCESS != status){
+    PRINT_ERR("Error in callback\n");
+  }
+
+  if(NULL != pCallbackTag){
+    callback_args *args = (callback_args *)pCallbackTag;
+    packet_stats *stats = args->stats;
+    stats->receiveTime = sampleCoderdtsc();
+    PRINT_DBG("Callback called\n");
+    COMPLETE((struct COMPLETION_STRUCT *)(args->completion));
+  }
+}

@@ -7,6 +7,7 @@
 #include "cpa_dc.h"
 #include "qae_mem.h"
 #include "cpa_sample_utils.h"
+#include "cpa_sample_code_utils.h"
 
 #include "icp_sal_poll.h"
 #include "thread_utils.h"
@@ -30,7 +31,7 @@ CpaStatus allocateIntermediateBuffers(CpaInstanceHandle dcInstHandle,
   Cpa32U *pBuffMetaSize);
 
 CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
-CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle);
+CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle, CpaDcCallbackFn callbackFunction);
 
 CpaStatus prepareSampleBuffer(Cpa8U **ppBuffer, Cpa32U bufferSize);
 CpaStatus createDstBufferList(CpaBufferList **ppBufferList, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType);

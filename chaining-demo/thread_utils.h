@@ -20,13 +20,21 @@ typedef struct _thread_args{
   Cpa16U id;
 } thread_args;
 
+typedef struct _packet_stats{
+  Cpa32U packetId;
+  Cpa64U submitTime;
+  Cpa64U receiveTime;
+} packet_stats;
+
 typedef struct _callback_args{
-  struct COMPLETION_STRUCT *completion;
+  struct COMPLETION_STRUCT *completion; /* Use this to communicate last offload completion */
+  packet_stats *stats;
 } callback_args;
 
 void *dc_polling(void *args);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
+void dcPerfCallback(void *pCallbackTag, CpaStatus status);
 
 
 #endif

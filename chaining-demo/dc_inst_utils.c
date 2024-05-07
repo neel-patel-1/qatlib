@@ -117,7 +117,7 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle){
 
 }
 
-CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle){
+CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle, CpaDcCallbackFn callbackFunction){
   CpaStatus status = CPA_STATUS_SUCCESS;
   CpaDcSessionSetupData sd = {0};
   Cpa32U sess_size = 0;
@@ -143,7 +143,7 @@ CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *p
           sessionHdl, /* session memory */
           &sd,        /* session setup data */
           NULL, /* pContexBuffer not required for stateless operations */
-          dcLatencyCallback); /* callback function */
+          callbackFunction); /* callback function */
   }
   *pSessionHandle = sessionHdl;
 }

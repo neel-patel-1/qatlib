@@ -73,7 +73,7 @@ int main(){
   }
 
   sessionHandle = sessionHandles[0];
-  prepareDcSession(dcInstHandle, &sessionHandle);
+  prepareDcSession(dcInstHandle, &sessionHandle, dcPerfCallback);
 
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
@@ -85,11 +85,22 @@ int main(){
   CpaDcOpData opData = {};
   CpaDcRqResults dcResults;
   CpaDcRqResults *pDcResults = &dcResults;
-  INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+
   struct COMPLETION_STRUCT complete;
+  callback_args *cb_args = NULL;
+  packet_stats *stats = NULL;
 
   COMPLETION_INIT(&complete);
+  INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+  PHYS_CONTIG_ALLOC(&cb_args, sizeof(struct _callback_args));
+  memset(cb_args, 0, sizeof(struct _callback_args));
 
+  PHYS_CONTIG_ALLOC(&stats, sizeof(packet_stats));
+  memset(stats, 0, sizeof(packet_stats));
+  cb_args->completion = &complete;
+  cb_args->stats = stats;
+
+  stats->submitTime = sampleCoderdtsc();
   status = cpaDcCompressData2(
     dcInstHandle,
     sessionHandle,
@@ -97,7 +108,7 @@ int main(){
     pBufferListDst,     /* destination buffer list */
     &opData,            /* Operational data */
     &dcResults,         /* results structure */
-    (void *)&complete); /* data sent as is to the callback function*/
+    (void *)cb_args); /* data sent as is to the callback function*/
 
   if(status != CPA_STATUS_SUCCESS){
     fprintf(stderr, "Error in compress data\n");
@@ -117,6 +128,7 @@ int main(){
         status = CPA_STATUS_FAIL;
     }
   }
+  COMPLETION_DESTROY(&complete);
 
 
   // functionalCompressAndCrc64(dcInstHandle, sessionHandle);
