@@ -4,15 +4,20 @@
 #include "cpa_dc.h"
 #include "qae_mem.h"
 #include "cpa_sample_utils.h"
-extern int gDebugParam;
 
+#include "icp_sal_poll.h"
+#include <pthread.h>
+
+#define MAX_INSTANCES 16
+#define SAMPLE_MAX_BUFF 1024
+
+extern int gDebugParam;
+extern _Atomic int gPollingDcs[MAX_INSTANCES];
 
 extern CpaDcHuffType huffmanType_g;
 extern CpaStatus qaeMemInit(void);
 extern void qaeMemDestroy(void);
 
-#define MAX_INSTANCES 16
-#define SAMPLE_MAX_BUFF 1024
 
 CpaStatus allocateDcInstances(CpaInstanceHandle *dcInstHandles, Cpa16U *numInstances);
 
@@ -22,3 +27,10 @@ CpaStatus allocateIntermediateBuffers(CpaInstanceHandle dcInstHandle,
   Cpa32U *pBuffMetaSize);
 
 CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
+
+typedef struct _thread_args{
+  CpaInstanceHandle dcInstHandle;
+  Cpa16U id;
+} thread_args;
+void *dc_polling(void *args);
+CpaStatus createThread(pthread_t *thread, void *func, void *arg);

@@ -29,8 +29,16 @@ int main(){
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandle);
 
+  CpaInstanceInfo2 info2 = {0};
 
+  status = cpaDcInstanceGetInfo2(dcInstHandle, &info2);
 
+  if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
+  {
+      /* Start thread to poll instance */
+      pthread_t thread[MAX_INSTANCES];
+      createThread(&thread[0], dc_polling, (void *)dcInstHandle);
+  }
 
 exit:
   icp_sal_userStop();
