@@ -9,7 +9,7 @@
 #include "dc_inst_utils.h"
 #include "thread_utils.h"
 
-int gDebugParam;
+int gDebugParam = 1;
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -161,9 +161,11 @@ int main(){
     //<snippet name="perfOp">
     COMPLETION_INIT(&complete);
 
-    callback_args args = {
-        .completion = &complete,
-    };
+    callback_args *args = NULL;
+    args = malloc(sizeof(callback_args));
+    memset(args, 0, sizeof(callback_args));
+
+    args->completion =  &complete;
 
     status = cpaDcCompressData2(
         dcInstHandle,
@@ -172,7 +174,7 @@ int main(){
         pBufferListDst,     /* destination buffer list */
         &opData,            /* Operational data */
         &dcResults,         /* results structure */
-        (void *)&args); /* data sent as is to the callback function*/
+        (void *)args); /* data sent as is to the callback function*/
                                 //</snippet>
 
     if (CPA_STATUS_SUCCESS != status)
@@ -186,7 +188,7 @@ int main(){
       */
     if (CPA_STATUS_SUCCESS == status)
     {
-        if (!COMPLETION_WAIT(&complete, TIMEOUT_MS))
+        if (!COMPLETION_WAIT(&complete, 5000))
         {
             PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
             status = CPA_STATUS_FAIL;
@@ -214,11 +216,129 @@ int main(){
         checksum = dcResults.checksum;
     }
   }
+  /*
+     * We now ensure we can decompress to the original buffer.
+     */
+    if (CPA_STATUS_SUCCESS == status)
+    {
+        /* Dst is now the Src buffer - update the length with amount of
+           compressed data added to the buffer */
+        pBufferListDst->pBuffers->dataLenInBytes = dcResults.produced;
+
+        /* Allocate memory for new destination bufferList Dst2, we can use
+         * stateless decompression here because in this scenario we know
+         * that all transmitted data before compress was less than some
+         * max size */
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = PHYS_CONTIG_ALLOC(&pBufferMetaDst2, bufferMetaSize);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = OS_MALLOC(&pBufferListDst2, bufferListMemSize);
+        }
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            status = PHYS_CONTIG_ALLOC(&pDst2Buffer, SAMPLE_MAX_BUFF);
+        }
+
+        if (CPA_STATUS_SUCCESS == status)
+        {
+            /* Build destination 2 bufferList */
+            pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst2 + 1);
+
+            pBufferListDst2->pBuffers = pFlatBuffer;
+            pBufferListDst2->numBuffers = 1;
+            pBufferListDst2->pPrivateMetaData = pBufferMetaDst2;
+
+            pFlatBuffer->dataLenInBytes = SAMPLE_MAX_BUFF;
+            pFlatBuffer->pData = pDst2Buffer;
+
+            PRINT_DBG("cpaDcDecompressData2\n");
+
+            //<snippet name="perfOpDecomp">
+            status = cpaDcDecompressData2(
+                dcInstHandle,
+                sessionHandle,
+                pBufferListDst,  /* source buffer list */
+                pBufferListDst2, /* destination buffer list */
+                &opData,
+                &dcResults, /* results structure */
+                (void
+                     *)&complete); /* data sent as is to the callback function*/
+                                   //</snippet>
+
+            if (CPA_STATUS_SUCCESS != status)
+            {
+                PRINT_ERR("cpaDcDecompressData2 failed. (status = %d)\n",
+                          status);
+            }
+
+            /*
+             * We now wait until the completion of the operation.  This uses a
+             * macro
+             * which can be defined differently for different OSes.
+             */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                if (!COMPLETION_WAIT(&complete, TIMEOUT_MS))
+                {
+                    PRINT_ERR(
+                        "timeout or interruption in cpaDcDecompressData2\n");
+                    status = CPA_STATUS_FAIL;
+                }
+            }
+
+            /*
+             * We now check the results
+             */
+            if (CPA_STATUS_SUCCESS == status)
+            {
+                if (dcResults.status != CPA_DC_OK)
+                {
+                    PRINT_ERR(
+                        "Results status not as expected decomp (status = %d)\n",
+                        dcResults.status);
+                    status = CPA_STATUS_FAIL;
+                }
+                else
+                {
+                    PRINT_DBG("Data consumed %d\n", dcResults.consumed);
+                    PRINT_DBG("Data produced %d\n", dcResults.produced);
+                    PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+                }
+
+                /* Compare with original Src buffer */
+                if (0 == memcmp(pDst2Buffer, pSrcBuffer, sampleDataSize))
+                {
+                    PRINT_DBG("Output matches expected output\n");
+                }
+                else
+                {
+                    PRINT_ERR("Output does not match expected output\n");
+                    status = CPA_STATUS_FAIL;
+                }
+                if (checksum == dcResults.checksum)
+                {
+                    PRINT_DBG("Checksums match after compression and "
+                              "decompression\n");
+                }
+                else
+                {
+                    PRINT_ERR("Checksums does not match after compression and "
+                              "decompression\n");
+                    status = CPA_STATUS_FAIL;
+                }
+            }
+        }
+    }
 
 exit:
 
 
   gPollingDcs[0] = 0;
+
+  COMPLETION_DESTROY(&complete);
 
   icp_sal_userStop();
   qaeMemDestroy();
