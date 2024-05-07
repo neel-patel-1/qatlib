@@ -11,13 +11,14 @@
 
 int gDebugParam = 1;
 
-CpaStatus prepareTestBufferLists(CpaInstanceHandle dcInstHandle){
+CpaStatus prepareTestBufferLists(CpaBufferList ***pSrcBufferLists, CpaBufferList ***pDstBufferLists,
+  CpaInstanceHandle dcInstHandle, Cpa32U bufferSize){
+
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
 
 
   Cpa16U numBufferLists = 1;
-  Cpa32U bufferSize = 1024;
   Cpa8U *pBuffers = NULL;
   CpaDcHuffType huffType = CPA_DC_HT_FULL_DYNAMIC;
 
@@ -29,7 +30,8 @@ CpaStatus prepareTestBufferLists(CpaInstanceHandle dcInstHandle){
     createSourceBufferList(&srcBufferLists[i], pBuffers, bufferSize, dcInstHandle, huffType);
     createDstBufferList(&dstBufferLists[i], bufferSize, dcInstHandle, huffType);
   }
-
+  *pSrcBufferLists = srcBufferLists;
+  *pDstBufferLists = dstBufferLists;
 }
 
 int main(){
@@ -50,6 +52,7 @@ int main(){
     fprintf(stderr, "No instances found\n");
     goto exit;
   }
+
   /* single instance for latency test */
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandle);
@@ -72,7 +75,51 @@ int main(){
   sessionHandle = sessionHandles[0];
   prepareDcSession(dcInstHandle, &sessionHandle);
 
-  functionalCompressAndCrc64(dcInstHandle, sessionHandle);
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+
+  prepareTestBufferLists(&srcBufferLists, &dstBufferLists, dcInstHandles[0], 1024);
+
+  CpaBufferList *pBufferListSrc = srcBufferLists[0];
+  CpaBufferList *pBufferListDst = dstBufferLists[0];
+  CpaDcOpData opData = {};
+  CpaDcRqResults dcResults;
+  CpaDcRqResults *pDcResults = &dcResults;
+  INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
+  struct COMPLETION_STRUCT complete;
+
+  COMPLETION_INIT(&complete);
+
+  status = cpaDcCompressData2(
+    dcInstHandle,
+    sessionHandle,
+    pBufferListSrc,     /* source buffer list */
+    pBufferListDst,     /* destination buffer list */
+    &opData,            /* Operational data */
+    &dcResults,         /* results structure */
+    (void *)&complete); /* data sent as is to the callback function*/
+
+  if(status != CPA_STATUS_SUCCESS){
+    fprintf(stderr, "Error in compress data\n");
+    goto exit;
+  }
+  if (!COMPLETION_WAIT(&complete, 5000))
+  {
+      PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
+      status = CPA_STATUS_FAIL;
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+    if (dcResults.status != CPA_DC_OK)
+    {
+        PRINT_ERR("Results status not as expected (status = %d)\n",
+                  dcResults.status);
+        status = CPA_STATUS_FAIL;
+    }
+  }
+
+
+  // functionalCompressAndCrc64(dcInstHandle, sessionHandle);
 
 
 exit:
