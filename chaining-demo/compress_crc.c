@@ -63,7 +63,7 @@ int main(){
   Cpa8U *sampleData = NULL;
   Cpa32U sampleDataSize = 512;
   CpaDcHuffType huffType = CPA_DC_HT_FULL_DYNAMIC;
-  if(!prepareSampleBuffer(&sampleData, sampleDataSize)){
+  if(CPA_STATUS_SUCCESS != prepareSampleBuffer((Cpa8U **)&sampleData, sampleDataSize)){
     fprintf(stderr, "Failed to prepare sample buffer\n");
     goto exit;
   }
@@ -127,7 +127,7 @@ int main(){
 
   if(CPA_STATUS_SUCCESS == status){
     /* copy source into buffer */
-    memcpy(pSrcBuffer, sampleData, sizeof(sampleData));
+    memcpy(pSrcBuffer, sampleData, sampleDataSize);
 
     /* Build source bufferList */
     pFlatBuffer = (CpaFlatBuffer *)(pBufferListSrc + 1);
@@ -161,6 +161,10 @@ int main(){
     //<snippet name="perfOp">
     COMPLETION_INIT(&complete);
 
+    callback_args args = {
+        .completion = &complete,
+    };
+
     status = cpaDcCompressData2(
         dcInstHandle,
         sessionHandle,
@@ -168,7 +172,7 @@ int main(){
         pBufferListDst,     /* destination buffer list */
         &opData,            /* Operational data */
         &dcResults,         /* results structure */
-        (void *)&complete); /* data sent as is to the callback function*/
+        (void *)&args); /* data sent as is to the callback function*/
                                 //</snippet>
 
     if (CPA_STATUS_SUCCESS != status)
@@ -211,10 +215,11 @@ int main(){
     }
   }
 
+exit:
+
 
   gPollingDcs[0] = 0;
 
-exit:
   icp_sal_userStop();
   qaeMemDestroy();
   return 0;

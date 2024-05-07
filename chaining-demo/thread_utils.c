@@ -84,6 +84,7 @@ void dcLatencyCallback(void *pCallbackTag, CpaStatus status){
   if(NULL != pCallbackTag){
     callback_args *args = (callback_args *)pCallbackTag;
     struct COMPLETION_STRUCT *completion = args->completion;
+    PRINT_DBG("Callback called\n");
     COMPLETE(completion);
   }
 }
