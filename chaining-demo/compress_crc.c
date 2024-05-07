@@ -289,30 +289,12 @@ int main(){
          * stateless decompression here because in this scenario we know
          * that all transmitted data before compress was less than some
          * max size */
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = PHYS_CONTIG_ALLOC(&pBufferMetaDst2, bufferMetaSize);
-        }
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = OS_MALLOC(&pBufferListDst2, bufferListMemSize);
-        }
-        if (CPA_STATUS_SUCCESS == status)
-        {
-            status = PHYS_CONTIG_ALLOC(&pDst2Buffer, SAMPLE_MAX_BUFF);
-        }
+        status = createDstBufferList(&pBufferListDst2, dstBufferSize, dcInstHandle, huffType);
+
 
         if (CPA_STATUS_SUCCESS == status)
         {
-            /* Build destination 2 bufferList */
-            pFlatBuffer = (CpaFlatBuffer *)(pBufferListDst2 + 1);
 
-            pBufferListDst2->pBuffers = pFlatBuffer;
-            pBufferListDst2->numBuffers = 1;
-            pBufferListDst2->pPrivateMetaData = pBufferMetaDst2;
-
-            pFlatBuffer->dataLenInBytes = SAMPLE_MAX_BUFF;
-            pFlatBuffer->pData = pDst2Buffer;
 
             PRINT_DBG("cpaDcDecompressData2\n");
 
@@ -382,7 +364,7 @@ int main(){
                 }
 
                 /* Compare with original Src buffer */
-                if (0 == memcmp(pDst2Buffer, pBufferListSrc->pBuffers[0].pData, sampleDataSize))
+                if (0 == memcmp(pBufferListDst2->pBuffers[0].pData, pBufferListSrc->pBuffers[0].pData, sampleDataSize))
                 {
                     PRINT_DBG("Output matches expected output\n");
                 }
