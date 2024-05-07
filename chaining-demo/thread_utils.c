@@ -12,6 +12,7 @@ void *dc_polling(void *args){
   while(gPollingDcs[id]){
     icp_sal_DcPollInstance(dcInstHandle, 0);
   }
+  free(targs);
   pthread_exit(NULL);
 }
 
