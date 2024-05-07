@@ -89,6 +89,16 @@ int main(){
   struct COMPLETION_STRUCT complete;
   callback_args *cb_args = NULL;
   packet_stats *stats = NULL;
+  Cpa64U submitTime;
+
+  CpaCrcData crcData = {0};
+
+  cpaDcQueryCapabilities(dcInstHandle, &cap);
+  if(cap.integrityCrcs64b == CPA_TRUE ){
+    PRINT_DBG("Integrity CRC is enabled\n");
+    opData.integrityCrcCheck = CPA_TRUE;
+    opData.pCrcData = &crcData;
+  }
 
   COMPLETION_INIT(&complete);
   INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
@@ -101,6 +111,7 @@ int main(){
   cb_args->stats = stats;
 
   stats->submitTime = sampleCoderdtsc();
+  submitTime = sampleCoderdtsc();
   status = cpaDcCompressData2(
     dcInstHandle,
     sessionHandle,
@@ -119,6 +130,16 @@ int main(){
       PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
       status = CPA_STATUS_FAIL;
   }
+
+  /* Collect Latencies */
+  Cpa64U latency = stats->receiveTime - stats->submitTime;
+  Cpa64U latencyWithHostTs = stats->receiveTime - submitTime;
+  Cpa32U freqKHz = 2080;
+  double freqMHz = freqKHz / 1000;
+  double latencyInMicroSec = latency / freqMHz;
+  printf("Latency(cycles): %lu\n", latency);
+  printf("Latency(cycles): %lu\n", latencyWithHostTs);
+
   if (CPA_STATUS_SUCCESS == status)
   {
     if (dcResults.status != CPA_DC_OK)
