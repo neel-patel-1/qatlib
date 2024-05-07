@@ -223,6 +223,7 @@ compress_crc_CFLAGS = \
 	-I$(srcdir)/chaining-demo \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
+	-g3 \
 	$(COMMON_FLAGS)
 
 compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la

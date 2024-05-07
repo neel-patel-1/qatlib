@@ -70,21 +70,18 @@ CpaStatus createThread(pthread_t *thread, void *func, void *arg){
     fprintf(stderr, "Enable SCHED_RR Policy\n");
     fprintf(stderr, "Creating thread with default attributes\n");
     pthread_create(thread, NULL, func, arg);
-
+    pthread_detach(*thread);
   }
 
-  pthread_detach(*thread);
 }
 
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status){
   if(CPA_STATUS_SUCCESS != status){
-    fprintf(stderr, "Error in callback\n");
+    PRINT_ERR("Error in callback\n");
   }
 
   if(NULL != pCallbackTag){
-    callback_args *args = (callback_args *)pCallbackTag;
-    struct COMPLETION_STRUCT *completion = args->completion;
     PRINT_DBG("Callback called\n");
-    COMPLETE(completion);
+    COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
   }
 }

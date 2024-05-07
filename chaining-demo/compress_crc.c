@@ -40,12 +40,11 @@ int main(){
   {
       /* Start thread to poll instance */
       pthread_t thread[MAX_INSTANCES];
-      thread_args args = {
-          .dcInstHandle = dcInstHandle,
-          .id = 0,
-
-      };
-      createThread(&thread[0], dc_polling, (void *)&args);
+      thread_args *args = NULL;
+      args = (thread_args *)malloc(sizeof(thread_args));
+      args->dcInstHandle = dcInstHandle;
+      args->id = 0;
+      createThread(&thread[0], dc_polling, (void *)args);
   }
 
   sessionHandle = sessionHandles[0];
@@ -161,12 +160,6 @@ int main(){
     //<snippet name="perfOp">
     COMPLETION_INIT(&complete);
 
-    callback_args *args = NULL;
-    args = malloc(sizeof(callback_args));
-    memset(args, 0, sizeof(callback_args));
-
-    args->completion =  &complete;
-
     status = cpaDcCompressData2(
         dcInstHandle,
         sessionHandle,
@@ -174,7 +167,7 @@ int main(){
         pBufferListDst,     /* destination buffer list */
         &opData,            /* Operational data */
         &dcResults,         /* results structure */
-        (void *)args); /* data sent as is to the callback function*/
+        (void *)&complete); /* data sent as is to the callback function*/
                                 //</snippet>
 
     if (CPA_STATUS_SUCCESS != status)
