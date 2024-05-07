@@ -186,3 +186,9 @@ CpaStatus createThread(pthread_t *thread, void *func, void *arg){
 
   pthread_detach(*thread);
 }
+
+void dcLatencyCallback(void *pCallbackTag, CpaStatus status){
+  if(CPA_STATUS_SUCCESS != status){
+    fprintf(stderr, "Error in callback\n");
+  }
+}

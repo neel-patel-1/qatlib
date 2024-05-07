@@ -27,6 +27,7 @@ CpaStatus allocateIntermediateBuffers(CpaInstanceHandle dcInstHandle,
   Cpa32U *pBuffMetaSize);
 
 CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
+CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle);
 
 typedef struct _thread_args{
   CpaInstanceHandle dcInstHandle;
@@ -34,3 +35,4 @@ typedef struct _thread_args{
 } thread_args;
 void *dc_polling(void *args);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
+void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
