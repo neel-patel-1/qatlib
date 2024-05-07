@@ -11,7 +11,26 @@
 
 int gDebugParam = 1;
 
+CpaStatus prepareTestBufferLists(CpaInstanceHandle dcInstHandle){
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
 
+
+  Cpa16U numBufferLists = 1;
+  Cpa32U bufferSize = 1024;
+  Cpa8U *pBuffers = NULL;
+  CpaDcHuffType huffType = CPA_DC_HT_FULL_DYNAMIC;
+
+  prepareSampleBuffer(&pBuffers, bufferSize);
+
+  OS_MALLOC(&srcBufferLists, numBufferLists * sizeof(CpaBufferList *));
+  OS_MALLOC(&dstBufferLists, numBufferLists * sizeof(CpaBufferList *));
+  for(int i=0; i<numBufferLists; i++){
+    createSourceBufferList(&srcBufferLists[i], pBuffers, bufferSize, dcInstHandle, huffType);
+    createDstBufferList(&dstBufferLists[i], bufferSize, dcInstHandle, huffType);
+  }
+
+}
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
