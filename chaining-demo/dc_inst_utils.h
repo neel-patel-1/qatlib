@@ -1,3 +1,6 @@
+#ifndef DC_INST_UTILS_H
+#define DC_INST_UTILS_H
+
 #include "cpa_types.h"
 #include "icp_sal_user.h"
 #include "cpa.h"
@@ -30,4 +33,14 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
 CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle);
 
 CpaStatus prepareSampleBuffer(Cpa8U **ppBuffer, Cpa32U bufferSize);
-// CpaStatus buildBufferListFromSampleBuffer(Cpa8U *pBuffer, Cpa32U bufferSize, CpaBufferList **pBufferList);
+CpaStatus createDstBufferList(CpaBufferList **ppBufferList, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType);
+CpaStatus createSourceBufferList(CpaBufferList **ppBufferList, Cpa8U *buffer, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType);
+
+
+CpaStatus functionalCompressAndCrc64(CpaInstanceHandle dcInstHandle,
+  CpaDcSessionHandle sessionHandle);
+
+/* Single Flat Buffer BufferList with buffer of bufferSize */
+
+
+#endif
