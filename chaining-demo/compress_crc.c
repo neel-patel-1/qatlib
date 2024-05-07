@@ -69,7 +69,7 @@ int main(){
 
   Cpa32U bufferSize = sampleDataSize;
   Cpa32U dstBufferSize = bufferSize;
-  Cpa32U checksum = 0;
+  Cpa64U checksum = 0;
   Cpa32U numBuffers = 1;
 
   Cpa32U bufferListMemSize =
@@ -160,6 +160,15 @@ int main(){
     //<snippet name="perfOp">
     COMPLETION_INIT(&complete);
 
+    /* enable integrityCrcCheck */
+    cpaDcQueryCapabilities(dcInstHandle, &cap);
+    CpaCrcData crcData = {0};
+    if(cap.integrityCrcs64b == CPA_TRUE ){
+      PRINT_DBG("Integrity CRC is enabled\n");
+      opData.integrityCrcCheck = CPA_TRUE;
+      opData.pCrcData = &crcData;
+    }
+
     status = cpaDcCompressData2(
         dcInstHandle,
         sessionHandle,
@@ -203,10 +212,12 @@ int main(){
         {
             PRINT_DBG("Data consumed %d\n", dcResults.consumed);
             PRINT_DBG("Data produced %d\n", dcResults.produced);
+            PRINT_DBG("Uncompressed CRC64 0x%lx\n", crcData.integrityCrc64b.iCrc);
+            PRINT_DBG("Compressed CRC64 0x%lx\n", crcData.integrityCrc64b.oCrc);
             PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
         }
         /* To compare the checksum with decompressed output */
-        checksum = dcResults.checksum;
+        checksum = crcData.integrityCrc64b.iCrc;
     }
   }
   /*

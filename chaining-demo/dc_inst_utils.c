@@ -95,6 +95,9 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle){
   {
       allocateIntermediateBuffers(dcInstHandle, &bufferInterArray, &numInterBuffLists, &buffMetaSize);
   }
+  if(cap.integrityCrcs64b){
+    PRINT_DBG("Integrity CRC is enabled\n");
+  }
   if (CPA_STATUS_SUCCESS == status)
   {
       /*
