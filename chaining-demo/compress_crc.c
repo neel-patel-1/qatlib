@@ -212,9 +212,12 @@ int main(){
         {
             PRINT_DBG("Data consumed %d\n", dcResults.consumed);
             PRINT_DBG("Data produced %d\n", dcResults.produced);
-            PRINT_DBG("Uncompressed CRC64 0x%lx\n", crcData.integrityCrc64b.iCrc);
-            PRINT_DBG("Compressed CRC64 0x%lx\n", crcData.integrityCrc64b.oCrc);
-            PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+            if(cap.integrityCrcs64b == CPA_TRUE){
+              PRINT_DBG("Uncompressed CRC64 0x%lx\n", crcData.integrityCrc64b.iCrc);
+              PRINT_DBG("Compressed CRC64 0x%lx\n", crcData.integrityCrc64b.oCrc);
+            } else {
+              PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+            }
         }
         /* To compare the checksum with decompressed output */
         checksum = crcData.integrityCrc64b.iCrc;
@@ -267,6 +270,7 @@ int main(){
               opData.pCrcData = &dCrcData;
             }
 
+
             //<snippet name="perfOpDecomp">
             status = cpaDcDecompressData2(
                 dcInstHandle,
@@ -316,7 +320,12 @@ int main(){
                 {
                     PRINT_DBG("Data consumed %d\n", dcResults.consumed);
                     PRINT_DBG("Data produced %d\n", dcResults.produced);
-                    PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+                    if(cap.integrityCrcs64b == CPA_TRUE){
+                      PRINT_DBG("Uncompressed CRC64 0x%lx\n", dCrcData.integrityCrc64b.oCrc);
+                      PRINT_DBG("Compressed CRC64 0x%lx\n", dCrcData.integrityCrc64b.iCrc);
+                    } else {
+                      PRINT_DBG("Adler checksum 0x%x\n", dcResults.checksum);
+                    }
                 }
 
                 /* Compare with original Src buffer */
