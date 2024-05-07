@@ -260,6 +260,13 @@ int main(){
 
             PRINT_DBG("cpaDcDecompressData2\n");
 
+            CpaCrcData dCrcData = {0};
+
+            if(cap.integrityCrcs64b == CPA_TRUE ){
+              opData.integrityCrcCheck = CPA_TRUE;
+              opData.pCrcData = &dCrcData;
+            }
+
             //<snippet name="perfOpDecomp">
             status = cpaDcDecompressData2(
                 dcInstHandle,
@@ -322,7 +329,7 @@ int main(){
                     PRINT_ERR("Output does not match expected output\n");
                     status = CPA_STATUS_FAIL;
                 }
-                if (checksum == dcResults.checksum)
+                if (checksum == dCrcData.integrityCrc64b.oCrc)
                 {
                     PRINT_DBG("Checksums match after compression and "
                               "decompression\n");
