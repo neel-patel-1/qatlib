@@ -178,6 +178,9 @@ dc_dp_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/sample_
 	$(COMMON_FLAGS)
 dc_dp_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) libcpa_sample_code_s.la
 
+
+
+
 noinst_PROGRAMS += dc_stateless_sample
 dc_stateless_sample_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c \
@@ -206,6 +209,16 @@ chaining_sample_CFLAGS = -I$(srcdir)/quickassist/lookaside/access_layer/src/samp
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS)
 chaining_sample_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la
+
+noinst_PROGRAMS += compress_crc
+compress_crc_SOURCES = \
+	chaining-demo/compress_crc.c
+compress_crc_CFLAGS = \
+	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
+	$(COMMON_SAMPLE_INCLUDES) \
+	$(COMMON_SAMPLE_CFLAGS) \
+	$(COMMON_FLAGS)
+compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la
 
 noinst_PROGRAMS += dc_stateless_multi_op_sample
 dc_stateless_multi_op_sample_SOURCES = \
@@ -393,13 +406,15 @@ samples: $(lib_LTLIBRARIES) cpa_sample_code dc_dp_sample dc_stateless_sample \
 	dc_stateless_multi_op_sample algchaining_sample ccm_sample \
 	cipher_sample gcm_sample hash_file_sample hash_sample ipsec_sample \
 	ssl_sample sym_dp_sample dh_sample prime_sample hkdf_sample \
-	ec_montedwds_sample eddsa_sample chaining_sample zuc_sample
+	ec_montedwds_sample eddsa_sample chaining_sample zuc_sample \
+	compress_crc
 
 samples-install: samples
 	@install -D -m 755 $(srcdir)/.libs/cpa_sample_code $(DESTDIR)$(bindir)/cpa_sample_code
 	@install -D -m 755 $(srcdir)/.libs/dc_dp_sample $(DESTDIR)$(bindir)/dc_dp_sample
 	@install -D -m 755 $(srcdir)/.libs/dc_stateless_sample $(DESTDIR)$(bindir)/dc_stateless_sample
 	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/chaining_sample
+	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/compress_crc
 	@install -D -m 755 $(srcdir)/.libs/dc_stateless_multi_op_sample $(DESTDIR)$(bindir)/dc_stateless_multi_op_sample
 	@install -D -m 755 $(srcdir)/.libs/algchaining_sample $(DESTDIR)$(bindir)/algchaining_sample
 	@install -D -m 755 $(srcdir)/.libs/ccm_sample $(DESTDIR)$(bindir)/ccm_sample

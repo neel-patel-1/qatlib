@@ -13,6 +13,8 @@ extern void qaeMemDestroy(void);
 #define MAX_INSTANCES 1
 #define SAMPLE_MAX_BUFF 1024
 
+extern int gDebugParam;
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -102,6 +104,21 @@ int main(){
           }
 
       } /* End numInterBuffLists */
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      /*
+        * Set the address translation function for the instance
+        */
+      status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+  }
+
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      /* Start DataCompression component */
+      PRINT_DBG("cpaDcStartInstance\n");
+      status = cpaDcStartInstance(
+          dcInstHandle, numInterBuffLists, bufferInterArray);
   }
 
 
