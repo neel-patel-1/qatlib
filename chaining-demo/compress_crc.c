@@ -216,7 +216,7 @@ int main(){
   callback_args **cb_args = NULL;
   packet_stats **stats = NULL;
   Cpa64U submitTime;
-  Cpa32U numOperations = 2;
+  Cpa32U numOperations = 1000;
   Cpa32U bufferSize = 1024;
 
   CpaCrcData *crcData = NULL;
@@ -266,7 +266,7 @@ int main(){
 
 
   for(int i=0; i<numOperations; i++){
-    submitAndStamp(
+    status = submitAndStamp(
       dcInstHandle,
       sessionHandle,
       srcBufferLists[i],
@@ -276,6 +276,10 @@ int main(){
       cb_args[i],
       i
     );
+    if(status != CPA_STATUS_SUCCESS){
+      fprintf(stderr, "Error in compress data on %d'th packet\n", i);
+      goto exit;
+    }
   }
 
   if(status != CPA_STATUS_SUCCESS){
