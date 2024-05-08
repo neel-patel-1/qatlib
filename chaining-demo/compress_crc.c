@@ -105,7 +105,16 @@ CpaStatus validateCompressAndCrc64(
     uint64_t crc64_orig = crcData->integrityCrc64b.iCrc;
     ret = memcmp(&crc64, &crc64_orig, sizeof(uint64_t));
     if(ret != 0){
-      PRINT_ERR("CRC64 does not match\n");
+      PRINT_ERR("Src CRC64 does not match\n");
+      status = CPA_STATUS_FAIL;
+    }
+
+    crc64 = crc64_be(0L, Z_NULL, 0);
+    crc64 = crc64_be(crc64, dstBufferList->pBuffers[0].pData, dcResults->produced);
+    crc64_orig = crcData->integrityCrc64b.oCrc;
+    ret = memcmp(&crc64, &crc64_orig, sizeof(uint64_t));
+    if(ret != 0){
+      PRINT_ERR("Dst CRC64 does not match\n");
       status = CPA_STATUS_FAIL;
     }
   }
@@ -241,12 +250,10 @@ int main(){
 
   /* Collect Latencies */
   Cpa64U latency = stats->receiveTime - stats->submitTime;
-  Cpa64U latencyWithHostTs = stats->receiveTime - submitTime;
   Cpa32U freqKHz = 2080;
-  double freqMHz = freqKHz / 1000;
-  double latencyInMicroSec = latency / freqMHz;
+  uint64_t micros = latency / freqKHz;
   printf("Latency(cycles): %lu\n", latency);
-  printf("Latency(cycles): %lu\n", latencyWithHostTs);
+  printf("Latency(us): %lu\n", micros);
 
   if (CPA_STATUS_SUCCESS == status)
   {
