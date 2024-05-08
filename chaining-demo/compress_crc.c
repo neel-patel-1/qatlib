@@ -292,7 +292,7 @@ retry:
 }
 
 CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
-  Cpa32U numOperations, Cpa32U bufferSize, packet_stats ***ppStats
+  Cpa32U numOperations, Cpa32U bufferSize, packet_stats ***ppStats, pthread_barrier_t *barrier
   ){
     CpaDcInstanceCapabilities cap = {0};
     CpaDcOpData **opData = NULL;
@@ -318,6 +318,8 @@ CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSe
       &dstBufferLists,
       dcInstHandle,
       &complete);
+
+    pthread_barrier_wait(barrier);
     CpaStatus status = doSubmissionsCompressAndCrc64AndWaitForFinal(
       dcInstHandle,
       sessionHandle,
@@ -347,7 +349,8 @@ void *streamFn(void *arg){
     args->sessionHandle,
     args->numOperations,
     args->bufferSize,
-    args->pArrayPacketStatsPtrs /*For communicating stats to caller */
+    args->pArrayPacketStatsPtrs, /*For communicating stats to caller */
+    args->pthread_barrier /* for synchronizing before starting submissions */
   );
 }
 
@@ -408,6 +411,9 @@ int main(){
 
   pthread_t subThreads[numFlows];
   packet_stats **arrayOfPacketStatsArrayPointers[numFlows];
+  pthread_barrier_t *pthread_barrier = NULL;
+  pthread_barrier = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
+  pthread_barrier_init(pthread_barrier, NULL, numFlows);
   for(int i=0; i<numFlows; i++){
     submitter_args *submitterArgs = NULL;
     OS_MALLOC(&submitterArgs, sizeof(submitter_args));
@@ -416,6 +422,7 @@ int main(){
     submitterArgs->numOperations = numOperations;
     submitterArgs->bufferSize = bufferSize;
     submitterArgs->pArrayPacketStatsPtrs = &(arrayOfPacketStatsArrayPointers[i]);
+    submitterArgs->pthread_barrier = pthread_barrier;
     createThreadJoinable(&(subThreads[i]), streamFn, (void *)submitterArgs);
   }
 
