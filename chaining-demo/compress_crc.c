@@ -124,6 +124,45 @@ CpaStatus validateCompressAndCrc64(
 
 }
 
+CpaStatus validateCompress(
+  CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize)
+{
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  /* Check the Buffer matches*/
+  z_stream *stream;
+  stream = malloc(sizeof(z_stream));
+  stream->zalloc = Z_NULL;
+  stream->zfree = Z_NULL;
+  stream->opaque = Z_NULL;
+  status = inflateInit(stream);
+  if (status != Z_OK)
+  {
+      PRINT_ERR("Error in zlib_inflateInit2, ret = %d\n", status);
+      return CPA_STATUS_FAIL;
+  }
+
+  Bytef *tmpBuf = NULL;
+  OS_MALLOC(&tmpBuf, bufferSize);
+
+  stream->next_in = (Bytef *)dstBufferList->pBuffers[0].pData;
+  stream->avail_in = dcResults->produced;
+  stream->next_out = (Bytef *)tmpBuf;
+  stream->avail_out = bufferSize;
+  int ret = inflate(stream, Z_FULL_FLUSH);
+
+  inflateEnd(stream);
+
+  ret = memcmp(srcBufferList->pBuffers[0].pData, tmpBuf, bufferSize);
+  if(ret != 0){
+    PRINT_ERR("Buffer data does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+  return status;
+}
+
 CpaStatus prepareTestBufferLists(CpaBufferList ***pSrcBufferLists, CpaBufferList ***pDstBufferLists,
   CpaInstanceHandle dcInstHandle, Cpa32U bufferSize, Cpa32U numBufferLists){
 
@@ -480,8 +519,11 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
+  /* Keep a dcinst handle for obtaining buffers with hw compress bounds and compatibility/ function reuse*/
+  dcInstHandle = dcInstHandles[0];
+
   /* Get test buffers and perf stats setup */
-  Cpa32U numOperations = 1000;
+  Cpa32U numOperations = 2;
   Cpa32U bufferSize = 1024;
   CpaDcOpData **opData = NULL;
   CpaDcRqResults **dcResults = NULL;
@@ -493,6 +535,7 @@ int main(){
   CpaBufferList **dstBufferLists = NULL;
   cpaDcQueryCapabilities(dcInstHandle, &cap);
   COMPLETION_INIT(&complete);
+  prepareDcInst(&dcInstHandle);
 
   multiBufferTestAllocations(&cb_args,
     &stats,
@@ -508,31 +551,48 @@ int main(){
     &complete);
 
   int ret;
-  z_stream strm;
-  memset(&strm, 0, sizeof(z_stream));
-  deflateInit(&strm, Z_DEFAULT_COMPRESSION);
-  if(ret != Z_OK)
-  {
-    fprintf(stderr, "Error in deflateInit, ret = %d\n", ret);
-    return CPA_STATUS_FAIL;
+
+  for(int i=0; i<numOperations; i++){
+    stats[i]->submitTime = sampleCoderdtsc();
+
+    z_stream strm;
+    memset(&strm, 0, sizeof(z_stream));
+    ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
+    if(ret != Z_OK)
+    {
+      fprintf(stderr, "Error in deflateInit, ret = %d\n", ret);
+      return CPA_STATUS_FAIL;
+    }
+
+    Cpa8U *src = srcBufferLists[i]->pBuffers[0].pData;
+    Cpa32U srcLen = srcBufferLists[i]->pBuffers->dataLenInBytes;
+    Cpa8U *dst = dstBufferLists[i]->pBuffers[0].pData;
+    Cpa32U dstLen = dstBufferLists[i]->pBuffers->dataLenInBytes;
+
+    strm.avail_in = srcLen;
+    strm.next_in = (Bytef *)src;
+    strm.avail_out = dstLen;
+    strm.next_out = (Bytef *)dst;
+    ret = deflate(&strm, Z_FINISH);
+    if(ret != Z_STREAM_END)
+    {
+      fprintf(stderr, "Error in deflate, ret = %d\n", ret);
+      return CPA_STATUS_FAIL;
+    }
+    dcResults[i]->produced = strm.total_out;
+    // deflateEnd(&strm);
+
+    stats[i]->receiveTime = sampleCoderdtsc();
   }
-  Cpa8U *src = srcBufferLists[0]->pBuffers[0].pData;
-  Cpa32U srcLen = srcBufferLists[0]->pBuffers->dataLenInBytes;
-  Cpa8U *dst = dstBufferLists[0]->pBuffers[0].pData;
-  Cpa32U dstLen = dstBufferLists[0]->pBuffers->dataLenInBytes;
 
-  strm.avail_in = srcLen;
-  strm.next_in = (Bytef *)src;
-  strm.avail_out = dstLen;
-  strm.next_out = (Bytef *)dst;
-  ret = deflate(&strm, Z_FINISH);
-  if(ret != Z_OK && ret != Z_STREAM_END)
-  {
-    fprintf(stderr, "Error in deflate, ret = %d\n", ret);
-    return CPA_STATUS_FAIL;
+  printStats(stats, numOperations, bufferSize);
+
+  for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize))
+    {
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
   }
-
-
 
 
 exit:
