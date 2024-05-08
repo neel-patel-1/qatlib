@@ -401,6 +401,67 @@ void createCompressCrc64Submitter(
   createThreadJoinable(threadId, streamFn, (void *)submitterArgs);
 }
 
+void printMultiThreadStats(packet_stats ***arrayOfPacketStatsArrayPointers, Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize){
+  printf("--------------------------------------\n");
+  printf("BufferSize: %d\n", bufferSize);
+  printf("NumOperations: %d\n", numOperations);
+  printf("--------------------------------------\n");
+  for(int i=0; i<numFlows; i++){
+    printf("--------------------------------------\n");
+    printf("Flow: %d\n", i);
+    printStats((arrayOfPacketStatsArrayPointers[i]), numOperations, bufferSize);
+  }
+  printf("--------------------------------------\n");
+}
+
+void multiStreamCompressCrc64PerformanceTest(
+  Cpa32U numFlows,
+  Cpa32U numOperations,
+  Cpa32U bufferSize,
+  CpaInstanceHandle *dcInstHandles,
+  CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances
+)
+{
+  /* multiple instance for latency test */
+  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numFlows);
+
+  /* Create Polling Threads */
+  pthread_t thread[numFlows];
+  for(int i=0; i<numFlows; i++){
+    createCompressCrc64Poller(dcInstHandles[i], i, &(thread[i]));
+  }
+
+  /* Create submitting threads */
+  pthread_t subThreads[numFlows];
+  packet_stats **arrayOfPacketStatsArrayPointers[numFlows];
+  pthread_barrier_t *pthread_barrier = NULL;
+  pthread_barrier = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
+  pthread_barrier_init(pthread_barrier, NULL, numFlows);
+  for(int i=0; i<numFlows; i++){
+    createCompressCrc64Submitter(
+      dcInstHandles[i],
+      sessionHandles[i],
+      numOperations,
+      bufferSize,
+      &(arrayOfPacketStatsArrayPointers[i]),
+      pthread_barrier,
+      &(subThreads[i])
+    );
+  }
+
+  /* Join Submitting Threads -- and terminate associated polling thread busy wait loops*/
+  for(int i=0; i<numFlows; i++){
+    pthread_join(subThreads[i], NULL);
+    gPollingDcs[i] = 0;
+  }
+
+  /*  Print Stats */
+  for(int i=0; i<numFlows; i++){
+    printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
+  }
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -424,56 +485,17 @@ int main(){
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 1024;
 
-  /* multiple instance for latency test */
-  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numFlows);
-
-  pthread_t thread[numFlows];
-  for(int i=0; i<numFlows; i++){
-    createCompressCrc64Poller(dcInstHandles[i], i, &(thread[i]));
-  }
-
-  pthread_t subThreads[numFlows];
-  packet_stats **arrayOfPacketStatsArrayPointers[numFlows];
-  pthread_barrier_t *pthread_barrier = NULL;
-  pthread_barrier = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
-  pthread_barrier_init(pthread_barrier, NULL, numFlows);
-  for(int i=0; i<numFlows; i++){
-    // submitter_args *submitterArgs = NULL;
-    // OS_MALLOC(&submitterArgs, sizeof(submitter_args));
-    // submitterArgs->dcInstHandle = dcInstHandles[i];
-    // submitterArgs->sessionHandle = sessionHandles[i];
-    // submitterArgs->numOperations = numOperations;
-    // submitterArgs->bufferSize = bufferSize;
-    // submitterArgs->pArrayPacketStatsPtrs = &(arrayOfPacketStatsArrayPointers[i]);
-    // submitterArgs->pthread_barrier = pthread_barrier;
-    // createThreadJoinable(&(subThreads[i]), streamFn, (void *)submitterArgs);
-    createCompressCrc64Submitter(
-      dcInstHandles[i],
-      sessionHandles[i],
-      numOperations,
-      bufferSize,
-      &(arrayOfPacketStatsArrayPointers[i]),
-      pthread_barrier,
-      &(subThreads[i])
-    );
-  }
+  multiStreamCompressCrc64PerformanceTest(
+    numFlows,
+    numOperations,
+    bufferSize,
+    dcInstHandles,
+    sessionHandles,
+    numInstances
+  );
 
 
-  for(int i=0; i<numFlows; i++){
-    pthread_join(subThreads[i], NULL);
-    gPollingDcs[i] = 0;
-  }
 
-  printf("--------------------------------------\n");
-  printf("BufferSize: %d\n", bufferSize);
-  printf("NumOperations: %d\n", numOperations);
-  printf("--------------------------------------\n");
-  for(int i=0; i<numFlows; i++){
-    printf("--------------------------------------\n");
-    printf("Flow: %d\n", i);
-    printStats((arrayOfPacketStatsArrayPointers[i]), numOperations, bufferSize);
-  }
-  printf("--------------------------------------\n");
 
 exit:
 
