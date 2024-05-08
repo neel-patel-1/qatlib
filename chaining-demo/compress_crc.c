@@ -340,6 +340,17 @@ CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSe
     COMPLETION_DESTROY(&complete);
 }
 
+
+void *streamFn(void *arg){
+  submitter_args *args = (submitter_args *)arg;
+  singleStreamOfCompressAndCrc64(
+    args->dcInstHandle,
+    args->sessionHandle,
+    args->numOperations,
+    args->bufferSize
+  );
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -384,18 +395,23 @@ int main(){
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 1024;
 
-  singleStreamOfCompressAndCrc64(
-    dcInstHandle,
-    sessionHandle,
-    numOperations,
-    bufferSize
-  );
+  pthread_t subThread;
+  submitter_args *submitterArgs = NULL;
+  OS_MALLOC(&submitterArgs, sizeof(submitter_args));
+  submitterArgs->dcInstHandle = dcInstHandle;
+  submitterArgs->sessionHandle = sessionHandle;
+  submitterArgs->numOperations = numOperations;
+  submitterArgs->bufferSize = bufferSize;
+
+  createThread(&subThread, streamFn, (void *)submitterArgs);
 
 
 exit:
+  while(1){}
 
 
   gPollingDcs[0] = 0;
+
 
 
   icp_sal_userStop();

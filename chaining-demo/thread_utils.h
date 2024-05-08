@@ -33,6 +33,13 @@ typedef struct _callback_args{
   packet_stats **stats;
 } callback_args;
 
+typedef struct _submit_td_args{
+  CpaInstanceHandle *dcInstHandle;
+  CpaDcSessionHandle *sessionHandle;
+  Cpa32U numOperations;
+  Cpa32U bufferSize;
+} submitter_args;
+
 void *dc_polling(void *args);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
