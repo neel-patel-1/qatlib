@@ -13,6 +13,7 @@
 #include "thread_utils.h"
 #include <pthread.h>
 
+
 #define MAX_INSTANCES 16
 #define SAMPLE_MAX_BUFF 1024
 
@@ -42,6 +43,9 @@ CpaStatus functionalCompressAndCrc64(CpaInstanceHandle dcInstHandle,
   CpaDcSessionHandle sessionHandle);
 
 /* Single Flat Buffer BufferList with buffer of bufferSize */
+
+
+
 
 
 #endif

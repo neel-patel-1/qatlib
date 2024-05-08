@@ -226,7 +226,7 @@ compress_crc_CFLAGS = \
 	-g3 \
 	$(COMMON_FLAGS)
 
-compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la
+compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la -lz
 
 noinst_PROGRAMS += dc_stateless_multi_op_sample
 dc_stateless_multi_op_sample_SOURCES = \
