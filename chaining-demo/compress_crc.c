@@ -18,10 +18,54 @@ int gDebugParam = 1;
 
 #include <zlib.h>
 
+CpaStatus validateCompressAndCrc64Sw(
+  CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize,
+  CpaCrcData *crcData)
+{
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  /* Check the Buffer matches*/
+  z_stream *stream;
+  stream = malloc(sizeof(z_stream));
+  stream->zalloc = Z_NULL;
+  stream->zfree = Z_NULL;
+  stream->opaque = Z_NULL;
+  status = inflateInit(stream);
+  if (status != Z_OK)
+  {
+      PRINT_ERR("Error in zlib_inflateInit2, ret = %d\n", status);
+      return CPA_STATUS_FAIL;
+  }
+
+  Bytef *tmpBuf = NULL;
+  OS_MALLOC(&tmpBuf, bufferSize);
+
+  stream->next_in = (Bytef *)dstBufferList->pBuffers[0].pData;
+  stream->avail_in = dcResults->produced;
+  stream->next_out = (Bytef *)tmpBuf;
+  stream->avail_out = bufferSize;
+  int ret = inflate(stream, Z_FULL_FLUSH);
+
+  inflateEnd(stream);
+
+  ret = memcmp(srcBufferList->pBuffers[0].pData, tmpBuf, bufferSize);
+  if(ret != 0){
+    PRINT_ERR("Buffer data does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+  return status;
+}
+
 /* resets the stream after each compression */
 CpaStatus deflateCompressAndTimestamp(
   CpaBufferList *pBufferListSrc,
-  CpaBufferList *pBufferListDst, CpaDcRqResults *pDcResults, int index, callback_args *cb_args
+  CpaBufferList *pBufferListDst,
+  CpaDcRqResults *pDcResults,
+  int index,
+  callback_args *cb_args,
+  CpaCrcData *crcData
 ){
   z_stream strm;
   int ret;
@@ -49,6 +93,10 @@ CpaStatus deflateCompressAndTimestamp(
     return CPA_STATUS_FAIL;
   }
   pDcResults->produced = strm.total_out;
+
+  Cpa64U crc64 = crc64_be(0, Z_NULL, 0);
+  crc64 = crc64_be(crc64, dst, strm.total_out);
+  crcData->integrityCrc64b.oCrc = crc64;
 
   stats->receiveTime = sampleCoderdtsc();
 
@@ -104,20 +152,9 @@ int main(){
     dcInstHandle,
     &complete);
 
-
-  multiStreamCompressCrc64PerformanceTest(
-    1,
-    numOperations,
-    bufferSize,
-    dcInstHandles,
-    sessionHandles,
-    numInstances
-  );
-
-
   for(int i=0; i<numOperations; i++){
     if(CPA_STATUS_SUCCESS != deflateCompressAndTimestamp(
-      srcBufferLists[i], dstBufferLists[i], dcResults[i], i, cb_args[i])){
+      srcBufferLists[i], dstBufferLists[i], dcResults[i], i, cb_args[i], &crcData[i])){
       PRINT_ERR("Error in compress data on %d'th packet\n", i);
     }
   }
@@ -125,7 +162,7 @@ int main(){
   printStats(stats, numOperations, bufferSize);
 
   for(int i=0; i<numOperations; i++){
-    if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize))
+    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64Sw(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize, &(crcData[i])))
     {
       PRINT_ERR("Buffer not compressed/decompressed correctly\n");
     }
