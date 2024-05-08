@@ -27,8 +27,10 @@ typedef struct _packet_stats{
 } packet_stats;
 
 typedef struct _callback_args{
+  Cpa32U completedOperations; /* number of offloads completed */
+  Cpa32U numOperations; /* number of offloads to complete*/
   struct COMPLETION_STRUCT *completion; /* Use this to communicate last offload completion */
-  packet_stats *stats;
+  packet_stats **stats;
 } callback_args;
 
 void *dc_polling(void *args);

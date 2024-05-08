@@ -94,9 +94,15 @@ void dcPerfCallback(void *pCallbackTag, CpaStatus status){
 
   if(NULL != pCallbackTag){
     callback_args *args = (callback_args *)pCallbackTag;
-    packet_stats *stats = args->stats;
+    packet_stats *stats = args->stats[args->completedOperations];
+
     stats->receiveTime = sampleCoderdtsc();
-    PRINT_DBG("Callback called\n");
-    COMPLETE((struct COMPLETION_STRUCT *)(args->completion));
+    args->completedOperations++;
+
+    if(args->completedOperations == args->numOperations){
+      PRINT_DBG("All operations completed\n");
+      COMPLETE((struct COMPLETION_STRUCT *)(args->completion));
+    }
+
   }
 }

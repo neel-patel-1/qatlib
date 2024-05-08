@@ -220,8 +220,9 @@ int main(){
 
   struct COMPLETION_STRUCT complete;
   callback_args *cb_args = NULL;
-  packet_stats *stats = NULL;
+  packet_stats **stats = NULL;
   Cpa64U submitTime;
+  Cpa32U numOperations = 1;
 
   CpaCrcData crcData = {0};
 
@@ -237,23 +238,20 @@ int main(){
   PHYS_CONTIG_ALLOC(&cb_args, sizeof(struct _callback_args));
   memset(cb_args, 0, sizeof(struct _callback_args));
 
-  PHYS_CONTIG_ALLOC(&stats, sizeof(packet_stats));
-  memset(stats, 0, sizeof(packet_stats));
+  PHYS_CONTIG_ALLOC(&stats, sizeof(packet_stats*) * numOperations);
+  for(int i=0; i<numOperations; i++){
+    PHYS_CONTIG_ALLOC(&(stats[i]), sizeof(packet_stats));
+    memset(stats[i], 0, sizeof(packet_stats));
+  }
+
   cb_args->completion = &complete;
   cb_args->stats = stats;
+  cb_args->completedOperations = 0;
+  cb_args->numOperations = numOperations;
 
-  submitAndStamp(dcInstHandle, sessionHandle, pBufferListSrc, pBufferListDst, &opData, pDcResults, cb_args);
-
-  // stats->submitTime = sampleCoderdtsc();
-  // submitTime = sampleCoderdtsc();
-  // status = cpaDcCompressData2(
-  //   dcInstHandle,
-  //   sessionHandle,
-  //   pBufferListSrc,     /* source buffer list */
-  //   pBufferListDst,     /* destination buffer list */
-  //   &opData,            /* Operational data */
-  //   &dcResults,         /* results structure */
-  //   (void *)cb_args); /* data sent as is to the callback function*/
+  for(int i=0; i<numOperations; i++){
+    submitAndStamp(dcInstHandle, sessionHandle, pBufferListSrc, pBufferListDst, &opData, pDcResults, cb_args);
+  }
 
   if(status != CPA_STATUS_SUCCESS){
     fprintf(stderr, "Error in compress data\n");
@@ -270,7 +268,7 @@ int main(){
   }
 
   /* Collect Latencies */
-  Cpa64U latency = stats->receiveTime - stats->submitTime;
+  Cpa64U latency = stats[0]->receiveTime - stats[0]->submitTime;
   Cpa32U freqKHz = 2080;
   uint64_t micros = latency / freqKHz;
   printf("Latency(cycles): %lu\n", latency);
