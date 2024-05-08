@@ -165,7 +165,6 @@ void syncSwComp(void *args){
     }
   }
 
-  // printStats(stats, numOperations, bufferSize);
   *(sw_args->pCallerStatsArrayPtrIndex) = stats;
 
   for(int i=0; i<numOperations; i++){
@@ -176,6 +175,32 @@ void syncSwComp(void *args){
   }
 
   return;
+}
+
+void multiStreamSwCompressCrc64Func(Cpa32U numOperations, Cpa32U bufferSize,
+  Cpa32U numStreams, CpaInstanceHandle dcInstHandle){
+
+  pthread_barrier_t barrier;
+  pthread_t threads[numStreams];
+
+  packet_stats **stats[numStreams];
+  pthread_barrier_init(&barrier, NULL, numStreams);
+  for(int i=0; i<numStreams; i++){
+    sw_comp_args *args = NULL;
+    OS_MALLOC(&args, sizeof(sw_comp_args));
+    args->numOperations = numOperations;
+    args->bufferSize = bufferSize;
+    args->dcInstHandle = dcInstHandle;
+    args->startSync = &barrier;
+    args->pCallerStatsArrayPtrIndex = &stats[i];
+    createThreadJoinable(&threads[i], syncSwComp, (void *)args);
+  }
+  for(int i=0; i<numStreams; i++){
+    pthread_join(threads[i], NULL);
+  }
+  printf("--------------------------------------------\n");
+  printf("Sw Deflate + Sw CRC 64\n");
+  printMultiThreadStats(stats, numStreams, numOperations, bufferSize);
 }
 
 int main(){
@@ -201,30 +226,7 @@ int main(){
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandles[0]);
 
-  Cpa32U numOperations = 10000;
-  Cpa32U bufferSize = 1024;
-  Cpa32U numStreams = 2;
-
-  pthread_barrier_t barrier;
-  pthread_t threads[numStreams];
-
-  packet_stats **stats[numStreams];
-  pthread_barrier_init(&barrier, NULL, numStreams);
-  for(int i=0; i<numStreams; i++){
-    sw_comp_args *args = NULL;
-    OS_MALLOC(&args, sizeof(sw_comp_args));
-    args->numOperations = numOperations;
-    args->bufferSize = bufferSize;
-    args->dcInstHandle = dcInstHandle;
-    args->startSync = &barrier;
-    args->pCallerStatsArrayPtrIndex = &stats[i];
-    createThreadJoinable(&threads[i], syncSwComp, (void *)args);
-  }
-
-  for(int i=0; i<numStreams; i++){
-    pthread_join(threads[i], NULL);
-  }
-  printMultiThreadStats(stats, numStreams, numOperations, bufferSize);
+  multiStreamSwCompressCrc64Func(10000, 1024, 8, dcInstHandle);
 
 exit:
 
