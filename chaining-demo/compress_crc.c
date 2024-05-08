@@ -517,7 +517,22 @@ int main(){
     return CPA_STATUS_FAIL;
   }
   Cpa8U *src = srcBufferLists[0]->pBuffers[0].pData;
+  Cpa32U srcLen = srcBufferLists[0]->pBuffers->dataLenInBytes;
   Cpa8U *dst = dstBufferLists[0]->pBuffers[0].pData;
+  Cpa32U dstLen = dstBufferLists[0]->pBuffers->dataLenInBytes;
+
+  strm.avail_in = srcLen;
+  strm.next_in = (Bytef *)src;
+  strm.avail_out = dstLen;
+  strm.next_out = (Bytef *)dst;
+  ret = deflate(&strm, Z_FINISH);
+  if(ret != Z_OK && ret != Z_STREAM_END)
+  {
+    fprintf(stderr, "Error in deflate, ret = %d\n", ret);
+    return CPA_STATUS_FAIL;
+  }
+
+
 
 
 exit:
