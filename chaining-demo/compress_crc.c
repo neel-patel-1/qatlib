@@ -125,13 +125,11 @@ CpaStatus validateCompressAndCrc64(
 }
 
 CpaStatus prepareTestBufferLists(CpaBufferList ***pSrcBufferLists, CpaBufferList ***pDstBufferLists,
-  CpaInstanceHandle dcInstHandle, Cpa32U bufferSize){
+  CpaInstanceHandle dcInstHandle, Cpa32U bufferSize, Cpa32U numBufferLists){
 
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
 
-
-  Cpa16U numBufferLists = 1;
   Cpa8U *pBuffers = NULL;
   CpaDcHuffType huffType = CPA_DC_HT_FULL_DYNAMIC;
 
@@ -148,10 +146,10 @@ CpaStatus prepareTestBufferLists(CpaBufferList ***pSrcBufferLists, CpaBufferList
 }
 
 CpaStatus submitAndStamp(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle, CpaBufferList *pBufferListSrc,
-  CpaBufferList *pBufferListDst, CpaDcOpData *opData, CpaDcRqResults *pDcResults, callback_args *cb_args){
+  CpaBufferList *pBufferListDst, CpaDcOpData *opData, CpaDcRqResults *pDcResults, callback_args *cb_args, int index){
 
   CpaStatus status = CPA_STATUS_SUCCESS;
-  packet_stats *stats = cb_args->stats;
+  packet_stats *stats = cb_args->stats[index];
   Cpa64U submitTime = sampleCoderdtsc();
   stats->submitTime = submitTime;
   status = cpaDcCompressData2(
@@ -210,47 +208,74 @@ int main(){
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
 
-  prepareTestBufferLists(&srcBufferLists, &dstBufferLists, dcInstHandles[0], 1024);
 
-  CpaBufferList *pBufferListSrc = srcBufferLists[0];
-  CpaBufferList *pBufferListDst = dstBufferLists[0];
-  CpaDcOpData opData = {};
-  CpaDcRqResults dcResults;
-  CpaDcRqResults *pDcResults = &dcResults;
+  CpaDcOpData *opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
 
   struct COMPLETION_STRUCT complete;
-  callback_args *cb_args = NULL;
+  callback_args **cb_args = NULL;
   packet_stats **stats = NULL;
   Cpa64U submitTime;
-  Cpa32U numOperations = 1;
+  Cpa32U numOperations = 2;
+  Cpa32U bufferSize = 1024;
 
-  CpaCrcData crcData = {0};
+  CpaCrcData *crcData = NULL;
 
   cpaDcQueryCapabilities(dcInstHandle, &cap);
-  if(cap.integrityCrcs64b == CPA_TRUE ){
-    PRINT_DBG("Integrity CRC is enabled\n");
-    opData.integrityCrcCheck = CPA_TRUE;
-    opData.pCrcData = &crcData;
-  }
-
   COMPLETION_INIT(&complete);
-  INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
-  PHYS_CONTIG_ALLOC(&cb_args, sizeof(struct _callback_args));
-  memset(cb_args, 0, sizeof(struct _callback_args));
-
   PHYS_CONTIG_ALLOC(&stats, sizeof(packet_stats*) * numOperations);
+  PHYS_CONTIG_ALLOC(&(crcData), sizeof(CpaCrcData) * numOperations);
+  PHYS_CONTIG_ALLOC(&cb_args, sizeof(callback_args*) * numOperations);
+  PHYS_CONTIG_ALLOC(&opData, sizeof(CpaDcOpData) * numOperations);
+  PHYS_CONTIG_ALLOC(&dcResults, sizeof(CpaDcRqResults*) * numOperations);
+
+  /* pointer to completed ops will be updated by the callback*/
   for(int i=0; i<numOperations; i++){
+    /* Per packet callback arguments */
+    PHYS_CONTIG_ALLOC(&(cb_args[i]), sizeof(callback_args));
+    memset(cb_args[i], 0, sizeof(struct _callback_args));
+    cb_args[i]->completion = &complete;
+    cb_args[i]->stats = stats;
+    /* here we assume that the i'th callback invocation will be processing the i'th packet*/
+    cb_args[i]->completedOperations = i;
+    cb_args[i]->numOperations = numOperations;
+
+    /* Per Packet packet stats */
     PHYS_CONTIG_ALLOC(&(stats[i]), sizeof(packet_stats));
     memset(stats[i], 0, sizeof(packet_stats));
+
+    /* Per packet CrC Datas */
+    memset(&crcData[i], 0, sizeof(CpaDcOpData));
+
+    /* Per packet opDatas*/
+    INIT_OPDATA(&opData[i], CPA_DC_FLUSH_FINAL);
+    memset(&opData[i], 0, sizeof(CpaDcOpData));
+    INIT_OPDATA(&opData[i], CPA_DC_FLUSH_FINAL);
+    if(cap.integrityCrcs64b == CPA_TRUE){
+      opData[i].integrityCrcCheck = CPA_TRUE;
+      opData[i].pCrcData = &(crcData[i]);
+    }
+
+    /* Per packet results */
+    PHYS_CONTIG_ALLOC(&(dcResults[i]), sizeof(CpaDcRqResults));
+    memset(dcResults[i], 0, sizeof(CpaDcRqResults));
   }
 
-  cb_args->completion = &complete;
-  cb_args->stats = stats;
-  cb_args->completedOperations = 0;
-  cb_args->numOperations = numOperations;
+  /* prepare buffers */
+  prepareTestBufferLists(&srcBufferLists, &dstBufferLists, dcInstHandles[0], bufferSize, numOperations);
+
 
   for(int i=0; i<numOperations; i++){
-    submitAndStamp(dcInstHandle, sessionHandle, pBufferListSrc, pBufferListDst, &opData, pDcResults, cb_args);
+    submitAndStamp(
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists[i],
+      dstBufferLists[i],
+      &(opData[i]),
+      dcResults[i],
+      cb_args[i],
+      i
+    );
   }
 
   if(status != CPA_STATUS_SUCCESS){
@@ -263,8 +288,11 @@ int main(){
       status = CPA_STATUS_FAIL;
   }
 
-  if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(pBufferListSrc, pBufferListDst, 1024, &dcResults, dcInstHandle, &crcData)){
-    PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+  /* validate all results */
+  for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], 1024, dcResults[i], dcInstHandle, &(crcData[i]))){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
   }
 
   /* Collect Latencies */
@@ -274,15 +302,6 @@ int main(){
   printf("Latency(cycles): %lu\n", latency);
   printf("Latency(us): %lu\n", micros);
 
-  if (CPA_STATUS_SUCCESS == status)
-  {
-    if (dcResults.status != CPA_DC_OK)
-    {
-        PRINT_ERR("Results status not as expected (status = %d)\n",
-                  dcResults.status);
-        status = CPA_STATUS_FAIL;
-    }
-  }
   COMPLETION_DESTROY(&complete);
 
 

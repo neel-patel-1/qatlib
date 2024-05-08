@@ -94,7 +94,8 @@ void dcPerfCallback(void *pCallbackTag, CpaStatus status){
 
   if(NULL != pCallbackTag){
     callback_args *args = (callback_args *)pCallbackTag;
-    packet_stats *stats = args->stats[args->completedOperations];
+    Cpa32U completedOps = args->completedOperations;
+    packet_stats *stats = args->stats[completedOps];
 
     stats->receiveTime = sampleCoderdtsc();
     args->completedOperations++;
