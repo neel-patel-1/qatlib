@@ -280,7 +280,7 @@ retry:
       i
     );
     if(status != CPA_STATUS_SUCCESS){
-      fprintf(stderr, "Error in compress data on %d'th packet\n", i);
+      // fprintf(stderr, "Error in compress data on %d'th packet\n", i);
       goto retry;
     }
   }
@@ -292,7 +292,7 @@ retry:
 }
 
 CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
-  Cpa32U numOperations, Cpa32U bufferSize
+  Cpa32U numOperations, Cpa32U bufferSize, packet_stats ***ppStats
   ){
     CpaDcInstanceCapabilities cap = {0};
     CpaDcOpData **opData = NULL;
@@ -335,7 +335,7 @@ CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSe
         PRINT_ERR("Buffer not compressed/decompressed correctly\n");
       }
     }
-    printStats(stats, numOperations, bufferSize);
+    *ppStats = stats;
     COMPLETION_DESTROY(&complete);
 }
 
@@ -346,7 +346,8 @@ void *streamFn(void *arg){
     args->dcInstHandle,
     args->sessionHandle,
     args->numOperations,
-    args->bufferSize
+    args->bufferSize,
+    args->pArrayPacketStatsPtrs /*For communicating stats to caller */
   );
 }
 
@@ -406,6 +407,7 @@ int main(){
   }
 
   pthread_t subThreads[numFlows];
+  packet_stats **arrayOfPacketStatsArrayPointers[numFlows];
   for(int i=0; i<numFlows; i++){
     submitter_args *submitterArgs = NULL;
     OS_MALLOC(&submitterArgs, sizeof(submitter_args));
@@ -413,7 +415,7 @@ int main(){
     submitterArgs->sessionHandle = sessionHandles[i];
     submitterArgs->numOperations = numOperations;
     submitterArgs->bufferSize = bufferSize;
-    singleStreamOfCompressAndCrc64(dcInstHandles[i], sessionHandles[i], numOperations, bufferSize);
+    submitterArgs->pArrayPacketStatsPtrs = &(arrayOfPacketStatsArrayPointers[i]);
     createThreadJoinable(&(subThreads[i]), streamFn, (void *)submitterArgs);
   }
 
@@ -423,10 +425,18 @@ int main(){
     gPollingDcs[i] = 0;
   }
 
+  printf("--------------------------------------\n");
+  printf("BufferSize: %d\n", bufferSize);
+  printf("NumOperations: %d\n", numOperations);
+  printf("--------------------------------------\n");
+  for(int i=0; i<numFlows; i++){
+    printf("--------------------------------------\n");
+    printf("Flow: %d\n", i);
+    printStats((arrayOfPacketStatsArrayPointers[i]), numOperations, bufferSize);
+  }
+  printf("--------------------------------------\n");
+
 exit:
-
-
-
 
   icp_sal_userStop();
   qaeMemDestroy();

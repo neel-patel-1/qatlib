@@ -38,6 +38,7 @@ typedef struct _submit_td_args{
   CpaDcSessionHandle *sessionHandle;
   Cpa32U numOperations;
   Cpa32U bufferSize;
+  packet_stats ***pArrayPacketStatsPtrs;
 } submitter_args;
 
 void *dc_polling(void *args);
