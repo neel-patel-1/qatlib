@@ -34,14 +34,6 @@ CpaStatus allocateIntermediateBuffers(CpaInstanceHandle dcInstHandle,
 CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle);
 CpaStatus prepareDcSession(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle *pSessionHandle, CpaDcCallbackFn callbackFunction);
 
-CpaStatus prepareSampleBuffer(Cpa8U **ppBuffer, Cpa32U bufferSize);
-CpaStatus createDstBufferList(CpaBufferList **ppBufferList, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType);
-CpaStatus createSourceBufferList(CpaBufferList **ppBufferList, Cpa8U *buffer, Cpa32U bufferSize, CpaInstanceHandle dcInstHandle, CpaDcHuffType huffType);
-
-
-CpaStatus functionalCompressAndCrc64(CpaInstanceHandle dcInstHandle,
-  CpaDcSessionHandle sessionHandle);
-
 /* Single Flat Buffer BufferList with buffer of bufferSize */
 
 
