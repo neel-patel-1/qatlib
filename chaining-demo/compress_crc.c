@@ -147,6 +147,25 @@ CpaStatus prepareTestBufferLists(CpaBufferList ***pSrcBufferLists, CpaBufferList
   *pDstBufferLists = dstBufferLists;
 }
 
+CpaStatus submitAndStamp(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle, CpaBufferList *pBufferListSrc,
+  CpaBufferList *pBufferListDst, CpaDcOpData *opData, CpaDcRqResults *pDcResults, callback_args *cb_args){
+
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  packet_stats *stats = cb_args->stats;
+  Cpa64U submitTime = sampleCoderdtsc();
+  stats->submitTime = submitTime;
+  status = cpaDcCompressData2(
+    dcInstHandle,
+    sessionHandle,
+    pBufferListSrc,     /* source buffer list */
+    pBufferListDst,     /* destination buffer list */
+    opData,            /* Operational data */
+    pDcResults,         /* results structure */
+    (void *)cb_args); /* data sent as is to the callback function*/
+  return status;
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -223,16 +242,18 @@ int main(){
   cb_args->completion = &complete;
   cb_args->stats = stats;
 
-  stats->submitTime = sampleCoderdtsc();
-  submitTime = sampleCoderdtsc();
-  status = cpaDcCompressData2(
-    dcInstHandle,
-    sessionHandle,
-    pBufferListSrc,     /* source buffer list */
-    pBufferListDst,     /* destination buffer list */
-    &opData,            /* Operational data */
-    &dcResults,         /* results structure */
-    (void *)cb_args); /* data sent as is to the callback function*/
+  submitAndStamp(dcInstHandle, sessionHandle, pBufferListSrc, pBufferListDst, &opData, pDcResults, cb_args);
+
+  // stats->submitTime = sampleCoderdtsc();
+  // submitTime = sampleCoderdtsc();
+  // status = cpaDcCompressData2(
+  //   dcInstHandle,
+  //   sessionHandle,
+  //   pBufferListSrc,     /* source buffer list */
+  //   pBufferListDst,     /* destination buffer list */
+  //   &opData,            /* Operational data */
+  //   &dcResults,         /* results structure */
+  //   (void *)cb_args); /* data sent as is to the callback function*/
 
   if(status != CPA_STATUS_SUCCESS){
     fprintf(stderr, "Error in compress data\n");
