@@ -378,50 +378,53 @@ int main(){
   if (0 == numInstances)
   {
     fprintf(stderr, "No instances found\n");
-    goto exit;
+    return CPA_STATUS_FAIL;
   }
 
   Cpa32U numFlows = 2;
+  Cpa32U numOperations = 10000;
+  Cpa32U bufferSize = 1024;
 
   /* multiple instance for latency test */
   prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numFlows);
 
+  pthread_t thread[numFlows];
+  for(int i=0; i<numFlows; i++){
+    CpaInstanceInfo2 info2 = {0};
 
-  CpaInstanceInfo2 info2 = {0};
+    status = cpaDcInstanceGetInfo2(dcInstHandle, &info2);
 
-  status = cpaDcInstanceGetInfo2(dcInstHandle, &info2);
-
-  if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
-  {
-      /* Start thread to poll instance */
-      pthread_t thread[MAX_INSTANCES];
-      thread_args *args = NULL;
-      args = (thread_args *)malloc(sizeof(thread_args));
-      args->dcInstHandle = dcInstHandle;
-      args->id = 0;
-      createThread(&thread[0], dc_polling, (void *)args);
+    if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
+    {
+        /* Start thread to poll instance */
+        thread_args *args = NULL;
+        args = (thread_args *)malloc(sizeof(thread_args));
+        args->dcInstHandle = dcInstHandles[i];
+        args->id = i;
+        createThread(&thread[i], dc_polling, (void *)args);
+    }
   }
 
-  sessionHandle = sessionHandles[0];
-  prepareDcSession(dcInstHandle, &sessionHandle, dcPerfCallback);
+  pthread_t subThreads[numFlows];
+  for(int i=0; i<numFlows; i++){
+    submitter_args *submitterArgs = NULL;
+    OS_MALLOC(&submitterArgs, sizeof(submitter_args));
+    submitterArgs->dcInstHandle = dcInstHandles[i];
+    submitterArgs->sessionHandle = sessionHandles[i];
+    submitterArgs->numOperations = numOperations;
+    submitterArgs->bufferSize = bufferSize;
+    singleStreamOfCompressAndCrc64(dcInstHandles[i], sessionHandles[i], numOperations, bufferSize);
+    createThreadJoinable(&(subThreads[i]), streamFn, (void *)submitterArgs);
+  }
 
-  Cpa32U numOperations = 10000;
-  Cpa32U bufferSize = 1024;
 
-  pthread_t subThread;
-  submitter_args *submitterArgs = NULL;
-  OS_MALLOC(&submitterArgs, sizeof(submitter_args));
-  submitterArgs->dcInstHandle = dcInstHandle;
-  submitterArgs->sessionHandle = sessionHandle;
-  submitterArgs->numOperations = numOperations;
-  submitterArgs->bufferSize = bufferSize;
-
-  createThreadJoinable(&subThread, streamFn, (void *)submitterArgs);
-
-  pthread_join(subThread, NULL);
+  for(int i=0; i<numFlows; i++){
+    pthread_join(subThreads[i], NULL);
+    gPollingDcs[i] = 0;
+  }
 
 exit:
-  gPollingDcs[0] = 0;
+
 
 
 
