@@ -251,7 +251,6 @@ void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
     if(micros > maxLatency){
       maxLatency = micros;
     }
-    printf("Latency(us): %lu\n", micros);
   }
   avgLatency = avgLatency / numOperations;
   printf("AveLatency(us): %lu\n", avgLatency);
@@ -351,6 +350,18 @@ void *streamFn(void *arg){
   );
 }
 
+CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances, Cpa16U numSessions){
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  for(int i=0; i<numInstances; i++){
+    dcInstHandles[i] = dcInstHandles[i];
+    prepareDcInst(&dcInstHandles[i]);
+    sessionHandles[i] = sessionHandles[i];
+    prepareDcSession(dcInstHandles[i], &sessionHandles[i], dcPerfCallback);
+  }
+  return status;
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -372,13 +383,9 @@ int main(){
 
   Cpa32U numFlows = 2;
 
-  /* single instance for latency test */
-  for(int i=0; i<numFlows; i++){
-    dcInstHandle = dcInstHandles[i];
-    prepareDcInst(&dcInstHandle);
-    sessionHandle = sessionHandles[i];
-    prepareDcSession(dcInstHandle, &sessionHandle, dcPerfCallback);
-  }
+  /* multiple instance for latency test */
+  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numFlows);
+
 
   CpaInstanceInfo2 info2 = {0};
 
