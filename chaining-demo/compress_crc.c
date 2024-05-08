@@ -91,45 +91,14 @@ int main(){
   COMPLETION_INIT(&complete);
   prepareDcInst(&dcInstHandle);
 
-  multiBufferTestAllocations(&cb_args,
-    &stats,
-    &opData,
-    &dcResults,
-    &crcData,
-    numOperations,
-    bufferSize,
-    cap,
-    &srcBufferLists,
-    &dstBufferLists,
-    dcInstHandle,
-    &complete);
-
-
   multiStreamCompressCrc64PerformanceTest(
-    1,
+    2,
     numOperations,
     bufferSize,
     dcInstHandles,
     sessionHandles,
     numInstances
   );
-
-
-  for(int i=0; i<numOperations; i++){
-    if(CPA_STATUS_SUCCESS != deflateCompressAndTimestamp(
-      srcBufferLists[i], dstBufferLists[i], dcResults[i], i, cb_args[i])){
-      PRINT_ERR("Error in compress data on %d'th packet\n", i);
-    }
-  }
-
-  printStats(stats, numOperations, bufferSize);
-
-  for(int i=0; i<numOperations; i++){
-    if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize))
-    {
-      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
-    }
-  }
 
 
 exit:
