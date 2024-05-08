@@ -42,6 +42,8 @@ typedef struct _submit_td_args{
 
 void *dc_polling(void *args);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
+CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg);
+
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
 void dcPerfCallback(void *pCallbackTag, CpaStatus status);
 

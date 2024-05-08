@@ -403,13 +403,11 @@ int main(){
   submitterArgs->numOperations = numOperations;
   submitterArgs->bufferSize = bufferSize;
 
-  createThread(&subThread, streamFn, (void *)submitterArgs);
+  createThreadJoinable(&subThread, streamFn, (void *)submitterArgs);
 
+  pthread_join(subThread, NULL);
 
 exit:
-  while(1){}
-
-
   gPollingDcs[0] = 0;
 
 
