@@ -366,6 +366,20 @@ CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessions(CpaInstanceHandle 
   return status;
 }
 
+void createCompressCrc64Poller(CpaInstanceHandle dcInstHandle, Cpa16U id, pthread_t *threadId){
+  CpaInstanceInfo2 info2 = {0};
+  CpaStatus status = cpaDcInstanceGetInfo2(dcInstHandle, &info2);
+  if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
+  {
+      /* Start thread to poll instance */
+      thread_args *args = NULL;
+      args = (thread_args *)malloc(sizeof(thread_args));
+      args->dcInstHandle = dcInstHandle;
+      args->id = id;
+      createThread(threadId, dc_polling, (void *)args);
+  }
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -394,19 +408,7 @@ int main(){
 
   pthread_t thread[numFlows];
   for(int i=0; i<numFlows; i++){
-    CpaInstanceInfo2 info2 = {0};
-
-    status = cpaDcInstanceGetInfo2(dcInstHandle, &info2);
-
-    if ((status == CPA_STATUS_SUCCESS) && (info2.isPolled == CPA_TRUE))
-    {
-        /* Start thread to poll instance */
-        thread_args *args = NULL;
-        args = (thread_args *)malloc(sizeof(thread_args));
-        args->dcInstHandle = dcInstHandles[i];
-        args->id = i;
-        createThread(&thread[i], dc_polling, (void *)args);
-    }
+    createCompressCrc64Poller(dcInstHandles[i], i, &(thread[i]));
   }
 
   pthread_t subThreads[numFlows];
