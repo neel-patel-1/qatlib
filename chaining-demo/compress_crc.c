@@ -118,6 +118,7 @@ typedef struct _sw_comp_args{
   Cpa32U bufferSize;
   CpaInstanceHandle dcInstHandle; /*Preprepared DCInstHandle for getting hw-provided compress bounds -- may not be accurate for sw deflate, but no issues throughout testing*/
   pthread_barrier_t *startSync;
+  packet_stats ***pCallerStatsArrayPtrIndex; /* Pointer to the packet stats array entry to populate at completion */
 } sw_comp_args;
 
 void syncSwComp(void *args){
@@ -164,7 +165,8 @@ void syncSwComp(void *args){
     }
   }
 
-  printStats(stats, numOperations, bufferSize);
+  // printStats(stats, numOperations, bufferSize);
+  *(sw_args->pCallerStatsArrayPtrIndex) = stats;
 
   for(int i=0; i<numOperations; i++){
     if (CPA_STATUS_SUCCESS != validateCompressAndCrc64Sw(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize, &(crcData[i])))
@@ -206,6 +208,7 @@ int main(){
   pthread_barrier_t barrier;
   pthread_t threads[numStreams];
 
+  packet_stats **stats[numStreams];
   pthread_barrier_init(&barrier, NULL, numStreams);
   for(int i=0; i<numStreams; i++){
     sw_comp_args *args = NULL;
@@ -214,13 +217,14 @@ int main(){
     args->bufferSize = bufferSize;
     args->dcInstHandle = dcInstHandle;
     args->startSync = &barrier;
+    args->pCallerStatsArrayPtrIndex = &stats[i];
     createThreadJoinable(&threads[i], syncSwComp, (void *)args);
   }
 
   for(int i=0; i<numStreams; i++){
     pthread_join(threads[i], NULL);
   }
-
+  printMultiThreadStats(stats, numStreams, numOperations, bufferSize);
 
 exit:
 
