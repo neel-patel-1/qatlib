@@ -552,17 +552,17 @@ int main(){
 
   int ret;
 
+  z_stream strm;
+  memset(&strm, 0, sizeof(z_stream));
+  ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
+  if(ret != Z_OK)
+  {
+    fprintf(stderr, "Error in deflateInit, ret = %d\n", ret);
+    return CPA_STATUS_FAIL;
+  }
+
   for(int i=0; i<numOperations; i++){
     stats[i]->submitTime = sampleCoderdtsc();
-
-    z_stream strm;
-    memset(&strm, 0, sizeof(z_stream));
-    ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
-    if(ret != Z_OK)
-    {
-      fprintf(stderr, "Error in deflateInit, ret = %d\n", ret);
-      return CPA_STATUS_FAIL;
-    }
 
     Cpa8U *src = srcBufferLists[i]->pBuffers[0].pData;
     Cpa32U srcLen = srcBufferLists[i]->pBuffers->dataLenInBytes;
@@ -580,9 +580,14 @@ int main(){
       return CPA_STATUS_FAIL;
     }
     dcResults[i]->produced = strm.total_out;
-    // deflateEnd(&strm);
 
     stats[i]->receiveTime = sampleCoderdtsc();
+    ret = deflateReset(&strm);
+    if(ret != Z_OK)
+    {
+      fprintf(stderr, "Error in deflateReset, ret = %d\n", ret);
+      return CPA_STATUS_FAIL;
+    }
   }
 
   printStats(stats, numOperations, bufferSize);
