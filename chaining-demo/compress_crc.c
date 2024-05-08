@@ -164,6 +164,71 @@ CpaStatus submitAndStamp(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sess
 
 }
 
+CpaStatus multiBufferTestAllocations(callback_args ***pcb_args, packet_stats ***pstats,
+  CpaDcOpData ***popData, CpaDcRqResults ***pdcResults, CpaCrcData **pCrcData,
+  Cpa32U numOperations, Cpa32U bufferSize, CpaDcInstanceCapabilities cap,
+  CpaBufferList ***pSrcBufferLists, CpaBufferList ***pDstBufferLists,
+  CpaInstanceHandle dcInstHandle, struct COMPLETION_STRUCT *complete){
+
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaDcOpData **opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+
+
+  PHYS_CONTIG_ALLOC(&cb_args, sizeof(callback_args*) * numOperations);
+  PHYS_CONTIG_ALLOC(&stats, sizeof(packet_stats*) * numOperations);
+  PHYS_CONTIG_ALLOC(&opData, sizeof(CpaDcOpData*) * numOperations);
+  PHYS_CONTIG_ALLOC(&dcResults, sizeof(CpaDcRqResults*) * numOperations);
+  PHYS_CONTIG_ALLOC(&crcData, sizeof(CpaCrcData) * numOperations);
+
+  for(int i=0; i<numOperations; i++){
+    /* Per packet callback arguments */
+    PHYS_CONTIG_ALLOC(&(cb_args[i]), sizeof(callback_args));
+    memset(cb_args[i], 0, sizeof(struct _callback_args));
+    cb_args[i]->completion = complete;
+    cb_args[i]->stats = stats;
+    /* here we assume that the i'th callback invocation will be processing the i'th packet*/
+    cb_args[i]->completedOperations = i;
+    cb_args[i]->numOperations = numOperations;
+
+    /* Per Packet packet stats */
+    PHYS_CONTIG_ALLOC(&(stats[i]), sizeof(packet_stats));
+    memset(stats[i], 0, sizeof(packet_stats));
+
+    /* Per packet CrC Datas */
+    memset(&crcData[i], 0, sizeof(CpaDcOpData));
+
+    /* Per packet opDatas*/
+    PHYS_CONTIG_ALLOC(&(opData[i]), sizeof(CpaDcOpData));
+    memset(opData[i], 0, sizeof(CpaDcOpData));
+    INIT_OPDATA(opData[i], CPA_DC_FLUSH_FINAL);
+    if(cap.integrityCrcs64b == CPA_TRUE){
+      opData[i]->integrityCrcCheck = CPA_TRUE;
+      opData[i]->pCrcData = &(crcData[i]);
+    }
+
+    /* Per packet results */
+    PHYS_CONTIG_ALLOC(&(dcResults[i]), sizeof(CpaDcRqResults));
+    memset(dcResults[i], 0, sizeof(CpaDcRqResults));
+  }
+  prepareTestBufferLists(&srcBufferLists, &dstBufferLists, dcInstHandle, bufferSize, numOperations);
+  *pcb_args = cb_args;
+  *pstats = stats;
+  *popData = opData;
+  *pdcResults = dcResults;
+  *pCrcData = crcData;
+  *pSrcBufferLists = srcBufferLists;
+  *pDstBufferLists = dstBufferLists;
+
+
+  return CPA_STATUS_SUCCESS;
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -209,7 +274,7 @@ int main(){
   CpaBufferList **dstBufferLists = NULL;
 
 
-  CpaDcOpData *opData = NULL;
+  CpaDcOpData **opData = NULL;
   CpaDcRqResults **dcResults = NULL;
 
   struct COMPLETION_STRUCT complete;
@@ -223,46 +288,20 @@ int main(){
 
   cpaDcQueryCapabilities(dcInstHandle, &cap);
   COMPLETION_INIT(&complete);
-  PHYS_CONTIG_ALLOC(&stats, sizeof(packet_stats*) * numOperations);
-  PHYS_CONTIG_ALLOC(&(crcData), sizeof(CpaCrcData) * numOperations);
-  PHYS_CONTIG_ALLOC(&cb_args, sizeof(callback_args*) * numOperations);
-  PHYS_CONTIG_ALLOC(&opData, sizeof(CpaDcOpData) * numOperations);
-  PHYS_CONTIG_ALLOC(&dcResults, sizeof(CpaDcRqResults*) * numOperations);
 
-  /* pointer to completed ops will be updated by the callback*/
-  for(int i=0; i<numOperations; i++){
-    /* Per packet callback arguments */
-    PHYS_CONTIG_ALLOC(&(cb_args[i]), sizeof(callback_args));
-    memset(cb_args[i], 0, sizeof(struct _callback_args));
-    cb_args[i]->completion = &complete;
-    cb_args[i]->stats = stats;
-    /* here we assume that the i'th callback invocation will be processing the i'th packet*/
-    cb_args[i]->completedOperations = i;
-    cb_args[i]->numOperations = numOperations;
 
-    /* Per Packet packet stats */
-    PHYS_CONTIG_ALLOC(&(stats[i]), sizeof(packet_stats));
-    memset(stats[i], 0, sizeof(packet_stats));
-
-    /* Per packet CrC Datas */
-    memset(&crcData[i], 0, sizeof(CpaDcOpData));
-
-    /* Per packet opDatas*/
-    INIT_OPDATA(&opData[i], CPA_DC_FLUSH_FINAL);
-    memset(&opData[i], 0, sizeof(CpaDcOpData));
-    INIT_OPDATA(&opData[i], CPA_DC_FLUSH_FINAL);
-    if(cap.integrityCrcs64b == CPA_TRUE){
-      opData[i].integrityCrcCheck = CPA_TRUE;
-      opData[i].pCrcData = &(crcData[i]);
-    }
-
-    /* Per packet results */
-    PHYS_CONTIG_ALLOC(&(dcResults[i]), sizeof(CpaDcRqResults));
-    memset(dcResults[i], 0, sizeof(CpaDcRqResults));
-  }
-
-  /* prepare buffers */
-  prepareTestBufferLists(&srcBufferLists, &dstBufferLists, dcInstHandles[0], bufferSize, numOperations);
+  multiBufferTestAllocations(&cb_args,
+    &stats,
+    &opData,
+    &dcResults,
+    &crcData,
+    numOperations,
+    bufferSize,
+    cap,
+    &srcBufferLists,
+    &dstBufferLists,
+    dcInstHandle,
+    &complete);
 
 
   for(int i=0; i<numOperations; i++){
@@ -272,7 +311,7 @@ retry:
       sessionHandle,
       srcBufferLists[i],
       dstBufferLists[i],
-      &(opData[i]),
+      (opData[i]),
       dcResults[i],
       cb_args[i],
       i
