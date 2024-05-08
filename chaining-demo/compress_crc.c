@@ -117,6 +117,7 @@ typedef struct _sw_comp_args{
   Cpa32U numOperations;
   Cpa32U bufferSize;
   CpaInstanceHandle dcInstHandle; /*Preprepared DCInstHandle for getting hw-provided compress bounds -- may not be accurate for sw deflate, but no issues throughout testing*/
+  pthread_barrier_t *startSync;
 } sw_comp_args;
 
 void syncSwComp(void *args){
@@ -155,6 +156,7 @@ void syncSwComp(void *args){
     dcInstHandle,
     &complete);
 
+  pthread_barrier_wait(sw_args->startSync);
   for(int i=0; i<numOperations; i++){
     if(CPA_STATUS_SUCCESS != deflateCompressAndTimestamp(
       srcBufferLists[i], dstBufferLists[i], dcResults[i], i, cb_args[i], &crcData[i])){
@@ -195,17 +197,30 @@ int main(){
 
   /* Keep a dcinst handle for obtaining buffers with hw compress bounds and compatibility/ function reuse*/
   dcInstHandle = dcInstHandles[0];
-  prepareDcInst(&dcInstHandle);
+  prepareDcInst(&dcInstHandles[0]);
 
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 1024;
+  Cpa32U numStreams = 2;
 
-  sw_comp_args *args = NULL;
-  OS_MALLOC(&args, sizeof(sw_comp_args));
-  args->numOperations = numOperations;
-  args->bufferSize = bufferSize;
-  args->dcInstHandle = dcInstHandle;
-  syncSwComp((void *)args);
+  pthread_barrier_t barrier;
+  pthread_t threads[numStreams];
+
+  pthread_barrier_init(&barrier, NULL, numStreams);
+  for(int i=0; i<numStreams; i++){
+    sw_comp_args *args = NULL;
+    OS_MALLOC(&args, sizeof(sw_comp_args));
+    args->numOperations = numOperations;
+    args->bufferSize = bufferSize;
+    args->dcInstHandle = dcInstHandle;
+    args->startSync = &barrier;
+    createThreadJoinable(&threads[i], syncSwComp, (void *)args);
+  }
+
+  for(int i=0; i<numStreams; i++){
+    pthread_join(threads[i], NULL);
+  }
+
 
 exit:
 
