@@ -457,9 +457,7 @@ void multiStreamCompressCrc64PerformanceTest(
   }
 
   /*  Print Stats */
-  for(int i=0; i<numFlows; i++){
-    printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
-  }
+  printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
 }
 
 int main(){
