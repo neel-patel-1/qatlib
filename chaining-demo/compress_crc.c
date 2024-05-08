@@ -597,37 +597,10 @@ int main(){
   }
 
   for(int i=0; i<numOperations; i++){
-    stats[i]->submitTime = sampleCoderdtsc();
-
     if(CPA_STATUS_SUCCESS != deflateCompressAndTimestamp(
       srcBufferLists[i], dstBufferLists[i], dcResults[i], i, cb_args[i])){
       PRINT_ERR("Error in compress data on %d'th packet\n", i);
     }
-
-    // Cpa8U *src = srcBufferLists[i]->pBuffers[0].pData;
-    // Cpa32U srcLen = srcBufferLists[i]->pBuffers->dataLenInBytes;
-    // Cpa8U *dst = dstBufferLists[i]->pBuffers[0].pData;
-    // Cpa32U dstLen = dstBufferLists[i]->pBuffers->dataLenInBytes;
-
-    // strm.avail_in = srcLen;
-    // strm.next_in = (Bytef *)src;
-    // strm.avail_out = dstLen;
-    // strm.next_out = (Bytef *)dst;
-    // ret = deflate(&strm, Z_FINISH);
-    // if(ret != Z_STREAM_END)
-    // {
-    //   fprintf(stderr, "Error in deflate, ret = %d\n", ret);
-    //   return CPA_STATUS_FAIL;
-    // }
-    // dcResults[i]->produced = strm.total_out;
-
-    // stats[i]->receiveTime = sampleCoderdtsc();
-    // ret = deflateReset(&strm);
-    // if(ret != Z_OK)
-    // {
-    //   fprintf(stderr, "Error in deflateReset, ret = %d\n", ret);
-    //   return CPA_STATUS_FAIL;
-    // }
   }
 
   printStats(stats, numOperations, bufferSize);
