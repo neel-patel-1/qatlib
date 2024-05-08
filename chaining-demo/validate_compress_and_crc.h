@@ -9,6 +9,8 @@
 #include "cpa_sample_utils.h"
 #include <zlib.h>
 
+#include "buffer_prepare_funcs.h"
+
 #define CRC64_ECMA182_POLY 0x42F0E1EBA9EA3693ULL
 extern uint64_t crc64table[256];
 

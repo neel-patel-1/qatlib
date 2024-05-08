@@ -77,7 +77,7 @@ int main(){
   dcInstHandle = dcInstHandles[0];
 
   /* Get test buffers and perf stats setup */
-  Cpa32U numOperations = 1000;
+  Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 1024;
   CpaDcOpData **opData = NULL;
   CpaDcRqResults **dcResults = NULL;
