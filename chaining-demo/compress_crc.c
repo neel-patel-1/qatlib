@@ -296,11 +296,18 @@ int main(){
   }
 
   /* Collect Latencies */
-  Cpa64U latency = stats[0]->receiveTime - stats[0]->submitTime;
-  Cpa32U freqKHz = 2080;
-  uint64_t micros = latency / freqKHz;
-  printf("Latency(cycles): %lu\n", latency);
-  printf("Latency(us): %lu\n", micros);
+  Cpa64U avgLatency = 0;
+  for(int i=0; i<numOperations; i++){
+    Cpa64U latency = stats[i]->receiveTime - stats[i]->submitTime;
+    Cpa32U freqKHz = 2080;
+    uint64_t micros = latency / freqKHz;
+    avgLatency += micros;
+    printf("Latency(cycles): %lu\n", latency);
+    printf("Latency(us): %lu\n", micros);
+  }
+  avgLatency = avgLatency / numOperations;
+  printf("AveLatency(us): %lu\n", avgLatency);
+
 
   COMPLETION_DESTROY(&complete);
 
