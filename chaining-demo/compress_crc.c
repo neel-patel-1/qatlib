@@ -370,9 +370,15 @@ int main(){
     goto exit;
   }
 
+  Cpa32U numFlows = 2;
+
   /* single instance for latency test */
-  dcInstHandle = dcInstHandles[0];
-  prepareDcInst(&dcInstHandle);
+  for(int i=0; i<numFlows; i++){
+    dcInstHandle = dcInstHandles[i];
+    prepareDcInst(&dcInstHandle);
+    sessionHandle = sessionHandles[i];
+    prepareDcSession(dcInstHandle, &sessionHandle, dcPerfCallback);
+  }
 
   CpaInstanceInfo2 info2 = {0};
 
