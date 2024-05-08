@@ -263,9 +263,9 @@ void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
 
 }
 
-CpaStatus doSubmissionsCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
+CpaStatus doSubmissionsCompressAndCrc64AndWaitForFinal(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
   CpaBufferList **srcBufferLists, CpaBufferList **dstBufferLists, CpaDcOpData **opData, CpaDcRqResults **dcResults,
-  callback_args **cb_args, Cpa32U numOperations){
+  callback_args **cb_args, Cpa32U numOperations, struct COMPLETION_STRUCT *complete){
 
   CpaStatus status = CPA_STATUS_SUCCESS;
   for(int i=0; i<numOperations; i++){
@@ -285,7 +285,27 @@ retry:
       goto retry;
     }
   }
+  if(!COMPLETION_WAIT(complete, 5000)){
+    PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
+    status = CPA_STATUS_FAIL;
+  }
   return status;
+}
+
+CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
+  CpaBufferList **srcBufferLists, CpaBufferList **dstBufferLists, CpaDcOpData **opData, CpaDcRqResults **dcResults,
+  callback_args **cb_args, Cpa32U numOperations, Cpa32U bufferSize, struct COMPLETION_STRUCT *complete){
+    CpaStatus status = doSubmissionsCompressAndCrc64AndWaitForFinal(
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists,
+      dstBufferLists,
+      opData,
+      dcResults,
+      cb_args,
+      numOperations,
+      complete
+    );
 }
 
 int main(){
@@ -362,8 +382,7 @@ int main(){
     dcInstHandle,
     &complete);
 
-
-  doSubmissionsCompressAndCrc64(
+  singleStreamOfCompressAndCrc64(
     dcInstHandle,
     sessionHandle,
     srcBufferLists,
@@ -371,18 +390,12 @@ int main(){
     opData,
     dcResults,
     cb_args,
-    numOperations
+    numOperations,
+    bufferSize,
+    &complete
   );
 
-  if(status != CPA_STATUS_SUCCESS){
-    fprintf(stderr, "Error in compress data\n");
-    goto exit;
-  }
-  if (!COMPLETION_WAIT(&complete, 5000))
-  {
-      PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
-      status = CPA_STATUS_FAIL;
-  }
+
 
   /* validate all results */
   for(int i=0; i<numOperations; i++){
