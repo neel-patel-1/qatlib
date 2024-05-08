@@ -112,44 +112,37 @@ CpaStatus deflateCompressAndTimestamp(
 
   return status;
 }
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  CpaDcInstanceCapabilities cap = {0};
 
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+typedef struct _sw_comp_args{
+  Cpa32U numOperations;
+  Cpa32U bufferSize;
+  CpaInstanceHandle dcInstHandle; /*Preprepared DCInstHandle for getting hw-provided compress bounds -- may not be accurate for sw deflate, but no issues throughout testing*/
+} sw_comp_args;
 
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-  /* Keep a dcinst handle for obtaining buffers with hw compress bounds and compatibility/ function reuse*/
-  dcInstHandle = dcInstHandles[0];
-
-  /* Get test buffers and perf stats setup */
-  Cpa32U numOperations = 10000;
-  Cpa32U bufferSize = 1024;
-  CpaDcOpData **opData = NULL;
-  CpaDcRqResults **dcResults = NULL;
-  CpaCrcData *crcData = NULL;
-  struct COMPLETION_STRUCT complete;
-  callback_args **cb_args = NULL;
-  packet_stats **stats = NULL;
+void syncSwComp(void *args){
+  sw_comp_args *sw_args = (sw_comp_args *)args;
+  Cpa32U numOperations = sw_args->numOperations;
+  Cpa32U bufferSize = sw_args->bufferSize;
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
-  cpaDcQueryCapabilities(dcInstHandle, &cap);
-  COMPLETION_INIT(&complete);
-  prepareDcInst(&dcInstHandle);
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaInstanceHandle dcInstHandle = sw_args->dcInstHandle;
+  CpaDcInstanceCapabilities cap = {0};
+  CpaDcOpData **opData = NULL;
+  struct COMPLETION_STRUCT complete;
+  CpaStatus status = CPA_STATUS_SUCCESS;
 
-  multiBufferTestAllocations(&cb_args,
+  COMPLETION_INIT(&complete);
+  if (CPA_STATUS_SUCCESS != cpaDcQueryCapabilities(dcInstHandle, &cap)){
+    PRINT_ERR("Error in querying capabilities\n");
+    return;
+  }
+
+  multiBufferTestAllocations(
+    &cb_args,
     &stats,
     &opData,
     &dcResults,
@@ -178,6 +171,41 @@ int main(){
     }
   }
 
+  return;
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+  CpaDcInstanceCapabilities cap = {0};
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
+
+  /* Keep a dcinst handle for obtaining buffers with hw compress bounds and compatibility/ function reuse*/
+  dcInstHandle = dcInstHandles[0];
+  prepareDcInst(&dcInstHandle);
+
+  Cpa32U numOperations = 10000;
+  Cpa32U bufferSize = 1024;
+
+  sw_comp_args *args = NULL;
+  OS_MALLOC(&args, sizeof(sw_comp_args));
+  args->numOperations = numOperations;
+  args->bufferSize = bufferSize;
+  args->dcInstHandle = dcInstHandle;
+  syncSwComp((void *)args);
 
 exit:
 
