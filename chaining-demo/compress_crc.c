@@ -380,6 +380,27 @@ void createCompressCrc64Poller(CpaInstanceHandle dcInstHandle, Cpa16U id, pthrea
   }
 }
 
+void createCompressCrc64Submitter(
+  CpaInstanceHandle dcInstHandle,
+  CpaDcSessionHandle sessionHandle,
+  Cpa32U numOperations,
+  Cpa32U bufferSize,
+  packet_stats ***pArrayPacketStatsPtrs,
+  pthread_barrier_t *pthread_barrier,
+  pthread_t *threadId
+  )
+{
+  submitter_args *submitterArgs = NULL;
+  OS_MALLOC(&submitterArgs, sizeof(submitter_args));
+  submitterArgs->dcInstHandle = dcInstHandle;
+  submitterArgs->sessionHandle = sessionHandle;
+  submitterArgs->numOperations = numOperations;
+  submitterArgs->bufferSize = bufferSize;
+  submitterArgs->pArrayPacketStatsPtrs = pArrayPacketStatsPtrs;
+  submitterArgs->pthread_barrier = pthread_barrier;
+  createThreadJoinable(threadId, streamFn, (void *)submitterArgs);
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -417,15 +438,24 @@ int main(){
   pthread_barrier = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
   pthread_barrier_init(pthread_barrier, NULL, numFlows);
   for(int i=0; i<numFlows; i++){
-    submitter_args *submitterArgs = NULL;
-    OS_MALLOC(&submitterArgs, sizeof(submitter_args));
-    submitterArgs->dcInstHandle = dcInstHandles[i];
-    submitterArgs->sessionHandle = sessionHandles[i];
-    submitterArgs->numOperations = numOperations;
-    submitterArgs->bufferSize = bufferSize;
-    submitterArgs->pArrayPacketStatsPtrs = &(arrayOfPacketStatsArrayPointers[i]);
-    submitterArgs->pthread_barrier = pthread_barrier;
-    createThreadJoinable(&(subThreads[i]), streamFn, (void *)submitterArgs);
+    // submitter_args *submitterArgs = NULL;
+    // OS_MALLOC(&submitterArgs, sizeof(submitter_args));
+    // submitterArgs->dcInstHandle = dcInstHandles[i];
+    // submitterArgs->sessionHandle = sessionHandles[i];
+    // submitterArgs->numOperations = numOperations;
+    // submitterArgs->bufferSize = bufferSize;
+    // submitterArgs->pArrayPacketStatsPtrs = &(arrayOfPacketStatsArrayPointers[i]);
+    // submitterArgs->pthread_barrier = pthread_barrier;
+    // createThreadJoinable(&(subThreads[i]), streamFn, (void *)submitterArgs);
+    createCompressCrc64Submitter(
+      dcInstHandles[i],
+      sessionHandles[i],
+      numOperations,
+      bufferSize,
+      &(arrayOfPacketStatsArrayPointers[i]),
+      pthread_barrier,
+      &(subThreads[i])
+    );
   }
 
 
