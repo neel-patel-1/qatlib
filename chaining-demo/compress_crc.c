@@ -263,6 +263,31 @@ void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
 
 }
 
+CpaStatus doSubmissionsCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
+  CpaBufferList **srcBufferLists, CpaBufferList **dstBufferLists, CpaDcOpData **opData, CpaDcRqResults **dcResults,
+  callback_args **cb_args, Cpa32U numOperations){
+
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  for(int i=0; i<numOperations; i++){
+retry:
+    status = submitAndStamp(
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists[i],
+      dstBufferLists[i],
+      (opData[i]),
+      dcResults[i],
+      cb_args[i],
+      i
+    );
+    if(status != CPA_STATUS_SUCCESS){
+      fprintf(stderr, "Error in compress data on %d'th packet\n", i);
+      goto retry;
+    }
+  }
+  return status;
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -338,23 +363,16 @@ int main(){
     &complete);
 
 
-  for(int i=0; i<numOperations; i++){
-retry:
-    status = submitAndStamp(
-      dcInstHandle,
-      sessionHandle,
-      srcBufferLists[i],
-      dstBufferLists[i],
-      (opData[i]),
-      dcResults[i],
-      cb_args[i],
-      i
-    );
-    if(status != CPA_STATUS_SUCCESS){
-      fprintf(stderr, "Error in compress data on %d'th packet\n", i);
-      goto retry;
-    }
-  }
+  doSubmissionsCompressAndCrc64(
+    dcInstHandle,
+    sessionHandle,
+    srcBufferLists,
+    dstBufferLists,
+    opData,
+    dcResults,
+    cb_args,
+    numOperations
+  );
 
   if(status != CPA_STATUS_SUCCESS){
     fprintf(stderr, "Error in compress data\n");
