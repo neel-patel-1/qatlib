@@ -55,6 +55,16 @@ CpaStatus validateCompressAndCrc64Sw(
     PRINT_ERR("Buffer data does not match\n");
     status = CPA_STATUS_FAIL;
   }
+
+  uint64_t crc64 = crc64_be(0L, Z_NULL, 0);
+  crc64 = crc64_be(crc64, dstBufferList->pBuffers[0].pData, dcResults->produced);
+  uint64_t crc64_orig = crcData->integrityCrc64b.oCrc;
+  ret = memcmp(&crc64, &crc64_orig, sizeof(uint64_t));
+  if(ret != 0){
+    PRINT_ERR("Dst CRC64 does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+
   return status;
 }
 
