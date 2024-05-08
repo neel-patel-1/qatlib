@@ -293,8 +293,32 @@ retry:
 }
 
 CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
-  CpaBufferList **srcBufferLists, CpaBufferList **dstBufferLists, CpaDcOpData **opData, CpaDcRqResults **dcResults,
-  callback_args **cb_args, Cpa32U numOperations, Cpa32U bufferSize, struct COMPLETION_STRUCT *complete){
+  Cpa32U numOperations, Cpa32U bufferSize
+  ){
+    CpaDcInstanceCapabilities cap = {0};
+    CpaDcOpData **opData = NULL;
+    CpaDcRqResults **dcResults = NULL;
+    CpaCrcData *crcData = NULL;
+    struct COMPLETION_STRUCT complete;
+    callback_args **cb_args = NULL;
+    packet_stats **stats = NULL;
+    CpaBufferList **srcBufferLists = NULL;
+    CpaBufferList **dstBufferLists = NULL;
+    cpaDcQueryCapabilities(dcInstHandle, &cap);
+    COMPLETION_INIT(&complete);
+
+    multiBufferTestAllocations(&cb_args,
+      &stats,
+      &opData,
+      &dcResults,
+      &crcData,
+      numOperations,
+      bufferSize,
+      cap,
+      &srcBufferLists,
+      &dstBufferLists,
+      dcInstHandle,
+      &complete);
     CpaStatus status = doSubmissionsCompressAndCrc64AndWaitForFinal(
       dcInstHandle,
       sessionHandle,
@@ -304,8 +328,16 @@ CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSe
       dcResults,
       cb_args,
       numOperations,
-      complete
+      &complete
     );
+    /* validate all results */
+    for(int i=0; i<numOperations; i++){
+      if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], 1024, dcResults[i], dcInstHandle, &(crcData[i]))){
+        PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+      }
+    }
+    printStats(stats, numOperations, bufferSize);
+    COMPLETION_DESTROY(&complete);
 }
 
 int main(){
@@ -349,68 +381,15 @@ int main(){
   sessionHandle = sessionHandles[0];
   prepareDcSession(dcInstHandle, &sessionHandle, dcPerfCallback);
 
-  CpaBufferList **srcBufferLists = NULL;
-  CpaBufferList **dstBufferLists = NULL;
-
-
-  CpaDcOpData **opData = NULL;
-  CpaDcRqResults **dcResults = NULL;
-
-  struct COMPLETION_STRUCT complete;
-  callback_args **cb_args = NULL;
-  packet_stats **stats = NULL;
-  Cpa64U submitTime;
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 1024;
-
-  CpaCrcData *crcData = NULL;
-
-  cpaDcQueryCapabilities(dcInstHandle, &cap);
-  COMPLETION_INIT(&complete);
-
-
-  multiBufferTestAllocations(&cb_args,
-    &stats,
-    &opData,
-    &dcResults,
-    &crcData,
-    numOperations,
-    bufferSize,
-    cap,
-    &srcBufferLists,
-    &dstBufferLists,
-    dcInstHandle,
-    &complete);
 
   singleStreamOfCompressAndCrc64(
     dcInstHandle,
     sessionHandle,
-    srcBufferLists,
-    dstBufferLists,
-    opData,
-    dcResults,
-    cb_args,
     numOperations,
-    bufferSize,
-    &complete
+    bufferSize
   );
-
-
-
-  /* validate all results */
-  for(int i=0; i<numOperations; i++){
-    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], 1024, dcResults[i], dcInstHandle, &(crcData[i]))){
-      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
-    }
-  }
-
-  printStats(stats, numOperations, bufferSize);
-
-
-  COMPLETION_DESTROY(&complete);
-
-
-  // functionalCompressAndCrc64(dcInstHandle, sessionHandle);
 
 
 exit:
