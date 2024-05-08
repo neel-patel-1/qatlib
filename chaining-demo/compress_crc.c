@@ -12,7 +12,7 @@
 
 int gDebugParam = 1;
 
-#include "zlib.h"
+#include <zlib.h>
 
 #define CRC64_ECMA182_POLY 0x42F0E1EBA9EA3693ULL
 static uint64_t crc64table[256] = {0};
@@ -457,6 +457,7 @@ void multiStreamCompressCrc64PerformanceTest(
   }
 
   /*  Print Stats */
+  printf("HW Offload Performance Test\n");
   printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
 }
 
@@ -479,20 +480,44 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
-  Cpa32U numFlows = 2;
-  Cpa32U numOperations = 10000;
+  /* Get test buffers and perf stats setup */
+  Cpa32U numOperations = 1000;
   Cpa32U bufferSize = 1024;
+  CpaDcOpData **opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  struct COMPLETION_STRUCT complete;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+  cpaDcQueryCapabilities(dcInstHandle, &cap);
+  COMPLETION_INIT(&complete);
 
-  multiStreamCompressCrc64PerformanceTest(
-    numFlows,
+  multiBufferTestAllocations(&cb_args,
+    &stats,
+    &opData,
+    &dcResults,
+    &crcData,
     numOperations,
     bufferSize,
-    dcInstHandles,
-    sessionHandles,
-    numInstances
-  );
+    cap,
+    &srcBufferLists,
+    &dstBufferLists,
+    dcInstHandle,
+    &complete);
 
-
+  int ret;
+  z_stream strm;
+  memset(&strm, 0, sizeof(z_stream));
+  deflateInit(&strm, Z_DEFAULT_COMPRESSION);
+  if(ret != Z_OK)
+  {
+    fprintf(stderr, "Error in deflateInit, ret = %d\n", ret);
+    return CPA_STATUS_FAIL;
+  }
+  Cpa8U *src = srcBufferLists[0]->pBuffers[0].pData;
+  Cpa8U *dst = dstBufferLists[0]->pBuffers[0].pData;
 
 
 exit:
