@@ -4,25 +4,26 @@ typedef struct _threadStats {
   Cpa64U avgLatency;
   Cpa64U minLatency;
   Cpa64U maxLatency;
-  Cpa64U exeTime;
+  Cpa64U exeTimeUs;
   Cpa32U operations;
   Cpa32U operationSize;
+  Cpa32U id;
 } threadStats;
 
 void statsThreadPopulate(packet_stats **packetStatsPtrsArray, Cpa32U numOperations, Cpa32U bufferSize,
-  threadStats *thrStats){
+  threadStats *thrStats, Cpa32U id){
   Cpa32U freqKHz = 2080;
   Cpa64U avgLatency = 0;
   Cpa64U minLatency = UINT64_MAX;
   Cpa64U maxLatency = 0;
-  Cpa64U firstSubmitTime = stats[0]->submitTime;
-  Cpa64U lastReceiveTime = stats[numOperations-1]->receiveTime;
+  Cpa64U firstSubmitTime = packetStatsPtrsArray[0]->submitTime;
+  Cpa64U lastReceiveTime = packetStatsPtrsArray[numOperations-1]->receiveTime;
   Cpa64U exeCycles = lastReceiveTime - firstSubmitTime;
-  Cpa64U exeTime = exeCycles/freqKHz;
-  double offloadsPerSec = numOperations / (double)exeTime;
+  Cpa64U exeTimeUs = exeCycles/freqKHz;
+  double offloadsPerSec = numOperations / (double)exeTimeUs;
   offloadsPerSec = offloadsPerSec * 1000000;
   for(int i=0; i<numOperations; i++){
-    Cpa64U latency = stats[i]->receiveTime - stats[i]->submitTime;
+    Cpa64U latency = packetStatsPtrsArray[i]->receiveTime - packetStatsPtrsArray[i]->submitTime;
     uint64_t micros = latency / freqKHz;
     avgLatency += micros;
     if(micros < minLatency){
@@ -36,10 +37,76 @@ void statsThreadPopulate(packet_stats **packetStatsPtrsArray, Cpa32U numOperatio
   thrStats->avgLatency = avgLatency;
   thrStats->minLatency = minLatency;
   thrStats->maxLatency = maxLatency;
-  thrStats->exeTime = exeTime;
+  thrStats->exeTimeUs = exeTimeUs;
   thrStats->operations = numOperations;
   thrStats->operationSize = bufferSize;
 
+}
+
+/* TODO: https://github.com/rxi/log.c*/
+
+void printSingleThreadStatsSummary(threadStats *stats){
+    Cpa64U exeTimeUs = stats->exeTimeUs;
+    Cpa32U numOperations = stats->operations;
+    Cpa32U bufferSize = stats->operationSize;
+    double offloadsPerSec = numOperations / (double)exeTimeUs;
+    offloadsPerSec = offloadsPerSec * 1000000;
+    printf("Thread: %d\n", stats->id);
+    printf("AvgLatency: %ld\n", stats->avgLatency);
+    printf("MinLatency: %ld\n", stats->minLatency);
+    printf("MaxLatency: %ld\n", stats->maxLatency);
+    printf("OffloadsPerSec: %f\n", offloadsPerSec);
+    printf("Throughput(GB/s): %f\n", offloadsPerSec * bufferSize / 1024 / 1024 / 1024);
+
+}
+
+void printMultiThreadStatsSummary(
+  packet_stats ***arrayOfPacketStatsArrayPointers,
+  Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize)
+{
+  threadStats thrStats[numFlows];
+  Cpa32U maxOfAll=0;
+  Cpa32U avgAcrossAll=0;
+  Cpa32U minOfAll=UINT32_MAX;
+  Cpa64U minLatency = UINT64_MAX;
+  Cpa64U maxLatency = 0;
+  Cpa64U avgLatency = 0;
+  Cpa64U totalThroughput = 0;
+  Cpa64U totalOperations = 0;
+  double offloadsPerSec = 0;
+
+  for(int i=0; i<numFlows; i++){
+    statsThreadPopulate(arrayOfPacketStatsArrayPointers[i], numOperations, bufferSize, &thrStats[i], i);
+    printSingleThreadStatsSummary(&thrStats[i]);
+    /* Exe times */
+    if(thrStats[i].exeTimeUs > maxOfAll){
+      maxOfAll = thrStats[i].exeTimeUs;
+    }
+    avgAcrossAll+=thrStats[i].exeTimeUs;
+    if(thrStats[i].exeTimeUs < minOfAll){
+      minOfAll = thrStats[i].exeTimeUs;
+    }
+
+    /* Latencies */
+    if(thrStats[i].maxLatency > maxLatency){
+      maxLatency = thrStats[i].maxLatency;
+    }
+    avgLatency+=thrStats[i].avgLatency;
+    if(thrStats[i].exeTimeUs < minOfAll){
+      minOfAll = thrStats[i].exeTimeUs;
+    }
+    totalOperations += thrStats[i].operations;
+
+    /* Offloads Per Sec Should use the avg offloads per sec from each flow */    double perFlowOffloadsPerSec = thrStats[i].operations / (double)thrStats[i].exeTimeUs;
+    perFlowOffloadsPerSec *= 1000000;
+    offloadsPerSec += perFlowOffloadsPerSec;
+  }
+  /* If the execution time on one flow was much larger than the others, this metric weighs in the deterioration in performance
+  from the long running flows*/
+  offloadsPerSec = offloadsPerSec / numFlows;
+
+  /* Throughput should use the average offloads per second scaled by the number of flows*/
+  totalThroughput = offloadsPerSec * bufferSize / 1024 / 1024 / 1024;
 }
 
 
@@ -52,8 +119,8 @@ void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
   Cpa64U firstSubmitTime = stats[0]->submitTime;
   Cpa64U lastReceiveTime = stats[numOperations-1]->receiveTime;
   Cpa64U exeCycles = lastReceiveTime - firstSubmitTime;
-  Cpa64U exeTime = exeCycles/freqKHz;
-  double offloadsPerSec = numOperations / (double)exeTime;
+  Cpa64U exeTimeUs = exeCycles/freqKHz;
+  double offloadsPerSec = numOperations / (double)exeTimeUs;
   offloadsPerSec = offloadsPerSec * 1000000;
   for(int i=0; i<numOperations; i++){
     Cpa64U latency = stats[i]->receiveTime - stats[i]->submitTime;
@@ -70,7 +137,7 @@ void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
   printf("AveLatency(us): %lu\n", avgLatency);
   printf("MinLatency(us): %lu\n", minLatency);
   printf("MaxLatency(us): %lu\n", maxLatency);
-  printf("Execution Time(us): %lu\n", exeTime);
+  printf("Execution Time(us): %lu\n", exeTimeUs);
   printf("OffloadsPerSec: %f\n", offloadsPerSec);
   printf("Throughput(GB/s): %f\n", offloadsPerSec * bufferSize / 1024 / 1024 / 1024);
 
@@ -88,4 +155,3 @@ void printMultiThreadStats(packet_stats ***arrayOfPacketStatsArrayPointers, Cpa3
   }
   printf("--------------------------------------\n");
 }
-
