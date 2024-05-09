@@ -72,7 +72,7 @@ void printMultiThreadStatsSummary(
   Cpa64U minLatency = UINT64_MAX;
   Cpa64U maxLatency = 0;
   Cpa64U avgLatency = 0;
-  Cpa64U totalThroughput = 0;
+  double totalThroughput = 0;
   Cpa64U totalOperations = 0;
   double offloadsPerSec = 0;
 
@@ -93,8 +93,8 @@ void printMultiThreadStatsSummary(
       maxLatency = thrStats[i].maxLatency;
     }
     avgLatency+=thrStats[i].avgLatency;
-    if(thrStats[i].exeTimeUs < minOfAll){
-      minOfAll = thrStats[i].exeTimeUs;
+    if(thrStats[i].minLatency < minLatency){
+      minLatency = thrStats[i].minLatency;
     }
     totalOperations += thrStats[i].operations;
 
@@ -108,6 +108,21 @@ void printMultiThreadStatsSummary(
 
   /* Throughput should use the average offloads per second scaled by the number of flows*/
   totalThroughput = offloadsPerSec * bufferSize / 1024 / 1024 / 1024;
+  printf("\n");
+  printf("NumFlows: %d\n", numFlows);
+  printf("BufferSize: %d\n", bufferSize);
+  printf("NumBuffers: %d\n", numOperations);
+  printf("MaxExecutionTime(across-all-streams): %d\n", maxOfAll);
+  printf("AvgExecutionTime(across-all-streams): %d\n", avgAcrossAll/numFlows);
+  printf("MinExecutionTime(across-all-streams): %d\n", minOfAll);
+  printf("MaxLatency(across-all-streams): %ld\n", maxLatency);
+  printf("AvgLatency(across-all-streams): %ld\n", avgLatency/numFlows);
+  printf("MinLatency(across-all-streams): %ld\n", minLatency);
+  printf("TotalOperations(across-all-streams): %ld\n", totalOperations);
+  printf("OffloadsPerSec(avg'd-across-threads): %f\n", offloadsPerSec);
+  printf("AvgPerThreadThroughput(GB/s): %f\n", totalThroughput);
+  printf("CumulativeThroughput(GB/s): %f\n", totalThroughput * numFlows);
+  printf("\n");
 }
 
 

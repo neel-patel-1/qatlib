@@ -22,12 +22,12 @@ CpaStatus createThread(pthread_t *thread, void *func, void *arg){
 
   int status = pthread_attr_init(&attr);
   if(status != 0){
-    fprintf(stderr, "Error initializing thread attributes\n");
+    PRINT_DBG( "Error initializing thread attributes\n");
     return CPA_STATUS_FAIL;
   }
   status = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
   if(status != 0){
-    fprintf(stderr, "Error setting thread scheduling inheritance\n");
+    PRINT_DBG( "Error setting thread scheduling inheritance\n");
     pthread_attr_destroy(&attr);
     return CPA_STATUS_FAIL;
   }
@@ -35,7 +35,7 @@ CpaStatus createThread(pthread_t *thread, void *func, void *arg){
   if (pthread_attr_setschedpolicy(
         &attr, SCHED_RR) != 0)
   {
-      fprintf(stderr,
+      PRINT_DBG(
               "Failed to set scheduling policy for thread!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
@@ -45,7 +45,7 @@ CpaStatus createThread(pthread_t *thread, void *func, void *arg){
   param.sched_priority = 15;
   if (pthread_attr_setschedparam(&attr, &param) != 0)
   {
-      fprintf(stderr,
+      PRINT_DBG(
               "Failed to set the sched parameters attribute!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
@@ -53,23 +53,23 @@ CpaStatus createThread(pthread_t *thread, void *func, void *arg){
 
   if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0)
   {
-      fprintf(stderr,
+      PRINT_DBG(
               "Failed to set the dettachState attribute!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
   }
   if (pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM) != 0)
   {
-      fprintf(stderr,"Failed to set the attribute!\n");
+      PRINT_DBG("Failed to set the attribute!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
   }
 
 
   if(pthread_create(thread, &attr, func, arg) != 0){
-    fprintf(stderr, "Error creating thread\n");
-    fprintf(stderr, "Enable SCHED_RR Policy\n");
-    fprintf(stderr, "Creating thread with default attributes\n");
+    PRINT_DBG( "Error creating thread\n");
+    PRINT_DBG( "Enable SCHED_RR Policy\n");
+    PRINT_DBG( "Creating thread with default attributes\n");
     pthread_create(thread, NULL, func, arg);
     pthread_detach(*thread);
   }
@@ -83,12 +83,12 @@ CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg){
   int status = pthread_attr_init(&attr);
 
   if(status != 0){
-    fprintf(stderr, "Error initializing thread attributes\n");
+    PRINT_DBG( "Error initializing thread attributes\n");
     return CPA_STATUS_FAIL;
   }
   status = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
   if(status != 0){
-    fprintf(stderr, "Error setting thread scheduling inheritance\n");
+    PRINT_DBG( "Error setting thread scheduling inheritance\n");
     pthread_attr_destroy(&attr);
     return CPA_STATUS_FAIL;
   }
@@ -96,7 +96,7 @@ CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg){
   if (pthread_attr_setschedpolicy(
         &attr, SCHED_RR) != 0)
   {
-      fprintf(stderr,
+      PRINT_DBG(
               "Failed to set scheduling policy for thread!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
@@ -106,7 +106,7 @@ CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg){
   param.sched_priority = 15;
   if (pthread_attr_setschedparam(&attr, &param) != 0)
   {
-      fprintf(stderr,
+      PRINT_DBG(
               "Failed to set the sched parameters attribute!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
@@ -114,20 +114,20 @@ CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg){
 
   if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) != 0)
   {
-      fprintf(stderr,
+      PRINT_DBG(
               "Failed to set the dettachState attribute!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
   }
   if (pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM) != 0)
   {
-      fprintf(stderr,"Failed to set the attribute!\n");
+      PRINT_DBG("Failed to set the attribute!\n");
       pthread_attr_destroy(&attr);
       return CPA_STATUS_FAIL;
   }
   if(pthread_create(thread, &attr, func, arg) != 0){
-    fprintf(stderr, "Error creating thread\n");
-    fprintf(stderr, "Creating thread with NULL attributes\n");
+    PRINT_DBG( "Error creating thread\n");
+    PRINT_DBG( "Creating thread with NULL attributes\n");
     pthread_create(thread, NULL, func, arg);
   }
 
