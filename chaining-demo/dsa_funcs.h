@@ -541,6 +541,55 @@ CpaStatus dsaCrcGenCompareWithSw(Cpa8U *buf, Cpa32U buf_size){
   return rc;
 }
 
+CpaStatus compareDSACRCsWithSW(){
+    /* single submit */
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+
+  /* Initial Seed of 0 */
+  int zlib_crc = crc32(0, NULL, 0);
+  Cpa8U *src = NULL;
+  int bufferSize = 1024;
+  prepareSampleBuffer(&src, bufferSize);
+
+  /* Use seeded value */
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+  struct task *tsk = acctest_alloc_task(dsa);
+  tsk->xfer_size = bufferSize;
+  tsk->crc_seed = zlib_crc;
+  tsk->src1 = src;
+  tsk->opcode = 0x10;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+	tsk->desc->crc_seed = zlib_crc;
+	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
+
+  acctest_desc_submit(dsa, tsk->desc);
+  rc = dsa_wait_crcgen(dsa, tsk);
+  int sw_crc = dsa_calculate_crc32(
+    src,
+    bufferSize,
+    zlib_crc, tsk->dflags);
+  zlib_crc = crc32(zlib_crc, src, bufferSize);
+  printf("dsa_sw_crc:%d, zlib_sw_crc:%d, dsa_hw_crc:%d\n", sw_crc, zlib_crc, tsk->comp->crc_val);
+}
+
 
 
 #endif
