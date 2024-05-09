@@ -47,6 +47,17 @@ int main(){
   multiStreamSwCompressCrc64Func(10000, 1024, 8, dcInstHandle);
   multiStreamCompressCrc64PerformanceTest(2,10000,1024,dcInstHandles,sessionHandles,numInstances);
 
+  Cpa32U numOperations = 1000;
+  Cpa32U bufferSize = 1024;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaDcOpData **opData = NULL;
+  struct COMPLETION_STRUCT complete;
+
 exit:
 
   icp_sal_userStop();
