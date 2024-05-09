@@ -41,8 +41,17 @@ int main(){
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandles[0]);
 
-  multiStreamSwCompressCrc64Func(10000, 1024, 8, dcInstHandle);
-  multiStreamCompressCrc64PerformanceTest(2,10000,1024,dcInstHandles,sessionHandles,numInstances);
+  int numFlows = 10;
+  int bufferSize = 4096;
+  int numOperations = 1000;
+
+  /* Double the number of cores since Ax config gets to use a separate polling thread for each flow*/
+  multiStreamSwCompressCrc64Func(100, bufferSize, numFlows * 2, dcInstHandle);
+
+  if(numFlows > numInstances){
+    numFlows = numInstances;
+  }
+  multiStreamCompressCrc64PerformanceTest(numFlows,numOperations,bufferSize,dcInstHandles,sessionHandles,numInstances);
 
 exit:
 

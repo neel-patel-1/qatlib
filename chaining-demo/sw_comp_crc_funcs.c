@@ -21,8 +21,7 @@ void multiStreamSwCompressCrc64Func(Cpa32U numOperations, Cpa32U bufferSize,
   for(int i=0; i<numStreams; i++){
     pthread_join(threads[i], NULL);
   }
-  printf("--------------------------------------------\n");
-  printf("Sw Deflate + Sw CRC 64\n");
+  printf("------------\nSw Deflate + Sw Crc64 Offload Performance Test");
   printMultiThreadStats(stats, numStreams, numOperations, bufferSize);
 }
 
