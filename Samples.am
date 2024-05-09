@@ -226,12 +226,13 @@ compress_crc_SOURCES = \
 compress_crc_CFLAGS = \
 	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 	-I$(srcdir)/chaining-demo \
+	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
 	-g3 \
 	$(COMMON_FLAGS)
 
-compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la -lz
+compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la -lz /home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a
 
 noinst_PROGRAMS += dc_stateless_multi_op_sample
 dc_stateless_multi_op_sample_SOURCES = \

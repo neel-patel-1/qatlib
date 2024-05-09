@@ -11,12 +11,16 @@
 
 #include "buffer_prepare_funcs.h"
 #include "hw_comp_crc_funcs.h"
+#include "sw_comp_crc_funcs.h"
 
 #include "print_funcs.h"
 
 int gDebugParam = 1;
 
 #include <zlib.h>
+
+
+#include "dml/dml.h"
 
 
 int main(){
