@@ -30,4 +30,11 @@ CpaStatus validateCompress(
   CpaDcRqResults *dcResults,
   Cpa32U bufferSize);
 
+CpaStatus validateCompressAndCrc64Sw(
+  CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize,
+  CpaCrcData *crcData);
+
 #endif

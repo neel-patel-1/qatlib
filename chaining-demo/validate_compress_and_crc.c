@@ -148,3 +148,53 @@ CpaStatus validateCompress(
   }
   return status;
 }
+
+CpaStatus validateCompressAndCrc64Sw(
+  CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize,
+  CpaCrcData *crcData)
+{
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  /* Check the Buffer matches*/
+  z_stream *stream;
+  stream = malloc(sizeof(z_stream));
+  stream->zalloc = Z_NULL;
+  stream->zfree = Z_NULL;
+  stream->opaque = Z_NULL;
+  status = inflateInit(stream);
+  if (status != Z_OK)
+  {
+      PRINT_ERR("Error in zlib_inflateInit2, ret = %d\n", status);
+      return CPA_STATUS_FAIL;
+  }
+
+  Bytef *tmpBuf = NULL;
+  OS_MALLOC(&tmpBuf, bufferSize);
+
+  stream->next_in = (Bytef *)dstBufferList->pBuffers[0].pData;
+  stream->avail_in = dcResults->produced;
+  stream->next_out = (Bytef *)tmpBuf;
+  stream->avail_out = bufferSize;
+  int ret = inflate(stream, Z_FULL_FLUSH);
+
+  inflateEnd(stream);
+
+  ret = memcmp(srcBufferList->pBuffers[0].pData, tmpBuf, bufferSize);
+  if(ret != 0){
+    PRINT_ERR("Buffer data does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+
+  uint64_t crc64 = crc64_be(0L, Z_NULL, 0);
+  crc64 = crc64_be(crc64, dstBufferList->pBuffers[0].pData, dcResults->produced);
+  uint64_t crc64_orig = crcData->integrityCrc64b.oCrc;
+  ret = memcmp(&crc64, &crc64_orig, sizeof(uint64_t));
+  if(ret != 0){
+    PRINT_ERR("Dst CRC64 does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+
+  return status;
+}
