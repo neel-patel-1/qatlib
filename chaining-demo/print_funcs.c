@@ -40,6 +40,7 @@ void statsThreadPopulate(packet_stats **packetStatsPtrsArray, Cpa32U numOperatio
   thrStats->exeTimeUs = exeTimeUs;
   thrStats->operations = numOperations;
   thrStats->operationSize = bufferSize;
+  thrStats->id = id;
 
 }
 
@@ -144,14 +145,15 @@ void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
 }
 
 void printMultiThreadStats(packet_stats ***arrayOfPacketStatsArrayPointers, Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize){
-  printf("--------------------------------------\n");
-  printf("BufferSize: %d\n", bufferSize);
-  printf("NumOperations: %d\n", numOperations);
-  printf("--------------------------------------\n");
-  for(int i=0; i<numFlows; i++){
-    printf("--------------------------------------\n");
-    printf("Flow: %d\n", i);
-    printStats((arrayOfPacketStatsArrayPointers[i]), numOperations, bufferSize);
-  }
-  printf("--------------------------------------\n");
+  // printf("--------------------------------------\n");
+  // printf("BufferSize: %d\n", bufferSize);
+  // printf("NumOperations: %d\n", numOperations);
+  // printf("--------------------------------------\n");
+  // for(int i=0; i<numFlows; i++){
+  //   printf("--------------------------------------\n");
+  //   printf("Flow: %d\n", i);
+  //   printStats((arrayOfPacketStatsArrayPointers[i]), numOperations, bufferSize);
+  // }
+  // printf("--------------------------------------\n");
+  printMultiThreadStatsSummary(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
 }
