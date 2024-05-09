@@ -139,7 +139,7 @@ CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSe
     );
     /* validate all results */
     for(int i=0; i<numOperations; i++){
-      if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], 1024, dcResults[i], dcInstHandle, &(crcData[i]))){
+      if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
         PRINT_ERR("Buffer not compressed/decompressed correctly\n");
       }
     }
@@ -204,7 +204,7 @@ void multiStreamCompressCrc64PerformanceTest(
   }
 
   /*  Print Stats */
-  printf("HW Offload Performance Test\n");
+  printf("------------\nHW Offload Performance Test");
   printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
 }
 

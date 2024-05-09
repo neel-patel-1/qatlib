@@ -63,7 +63,7 @@ void printSingleThreadStatsSummary(threadStats *stats){
 
 void printMultiThreadStatsSummary(
   packet_stats ***arrayOfPacketStatsArrayPointers,
-  Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize)
+  Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize, CpaBoolean printThreadStats)
 {
   threadStats thrStats[numFlows];
   Cpa32U maxOfAll=0;
@@ -78,7 +78,9 @@ void printMultiThreadStatsSummary(
 
   for(int i=0; i<numFlows; i++){
     statsThreadPopulate(arrayOfPacketStatsArrayPointers[i], numOperations, bufferSize, &thrStats[i], i);
-    printSingleThreadStatsSummary(&thrStats[i]);
+    if(printThreadStats){
+      printSingleThreadStatsSummary(&thrStats[i]);
+    }
     /* Exe times */
     if(thrStats[i].exeTimeUs > maxOfAll){
       maxOfAll = thrStats[i].exeTimeUs;
@@ -121,6 +123,7 @@ void printMultiThreadStatsSummary(
   printf("TotalOperations(across-all-streams): %ld\n", totalOperations);
   printf("OffloadsPerSec(avg'd-across-threads): %f\n", offloadsPerSec);
   printf("AvgPerThreadThroughput(GB/s): %f\n", totalThroughput);
+  printf("CumulativeOffloadsPerSec: %f\n", offloadsPerSec*numFlows);
   printf("CumulativeThroughput(GB/s): %f\n", totalThroughput * numFlows);
   printf("\n");
 }
@@ -170,5 +173,5 @@ void printMultiThreadStats(packet_stats ***arrayOfPacketStatsArrayPointers, Cpa3
   //   printStats((arrayOfPacketStatsArrayPointers[i]), numOperations, bufferSize);
   // }
   // printf("--------------------------------------\n");
-  printMultiThreadStatsSummary(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
+  printMultiThreadStatsSummary(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize, CPA_FALSE);
 }
