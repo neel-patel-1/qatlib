@@ -532,6 +532,10 @@ CpaStatus dsaCrcGenCompareWithSw(Cpa8U *buf, Cpa32U buf_size){
 
   int sw_crc = dsa_calculate_crc32(inp, size, seed_val, tsk->dflags);
   printf("%d, %d", dsa_crc, sw_crc);
+  if(dsa_crc != sw_crc){
+    PRINT_ERR("CRC32 Does not match expected: %d\n", sw_crc);
+    rc = CPA_STATUS_FAIL;
+  }
 
   rc = task_result_verify_task_nodes(dsa, 0);
   if(rc != ACCTEST_STATUS_OK){
@@ -590,6 +594,76 @@ CpaStatus compareDSACRCsWithSW(){
   printf("dsa_sw_crc:%d, zlib_sw_crc:%d, dsa_hw_crc:%d\n", sw_crc, zlib_crc, tsk->comp->crc_val);
 }
 
+/*
+ Could prepare all descriptors in advance and submit them
+ An application would prepare a batch of reusable descriptors.
+ The only fields requiring changing are src1, dst1,
+*/
+
+/*
+  Need a way to determine when any given dsa offload has completed
+  (1) CRs are received in order -> on each cr discovery, update the packet_stats latency
+
+
+  where is crc_seed_addr used?
+  how to get dsa to emit crc64?
+
+  multi-task-nodes approach: allocate many tasks, do acctest_prep_desc_common tasks
+
+
+  Goal submit dependent tasks to dsa once a task on qat has completed
+*/
+
+CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists){
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+  struct task *tsk;
+
+  /* Use seeded value */
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+
+  tsk = acctest_alloc_task(dsa);
+  tsk->xfer_size = 1024;
+  tsk->pattern = 0x0123456789abcdef;
+  tsk->crc_seed = 0x12345678;
+  tsk->src1 = srcBufferLists[0]->pBuffers[0].pData;
+  tsk->opcode = 0x10;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+	tsk->desc->crc_seed = tsk->crc_seed;
+	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
+
+  acctest_desc_submit(dsa, tsk->desc);
+  rc = dsa_wait_crcgen(dsa, tsk);
+
+  acctest_alloc_multiple_tasks(dsa, 1);
+
+  acctest_free(dsa);
+
+  int crc32 = dsa_calculate_crc32(tsk->src1, tsk->xfer_size, tsk->crc_seed, tsk->dflags);
+  if(tsk->comp->crc_val != crc32){
+    PRINT_ERR("CRC32 Mismatch\n");
+    rc = CPA_STATUS_FAIL;
+  }
+  return rc;
+}
 
 
 #endif
