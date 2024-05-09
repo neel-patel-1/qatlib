@@ -15,13 +15,17 @@
 
 #include "print_funcs.h"
 
-int gDebugParam = 1;
-
 #include <zlib.h>
 
 
 #include "idxd.h"
 #include "dsa.h"
+
+#include "dsa_funcs.h"
+
+int gDebugParam = 1;
+
+
 
 
 int main(){
@@ -72,26 +76,16 @@ int main(){
     &complete
   );
 
-  /*offload*/
-  struct acctest_context *dsa = NULL;
-  int tflags = TEST_FLAGS_BOF;
-  int rc;
-  int wq_type = ACCFG_WQ_SHARED;
-  int dev_id = 0;
-  int wq_id = 0;
-
   /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
-  dsa = acctest_init(tflags);
-  dsa->dev_type = ACCFG_DEVICE_DSA;
 
-  if (!dsa)
-		return -ENOMEM;
+  status = dsaCrcGenCompareWithSw(srcBufferLists[0]->pBuffers[0].pData,
+    bufferSize);
+  return status;
 
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-	if (rc < 0)
-		return -ENOMEM;
-
+  /* single submit */
+  int rc;
   struct task *tsk;
+  struct acctest_context *dsa = NULL;
 
   tsk = acctest_alloc_task(dsa);
   tsk->xfer_size = 1024;
@@ -110,6 +104,8 @@ int main(){
 
   acctest_desc_submit(dsa, tsk->desc);
   rc = dsa_wait_crcgen(dsa, tsk);
+
+  acctest_alloc_multiple_tasks(dsa, 1);
 
   acctest_free(dsa);
 exit:
