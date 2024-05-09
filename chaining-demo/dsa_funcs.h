@@ -732,5 +732,14 @@ CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists){
   return rc;
 }
 
+CpaStatus validateCrc32DSA(struct task *tsk, Cpa8U *buf, Cpa64U bufLen){
+  int crc32 = dsa_calculate_crc32(buf, bufLen, tsk->crc_seed, tsk->dflags);
+  int rc;
+  if(tsk->comp->crc_val != crc32){
+    PRINT_ERR("CRC32 Mismatch\n");
+    rc = CPA_STATUS_FAIL;
+  }
+}
+
 
 #endif

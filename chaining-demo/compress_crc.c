@@ -101,9 +101,16 @@ int main(){
   /* generate requests */
   // struct task_node *dstBufCrcTaskNodes = NULL;
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
-  struct task *waitTask = dsa->multi_task_node->tsk;
+
+  struct task_node *waitTaskNode = dsa->multi_task_node;
+  struct task *waitTask = waitTaskNode->tsk;
+  Cpa8U *buf = srcBufferLists[0]->pBuffers[0].pData;
   single_crc_submit_task(dsa, waitTask);
   dsa_wait_crcgen(dsa, waitTask);
+  rc = validateCrc32DSA(waitTask,buf, bufferSize);
+  if( CPA_STATUS_SUCCESS != rc ){
+    goto exit;
+  }
   // tsk=dstBufCrcTaskNodes->tsk;
   // single_crc_submit_task(dsa, tsk);
 
