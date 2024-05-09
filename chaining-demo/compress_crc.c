@@ -72,6 +72,7 @@ int main(){
     &complete
   );
 
+  /*offload*/
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
   int rc;
@@ -92,7 +93,25 @@ int main(){
 
   struct task *tsk;
 
+  tsk = acctest_alloc_task(dsa);
+  tsk->xfer_size = 1024;
+  tsk->pattern = 0x0123456789abcdef;
+  tsk->crc_seed = 0x12345678;
+  tsk->src1 = srcBufferLists[0]->pBuffers[0].pData;
+  tsk->dst1 = (void *)&(crcData[0].crc32);
+  tsk->opcode = 0x10;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+	tsk->desc->crc_seed = tsk->crc_seed;
+	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
 
+  acctest_desc_submit(dsa, tsk->desc);
+  rc = dsa_wait_crcgen(dsa, tsk);
+
+  acctest_free(dsa);
 exit:
 
   icp_sal_userStop();
