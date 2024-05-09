@@ -221,11 +221,20 @@ compress_crc_SOURCES = \
 	chaining-demo/buffer_prepare_funcs.c \
 	chaining-demo/validate_compress_and_crc.c \
 	chaining-demo/print_funcs.c \
+	$(srcdir)/idxd/test/libaccfg.c \
+	$(srcdir)/idxd/test/core.c \
+	$(srcdir)/idxd/test/dsa.c \
+	$(srcdir)/idxd/util/log.c \
+	$(srcdir)/idxd/test/accel_test.c \
+	$(srcdir)/idxd/test/dsa_prep.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
 
 compress_crc_CFLAGS = \
 	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
 	-I$(srcdir)/chaining-demo \
+	-I$(srcdir)/idxd/test \
+	-I$(srdir)/idxd \
+	-I$(srcdir)/accfg \
 	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \

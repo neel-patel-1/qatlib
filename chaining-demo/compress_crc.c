@@ -20,7 +20,8 @@ int gDebugParam = 1;
 #include <zlib.h>
 
 
-#include "dml/dml.h"
+#include "idxd.h"
+#include "dsa.h"
 
 
 int main(){
@@ -44,8 +45,6 @@ int main(){
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandles[0]);
 
-  multiStreamSwCompressCrc64Func(10000, 1024, 8, dcInstHandle);
-  multiStreamCompressCrc64PerformanceTest(2,10000,1024,dcInstHandles,sessionHandles,numInstances);
 
   Cpa32U numOperations = 1000;
   Cpa32U bufferSize = 1024;
@@ -57,6 +56,42 @@ int main(){
   packet_stats **stats = NULL;
   CpaDcOpData **opData = NULL;
   struct COMPLETION_STRUCT complete;
+
+  multiBufferTestAllocations(
+    &cb_args,
+    &stats,
+    &opData,
+    &dcResults,
+    &crcData,
+    numOperations,
+    bufferSize,
+    cap,
+    &srcBufferLists,
+    &dstBufferLists,
+    dcInstHandle,
+    &complete
+  );
+
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+
+  /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+  struct task *tsk;
+
 
 exit:
 
