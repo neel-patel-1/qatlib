@@ -628,7 +628,11 @@ the application is processing streams of transformations at line rate, submittin
   Goal submit dependent tasks to dsa once a task on qat has completed
 */
 
-void alloc_crc_task(struct acctest_context *dsa, struct task **pTsk, Cpa8U *srcAddr){
+void single_crc_submit_task(struct acctest_context *dsa, struct task *tsk){
+  acctest_desc_submit(dsa, tsk->desc);
+}
+
+struct task *alloc_crc_task(struct acctest_context *dsa, Cpa8U *srcAddr){
   struct task *tsk;
 
   tsk = acctest_alloc_task(dsa);
@@ -645,7 +649,48 @@ void alloc_crc_task(struct acctest_context *dsa, struct task **pTsk, Cpa8U *srcA
 	tsk->desc->crc_seed = tsk->crc_seed;
 	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
 
-  *pTsk = tsk;
+  return tsk;
+}
+
+/* prepare an allocated tsk for crcgen on the srcAddr */
+void prepare_crc_task(
+    struct task *tsk,
+    struct acctest_context *dsa, Cpa8U *srcAddr, Cpa64U bufferSize
+    ){
+  tsk->xfer_size = bufferSize;
+  tsk->crc_seed = 0x12345678;
+  tsk->src1 = srcAddr;
+  tsk->opcode = 0x10;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+	tsk->desc->crc_seed = tsk->crc_seed;
+	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
+
+}
+
+/* tsks are in a linked list, we are waiting on multiple tasks in sequence, is traversing the linked list to get the next task to wait on the bottlneck?*/
+/* Array of Buffer Lists contain all the data for which dsa ops will be performed, but dsa is the second step in the offload sequence and must use the dst as src */
+/* Task nodes are allocated on dsa and prepped for buffer lists*/
+CpaStatus create_tsk_nodes_for_stage2_offload(CpaBufferList **srcBufferLists,
+  int numOperations, struct acctest_context *dsa){
+  struct task *tsk;
+  struct task_node *task_node = NULL;
+  Cpa32U bListIdx = 0;
+
+  acctest_alloc_multiple_tasks(dsa, numOperations);
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    CpaFlatBuffer *fltBuf = &(srcBufferLists[bListIdx]->pBuffers[0]);
+    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, fltBuf->dataLenInBytes);
+    bListIdx++;
+    task_node = task_node->next;
+  }
+
+
 }
 
 CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists){
@@ -670,7 +715,7 @@ CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists){
 		return -ENOMEM;
 
 
-  alloc_crc_task(dsa, &tsk, srcBufferLists[0]->pBuffers[0].pData);
+  tsk = alloc_crc_task(dsa, srcBufferLists[0]->pBuffers[0].pData);
 
   acctest_desc_submit(dsa, tsk->desc);
   rc = dsa_wait_crcgen(dsa, tsk);

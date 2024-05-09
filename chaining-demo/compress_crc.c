@@ -77,8 +77,33 @@ int main(){
   );
 
   /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+  struct task *tsk;
 
-  /* single submit */
+  /* Use seeded value */
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+
+  /* generate requests */
+  // struct task_node *dstBufCrcTaskNodes = NULL;
+  create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  // tsk=dstBufCrcTaskNodes->tsk;
+  // single_crc_submit_task(dsa, tsk);
+
   singleSubmitValidation(srcBufferLists);
 exit:
 
