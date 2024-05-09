@@ -598,6 +598,14 @@ CpaStatus compareDSACRCsWithSW(){
  Could prepare all descriptors in advance and submit them
  An application would prepare a batch of reusable descriptors.
  The only fields requiring changing are src1, dst1,
+
+ benefit of preparing hw_descs: none if all tasks are preallocated, and the callback function has access to the hwdesc to submit
+
+ what is the application/use case we are emulating?:
+the application is processing streams of transformations at line rate, submitting requests for chained operations as fast as possible
+
+
+ need to
 */
 
 /*
@@ -607,12 +615,38 @@ CpaStatus compareDSACRCsWithSW(){
 
   where is crc_seed_addr used?
   how to get dsa to emit crc64?
+  IDXD_OP_FLAG_CRAV?
+  IDXD_OP_FLAG_RCR?
+  when might we copy and crc?
+
+  link against idxd_config lib to avoid using internal code / compiling, but missing dsa.c / test functions
+  check for idxd test library
 
   multi-task-nodes approach: allocate many tasks, do acctest_prep_desc_common tasks
 
 
   Goal submit dependent tasks to dsa once a task on qat has completed
 */
+
+void alloc_crc_task(struct acctest_context *dsa, struct task **pTsk, Cpa8U *srcAddr){
+  struct task *tsk;
+
+  tsk = acctest_alloc_task(dsa);
+  tsk->xfer_size = 1024;
+  tsk->crc_seed = 0x12345678;
+  tsk->src1 = srcAddr;
+  tsk->opcode = 0x10;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+	tsk->desc->crc_seed = tsk->crc_seed;
+	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
+
+  *pTsk = tsk;
+}
 
 CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists){
   struct acctest_context *dsa = NULL;
@@ -636,19 +670,7 @@ CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists){
 		return -ENOMEM;
 
 
-  tsk = acctest_alloc_task(dsa);
-  tsk->xfer_size = 1024;
-  tsk->pattern = 0x0123456789abcdef;
-  tsk->crc_seed = 0x12345678;
-  tsk->src1 = srcBufferLists[0]->pBuffers[0].pData;
-  tsk->opcode = 0x10;
-  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
-  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
-				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
-  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
-	tsk->comp->status = 0;
-	tsk->desc->crc_seed = tsk->crc_seed;
-	tsk->desc->seed_addr = (uint64_t)tsk->crc_seed_addr;
+  alloc_crc_task(dsa, &tsk, srcBufferLists[0]->pBuffers[0].pData);
 
   acctest_desc_submit(dsa, tsk->desc);
   rc = dsa_wait_crcgen(dsa, tsk);
