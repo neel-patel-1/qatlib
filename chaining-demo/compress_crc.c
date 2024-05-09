@@ -221,19 +221,8 @@ int main(){
     fprintf(stderr, "No instances found\n");
     return CPA_STATUS_FAIL;
   }
-
-  /* Keep a dcinst handle for obtaining buffers with hw compress bounds and compatibility/ function reuse*/
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandles[0]);
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-  cpaDcQueryCapabilities(dcInstHandle, &cap);
-  prepareDcInst(&dcInstHandle);
 
   multiStreamSwCompressCrc64Func(10000, 1024, 8, dcInstHandle);
   multiStreamCompressCrc64PerformanceTest(2,10000,1024,dcInstHandles,sessionHandles,numInstances);
