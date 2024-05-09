@@ -1,8 +1,7 @@
 #include "thread_utils.h"
 
 _Atomic int gPollingDcs[MAX_INSTANCES];
-
-
+_Atomic int gPollingCrcs[MAX_DSAS];
 
 void *dc_polling(void *args){
   thread_args *targs = (thread_args *)args;

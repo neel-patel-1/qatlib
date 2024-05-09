@@ -12,8 +12,10 @@
 #include <pthread.h>
 
 #define MAX_INSTANCES 16
+#define MAX_DSAS 8
 extern int gDebugParam;
 extern _Atomic int gPollingDcs[MAX_INSTANCES];
+extern _Atomic int gPollingCrcs[MAX_DSAS];
 
 typedef struct _thread_args{
   CpaInstanceHandle dcInstHandle;

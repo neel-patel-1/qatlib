@@ -25,6 +25,23 @@
 
 int gDebugParam = 1;
 
+typedef struct _crc_polling_args{
+  struct acctest_context *dsa;
+  int id;
+} crc_polling_args;
+
+void *crc_polling(void *args){
+  crc_polling_args *crcArgs = (crc_polling_args *)(args);
+  int id = crcArgs->id;
+  gPollingCrcs[id] = 1;
+  struct acctest_context *dsa = crcArgs->dsa;
+  struct task_node *tsk_node = crcArgs->dsa->multi_task_node;
+  while(tsk_node){
+    dsa_wait_crcgen(dsa, tsk_node->tsk);
+    tsk_node = tsk_node->next;
+  }
+  gPollingCrcs[id] = 0;
+}
 
 
 
@@ -97,17 +114,48 @@ int main(){
 	if (rc < 0)
 		return -ENOMEM;
 
+  int bufIdx = 0;
+  crc_polling_args *crcArgs = NULL;
+  int tid=0;
+  pthread_t pTid;
+  struct task *waitTask;
+  Cpa8U *buf;
+  struct task_node *waitTaskNode;
 
-  /* generate requests */
-  // struct task_node *dstBufCrcTaskNodes = NULL;
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
+  crcArgs->dsa=dsa;
+  crcArgs->id = tid;
+  createThreadJoinable(&pTid,crc_polling, crcArgs);
 
-  struct task_node *waitTaskNode = dsa->multi_task_node;
-  struct task *waitTask = waitTaskNode->tsk;
-  Cpa8U *buf = srcBufferLists[0]->pBuffers[0].pData;
-  single_crc_submit_task(dsa, waitTask);
-  dsa_wait_crcgen(dsa, waitTask);
-  rc = validateCrc32DSA(waitTask,buf, bufferSize);
+  waitTaskNode = dsa->multi_task_node;
+
+  while(waitTaskNode){
+    waitTask = waitTaskNode->tsk;
+    single_crc_submit_task(dsa, waitTask);
+
+    waitTaskNode = waitTaskNode->next;
+  }
+  pthread_join(pTid, NULL);
+
+  waitTaskNode = dsa->multi_task_node;
+  for(int i=0; i<numOperations; i++){
+    waitTask = waitTaskNode->tsk;
+    buf = srcBufferLists[bufIdx]->pBuffers[0].pData;
+
+    rc = validateCrc32DSA(waitTask,buf, bufferSize);
+    if(rc == CPA_STATUS_SUCCESS){
+      PRINT_DBG("DSA CRC32 Correct\n");
+    } else{
+      PRINT_ERR("DSA CRC32 Incorrect\n");
+      break;
+    }
+
+    waitTaskNode = waitTaskNode->next;
+    bufIdx++;
+  }
+
+
   if( CPA_STATUS_SUCCESS != rc ){
     goto exit;
   }
