@@ -101,10 +101,13 @@ int main(){
   /* generate requests */
   // struct task_node *dstBufCrcTaskNodes = NULL;
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  struct task *waitTask = dsa->multi_task_node->tsk;
+  single_crc_submit_task(dsa, waitTask);
+  dsa_wait_crcgen(dsa, waitTask);
   // tsk=dstBufCrcTaskNodes->tsk;
   // single_crc_submit_task(dsa, tsk);
 
-  singleSubmitValidation(srcBufferLists);
+  // singleSubmitValidation(srcBufferLists);
 exit:
 
   icp_sal_userStop();
