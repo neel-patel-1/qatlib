@@ -206,7 +206,32 @@ void create_dc_polling_thread(struct acctest_context *dsa, int flowId,
   createThread(tid, dc_crc64_polling, dcCrcArgs);
 }
 
-CpaStatus submit_all_comp_crc_requests(){}
+CpaStatus submit_all_comp_crc_requests(
+  int numOperations,
+  CpaInstanceHandle dcInstHandle,
+  CpaDcSessionHandle sessionHandle,
+  CpaBufferList **srcBufferLists,
+  CpaBufferList **dstBufferLists,
+  CpaDcOpData **opData,
+  CpaDcRqResults **dcResults,
+  dsa_fwder_args **args
+){
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  int bufIdx = 0;
+  while(bufIdx < numOperations){
+    status |= submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+      sessionHandle,
+      srcBufferLists[bufIdx],
+      dstBufferLists[bufIdx],
+      opData[bufIdx],
+      dcResults[bufIdx],
+      args[bufIdx],
+      bufIdx);
+
+    bufIdx++;
+  }
+  return status;
+}
 
 
 int main(){
@@ -330,19 +355,28 @@ int main(){
   create_dc_polling_thread(dsa, flowId, &dcToCrcTid, dcInstHandle);
 
   /* Submit to dcInst */
-  bufIdx = 0;
-  while(bufIdx < numOperations){
-    rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
-      sessionHandle,
-      srcBufferLists[bufIdx],
-      dstBufferLists[bufIdx],
-      opData[bufIdx],
-      dcResults[bufIdx],
-      args[bufIdx],
-      bufIdx);
+  // bufIdx = 0;
+  // while(bufIdx < numOperations){
+  //   rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+  //     sessionHandle,
+  //     srcBufferLists[bufIdx],
+  //     dstBufferLists[bufIdx],
+  //     opData[bufIdx],
+  //     dcResults[bufIdx],
+  //     args[bufIdx],
+  //     bufIdx);
 
-    bufIdx++;
-  }
+  //   bufIdx++;
+  // }
+    rc = submit_all_comp_crc_requests(
+      numOperations,
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists,
+      dstBufferLists,
+      opData,
+      dcResults,
+      args);
 
   pthread_join(crcTid, NULL);
   gPollingDcs[flowId] = 0;
