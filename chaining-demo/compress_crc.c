@@ -116,26 +116,6 @@ retry:
 
 
 
-
-
-void printTwoPhaseSingleThreadStatsSummary(threadStats2P *stats){
-    Cpa64U exeTimeUs = stats->exeTimeUs;
-    Cpa32U numOperations = stats->operations;
-    Cpa32U bufferSize = stats->operationSize;
-    double offloadsPerSec = numOperations / (double)exeTimeUs;
-    offloadsPerSec = offloadsPerSec * 1000000;
-    printf("Thread: %d\n", stats->id);
-    printf("AvgLatency: %ld\n", stats->avgLatency);
-    printf("MinLatency: %ld\n", stats->minLatency);
-    printf("MaxLatency: %ld\n", stats->maxLatency);
-    printf("AvgPhase1Latency: %ld\n", stats->avgLatencyS1);
-    printf("AvgPhase2Latency: %ld\n", stats->avgLatencyS2);
-    printf("OffloadsPerSec: %f\n", offloadsPerSec);
-    printf("Throughput(GB/s): %f\n", offloadsPerSec * bufferSize / 1024 / 1024 / 1024);
-
-}
-
-
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
