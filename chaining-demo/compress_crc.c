@@ -140,6 +140,43 @@ retry:
 
 }
 
+CpaStatus prep_crc_test_cb_fwd_args(
+  dsa_fwder_args *** pArrayCbArgsPtrs,
+  struct acctest_context * dsa,
+  two_stage_packet_stats **arrayPktStatsPtrs,
+  int numOperations
+){
+  dsa_fwder_args **args;
+  PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args*)*numOperations);
+  struct task_node *waitTaskNode;
+  int rc = CPA_STATUS_SUCCESS;
+
+  waitTaskNode = dsa->multi_task_node;
+  for(int argsIdx=0; argsIdx<numOperations; argsIdx++){
+    if(waitTaskNode == NULL){
+      rc = CPA_STATUS_FAIL;
+      PRINT_ERR("Multi-Task Node has insufficient tasks\n");
+      break;
+    }
+    /* args */
+    PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
+    args[argsIdx]->dsa=dsa;
+    args[argsIdx]->toSubmit = waitTaskNode->tsk;
+    args[argsIdx]->stats = arrayPktStatsPtrs;
+    args[argsIdx]->packetId = argsIdx; /* assume packets will be seen in order at dsa*/
+    waitTaskNode = waitTaskNode->next;
+  }
+  *pArrayCbArgsPtrs = args;
+  return rc;
+}
+
+CpaStatus alloc_crc_test_packet_stats(){}
+
+CpaStatus create_crc_polling_thread(){}
+
+CpaStatus create_dc_polling_thread(){}
+
+CpaStatus submit_all_comp_crc_requests(){}
 
 
 int main(){
@@ -229,33 +266,42 @@ int main(){
   two_stage_packet_stats **stats2Phase = NULL;
   PHYS_CONTIG_ALLOC(&stats2Phase, sizeof(two_stage_packet_stats*) * numOperations);
 
-  struct acctest_context *crc32Ctx = NULL;
-  crc32Ctx = acctest_init(TEST_FLAGS_BOF);
-  rc = acctest_duplicate_context(crc32Ctx, dsa );
-  if(rc < 0){
-    PRINT_ERR("Failed to allocate shared wq for crc32Ctx\n");
-    goto exit;
-  }
-  return rc;
+  // struct acctest_context *crc32Ctx = NULL;
+  // crc32Ctx = acctest_init(TEST_FLAGS_BOF);
+  // rc = acctest_duplicate_context(crc32Ctx, dsa );
+  // if(rc < 0){
+  //   PRINT_ERR("Failed to allocate shared wq for crc32Ctx\n");
+  //   goto exit;
+  // }
+  // return rc;
 
   /* Create args and dsa descs for the callback function to submit*/
-  PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args*)*numOperations);
+  // PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args*)*numOperations);
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  rc = prep_crc_test_cb_fwd_args(
+    &args,
+    dsa,
+    stats2Phase,
+    numOperations
+  );
+
   waitTaskNode = dsa->multi_task_node;
   while(waitTaskNode){
     /* args */
-    PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
-    args[argsIdx]->dsa=dsa;
-    args[argsIdx]->toSubmit = waitTaskNode->tsk;
-    args[argsIdx]->stats = stats2Phase;
-    args[argsIdx]->packetId = argsIdx; /* assume packets will be seen in order at dsa*/
-    waitTaskNode = waitTaskNode->next;
+    // PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
+    // args[argsIdx]->dsa=dsa;
+    // args[argsIdx]->toSubmit = waitTaskNode->tsk;
+    // args[argsIdx]->stats = stats2Phase;
+    // args[argsIdx]->packetId = argsIdx; /* assume packets will be seen in order at dsa*/
+    // waitTaskNode = waitTaskNode->next;
 
     /* packet stats */
     PHYS_CONTIG_ALLOC(&(stats2Phase[argsIdx]), sizeof(two_stage_packet_stats));
     memset(stats2Phase[argsIdx], 0, sizeof(two_stage_packet_stats));
       argsIdx++;
+      waitTaskNode = waitTaskNode->next;
   }
+
 
   /* Create polling thread for DSA */
   OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
