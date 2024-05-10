@@ -136,6 +136,7 @@ int main(){
   }
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandles[0]);
+  prepareDcSession(dcInstHandle, &sessionHandle, dcDsaCrcCallback);
 
 
   Cpa32U numOperations = 1000;
@@ -188,13 +189,15 @@ int main(){
   int bufIdx = 0;
   crc_polling_args *crcArgs = NULL;
   int tid=0;
-  pthread_t pTid;
+  pthread_t pTid, dcToCrcTid;
   struct task *waitTask;
   Cpa8U *buf;
   struct task_node *waitTaskNode;
 
   dsa_fwder_args **args;
+  dc_crc_polling_args *dcCrcArgs;
   int argsIdx = 0;
+  int flowId = 0;
 
   /* Need a specialized two-stage packet stats structure */
   two_stage_packet_stats **stats2Phase = NULL;
@@ -225,18 +228,24 @@ int main(){
   crcArgs->id = tid;
   createThreadJoinable(&pTid,crc_polling, crcArgs);
 
+  /* Create intermediate polling thread for forwarding */
+  OS_MALLOC(&dcCrcArgs, sizeof(dc_crc_polling_args));
+  dcCrcArgs->dcInstance = dcInstHandle;
+  dcCrcArgs->id = flowId;
+  createThread(&dcToCrcTid, dc_crc64_polling, dcCrcArgs);
+
   /* Submit to dcInst */
   bufIdx = 0;
   while(bufIdx < numOperations){
-    dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
-    // rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
-    // sessionHandle,
-    // srcBufferLists[bufIdx],
-    // dstBufferLists[bufIdx],
-    // opData[bufIdx],
-    // dcResults[bufIdx],
-    // args[bufIdx],
-    // bufIdx);
+    // dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
+    rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+      sessionHandle,
+      srcBufferLists[bufIdx],
+      dstBufferLists[bufIdx],
+      opData[bufIdx],
+      dcResults[bufIdx],
+      args[bufIdx],
+      bufIdx);
 
     bufIdx++;
   }
