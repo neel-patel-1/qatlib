@@ -324,7 +324,7 @@ CpaStatus compCrcStream(Cpa32U numOperations,
 
   /* print stats */
   threadStats2P *thrStats = NULL;
-  populate2PhaseThreadStats(stats2Phase, &thrStats, numOperations, bufferSize);
+  populate2PhaseThreadStats(stats2Phase, &thrStats, numOperations, bufferSize, flowId);
   printTwoPhaseSingleThreadStatsSummary(thrStats);
 
 
@@ -445,12 +445,9 @@ int main(){
       dsa, tflags, dcInstHandles[flowId], sessionHandles[flowId], cap,
       flowId, &(streamStats[flowId]), &barrier);
 
-    createThreadJoinable(&streamTds[flowId], compCrcStreamThreadFn, args);
     /* start the comp streams */
-    // compCrcStream(numOperations, bufferSize,
-    //   dsa, tflags, dcInstHandles[flowId],
-    //   sessionHandles[flowId], cap, flowId,
-    //   &(streamStats[flowId]), &barrier);
+    createThreadJoinable(&streamTds[flowId], compCrcStreamThreadFn, args);
+
   }
   for(int flowId=0; flowId<numFlows; flowId++){
     pthread_join(streamTds[flowId], NULL);

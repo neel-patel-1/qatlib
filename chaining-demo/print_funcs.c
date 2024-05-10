@@ -118,10 +118,9 @@ void printMultiThreadStatsSummary(
   printf("\n");
 }
 
-void populate2PhaseThreadStats(two_stage_packet_stats ** stats2Phase, threadStats2P **pThrStats, Cpa32U numOperations, Cpa32U bufferSize){
+void populate2PhaseThreadStats(two_stage_packet_stats ** stats2Phase, threadStats2P **pThrStats, Cpa32U numOperations, Cpa32U bufferSize, Cpa32U id){
 /* Print latencies for each phase */
   threadStats2P *thrStats;
-  Cpa32U id = 0;
   Cpa32U freqKHz = 2080;
   Cpa64U avgLatency = 0;
   Cpa64U minLatency = UINT64_MAX;
@@ -183,6 +182,74 @@ void printTwoPhaseSingleThreadStatsSummary(threadStats2P *stats){
     printf("Throughput(GB/s): %f\n", offloadsPerSec * bufferSize / 1024 / 1024 / 1024);
 
 }
+
+void printTwoPhaseMultiThreadStatsSummary(
+  two_stage_packet_stats ***arrayOfPacketStatsArrayPointers,
+  Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize, CpaBoolean printThreadStats)
+{
+  threadStats2P *thrStats[numFlows];
+  Cpa32U maxOfAll=0;
+  Cpa32U avgAcrossAll=0;
+  Cpa32U minOfAll=UINT32_MAX;
+  Cpa64U minLatency = UINT64_MAX;
+  Cpa64U maxLatency = 0;
+  Cpa64U avgLatency = 0;
+  double totalThroughput = 0;
+  Cpa64U totalOperations = 0;
+  double offloadsPerSec = 0;
+
+  for(int i=0; i<numFlows; i++){
+    populate2PhaseThreadStats(arrayOfPacketStatsArrayPointers[i], &thrStats[i], numOperations, bufferSize, i);
+    if(printThreadStats){
+      printTwoPhaseSingleThreadStatsSummary(thrStats[i]);
+    }
+    /* Exe times */
+    if(thrStats[i]->exeTimeUs > maxOfAll){
+      maxOfAll = thrStats[i]->exeTimeUs;
+    }
+    avgAcrossAll+=thrStats[i]->exeTimeUs;
+    if(thrStats[i]->exeTimeUs < minOfAll){
+      minOfAll = thrStats[i]->exeTimeUs;
+    }
+
+    /* Latencies */
+    if(thrStats[i]->maxLatency > maxLatency){
+      maxLatency = thrStats[i]->maxLatency;
+    }
+    avgLatency+=thrStats[i]->avgLatency;
+    if(thrStats[i]->minLatency < minLatency){
+      minLatency = thrStats[i]->minLatency;
+    }
+    totalOperations += thrStats[i]->operations;
+
+    /* Offloads Per Sec Should use the avg offloads per sec from each flow */
+    double perFlowOffloadsPerSec = thrStats[i]->operations / (double)thrStats[i]->exeTimeUs;
+    perFlowOffloadsPerSec *= 1000000;
+    offloadsPerSec += perFlowOffloadsPerSec;
+  }
+  /* If the execution time on one flow was much larger than the others, this metric weighs in the deterioration in performance
+  from the long running flows*/
+  offloadsPerSec = offloadsPerSec / numFlows;
+   /* Throughput should use the average offloads per second scaled by the number of flows*/
+  totalThroughput = offloadsPerSec * bufferSize / 1024 / 1024 / 1024;
+  printf("\n");
+  printf("NumFlows: %d\n", numFlows);
+  printf("BufferSize: %d\n", bufferSize);
+  printf("NumBuffers: %d\n", numOperations);
+  printf("MaxExecutionTime(across-all-streams): %d\n", maxOfAll);
+  printf("AvgExecutionTime(across-all-streams): %d\n", avgAcrossAll/numFlows);
+  printf("MinExecutionTime(across-all-streams): %d\n", minOfAll);
+  printf("MaxLatency(across-all-streams): %ld\n", maxLatency);
+  printf("AvgLatency(across-all-streams): %ld\n", avgLatency/numFlows);
+  printf("MinLatency(across-all-streams): %ld\n", minLatency);
+  printf("TotalOperations(across-all-streams): %ld\n", totalOperations);
+  printf("OffloadsPerSec(avg'd-across-threads): %f\n", offloadsPerSec);
+  printf("AvgPerThreadThroughput(GB/s): %f\n", totalThroughput);
+  printf("CumulativeOffloadsPerSec: %f\n", offloadsPerSec*numFlows);
+  printf("CumulativeThroughput(GB/s): %f\n", totalThroughput * numFlows);
+  printf("\n");
+}
+
 
 
 void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize){
