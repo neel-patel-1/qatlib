@@ -572,7 +572,10 @@ void acctest_desc_submit(struct acctest_context *ctx, struct hw_desc *hw)
 	/* use MOVDIR64B for DWQ */
 	if (ctx->dedicated)
 		movdir64b(ctx->wq_reg, hw);
-	else /* use ENQCMD for SWQ */
-		if (acctest_enqcmd(ctx, hw))
+	else /* use ENQCMD for SWQ */{
+		if (acctest_enqcmd(ctx, hw)){
+			printf("Failed enqcmd\n");
 			usleep(10000);
+		}
+	}
 }
