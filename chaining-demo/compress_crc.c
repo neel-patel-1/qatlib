@@ -62,6 +62,7 @@ void dcDsaCrcCallback(void *pCallbackTag, CpaStatus status){
 
   if(NULL != pCallbackTag){
     dsa = args->dsa;
+    args->intermediateTimestamp = sampleCoderdtsc();
     toSubmit = args->toSubmit;
     single_crc_submit_task(dsa, toSubmit);
   }
@@ -145,6 +146,9 @@ int main(){
   Cpa8U *buf;
   struct task_node *waitTaskNode;
 
+  dsa_fwder_args *args;
+
+
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
   OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
   crcArgs->dsa=dsa;
@@ -154,8 +158,12 @@ int main(){
   waitTaskNode = dsa->multi_task_node;
 
   while(waitTaskNode){
-    waitTask = waitTaskNode->tsk;
-    single_crc_submit_task(dsa, waitTask);
+    PHYS_CONTIG_ALLOC(&args, sizeof(dsa_fwder_args));
+    args->dsa=dsa;
+    args->toSubmit = waitTaskNode->tsk;
+    dcDsaCrcCallback(args, CPA_STATUS_SUCCESS);
+    // waitTask = waitTaskNode->tsk;
+    // single_crc_submit_task(dsa, waitTask);
 
     waitTaskNode = waitTaskNode->next;
   }
