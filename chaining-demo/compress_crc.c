@@ -170,7 +170,23 @@ CpaStatus prep_crc_test_cb_fwd_args(
   return rc;
 }
 
-CpaStatus alloc_crc_test_packet_stats(){}
+CpaStatus alloc_crc_test_packet_stats(
+  struct acctest_context * dsa,
+  two_stage_packet_stats ***pArrayPktStatsPtrs,
+  int numOperations)
+{
+  two_stage_packet_stats **stats2Phase = NULL;
+  PHYS_CONTIG_ALLOC(&stats2Phase, sizeof(two_stage_packet_stats*) * numOperations);
+  for(int argsIdx=0; argsIdx<numOperations; argsIdx++){
+    PHYS_CONTIG_ALLOC(&(stats2Phase[argsIdx]), sizeof(two_stage_packet_stats));
+    if(NULL == memset(stats2Phase[argsIdx], 0, sizeof(two_stage_packet_stats))){
+      PRINT_ERR("Failed to MemSet pktstats\n");
+      return CPA_STATUS_FAIL;
+    }
+  }
+  *pArrayPktStatsPtrs = stats2Phase;
+  return CPA_STATUS_SUCCESS;
+}
 
 CpaStatus create_crc_polling_thread(){}
 
@@ -258,13 +274,12 @@ int main(){
   struct task_node *waitTaskNode;
 
   dsa_fwder_args **args;
-  dc_crc_polling_args *dcCrcArgs;
   int argsIdx = 0;
   int flowId = 0;
 
   /* Need a specialized two-stage packet stats structure */
   two_stage_packet_stats **stats2Phase = NULL;
-  PHYS_CONTIG_ALLOC(&stats2Phase, sizeof(two_stage_packet_stats*) * numOperations);
+  dc_crc_polling_args *dcCrcArgs = NULL;
 
   // struct acctest_context *crc32Ctx = NULL;
   // crc32Ctx = acctest_init(TEST_FLAGS_BOF);
@@ -276,31 +291,27 @@ int main(){
   // return rc;
 
   /* Create args and dsa descs for the callback function to submit*/
-  // PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args*)*numOperations);
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  rc =alloc_crc_test_packet_stats(
+    dsa,
+    &stats2Phase,
+    numOperations
+  );
+  if(rc != CPA_STATUS_SUCCESS){
+    return CPA_STATUS_FAIL;
+  }
+
   rc = prep_crc_test_cb_fwd_args(
     &args,
     dsa,
     stats2Phase,
     numOperations
   );
-
-  waitTaskNode = dsa->multi_task_node;
-  while(waitTaskNode){
-    /* args */
-    // PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
-    // args[argsIdx]->dsa=dsa;
-    // args[argsIdx]->toSubmit = waitTaskNode->tsk;
-    // args[argsIdx]->stats = stats2Phase;
-    // args[argsIdx]->packetId = argsIdx; /* assume packets will be seen in order at dsa*/
-    // waitTaskNode = waitTaskNode->next;
-
-    /* packet stats */
-    PHYS_CONTIG_ALLOC(&(stats2Phase[argsIdx]), sizeof(two_stage_packet_stats));
-    memset(stats2Phase[argsIdx], 0, sizeof(two_stage_packet_stats));
-      argsIdx++;
-      waitTaskNode = waitTaskNode->next;
+  if(rc != CPA_STATUS_SUCCESS){
+    return CPA_STATUS_FAIL;
   }
+
+
 
 
   /* Create polling thread for DSA */
