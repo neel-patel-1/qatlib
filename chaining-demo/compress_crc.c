@@ -25,16 +25,16 @@
 
 int gDebugParam = 0;
 
-struct _two_stage_packet_stats{
+typedef struct _two_stage_packet_stats{
   Cpa32U packetId;
   Cpa64U submitTime;
   Cpa64U cbReceiveTime;
   Cpa64U receiveTime;
-};
+} two_stage_packet_stats;
 
 typedef struct _crc_polling_args{
   struct acctest_context *dsa;
-  struct _two_stage_packet_stats *stats;
+  struct _two_stage_packet_stats **stats;
   int id;
 } crc_polling_args;
 
@@ -44,12 +44,14 @@ void *crc_polling(void *args){
   gPollingCrcs[id] = 1;
   struct acctest_context *dsa = crcArgs->dsa;
   struct task_node *tsk_node = crcArgs->dsa->multi_task_node;
+  two_stage_packet_stats **stats = crcArgs->stats;
   int received = 0;
   while(tsk_node){
     dsa_wait_crcgen(dsa, tsk_node->tsk);
 
     PRINT_DBG("Received CR:%d\n", received);
     /* Assume received in order, this has been the case throughout testing*/
+    stats[received]->receiveTime = sampleCoderdtsc();
     tsk_node = tsk_node->next;
     received++;
   }
@@ -278,6 +280,7 @@ int main(){
     args[argsIdx]->dsa=dsa;
     args[argsIdx]->toSubmit = waitTaskNode->tsk;
     args[argsIdx]->stats = stats2Phase;
+    args[argsIdx]->packetId = argsIdx; /* assume packets will be seen in order at dsa*/
     waitTaskNode = waitTaskNode->next;
 
     /* packet stats */
@@ -290,6 +293,7 @@ int main(){
   OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
   crcArgs->dsa=dsa;
   crcArgs->id = tid;
+  crcArgs->stats = stats2Phase;
   createThreadJoinable(&pTid,crc_polling, crcArgs);
 
   /* Create intermediate polling thread for forwarding */
@@ -346,6 +350,7 @@ int main(){
 
     avgLatencyP1 += p1Micros;
     avgLatencyP2 += p2Micros;
+    avgLatency += (p1Micros + p2Micros);
     if(e2eMicros < minLatency){
       minLatency = e2eMicros;
     }
