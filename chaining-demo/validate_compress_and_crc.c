@@ -198,3 +198,29 @@ CpaStatus validateCompressAndCrc64Sw(
 
   return status;
 }
+
+/* verify crcs */
+CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
+  CpaBufferList **srcBufferLists, Cpa32U bufferSize
+  )
+{
+  int bufIdx = 0;
+  Cpa8U *buf;
+  struct task *waitTask;
+  int rc = CPA_STATUS_SUCCESS;
+
+  while(waitTaskNode){
+    waitTask = waitTaskNode->tsk;
+    buf = srcBufferLists[bufIdx]->pBuffers[0].pData;
+
+    rc = validateCrc32DSA(waitTask,buf, bufferSize);
+    if(rc != CPA_STATUS_SUCCESS){
+      PRINT_ERR("DSA CRC32 Incorrect\n");
+      rc = CPA_STATUS_FAIL;
+      break;
+    }
+
+    waitTaskNode = waitTaskNode->next;
+    bufIdx++;
+  }
+}

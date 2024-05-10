@@ -15,6 +15,16 @@ void *dc_polling(void *args){
   pthread_exit(NULL);
 }
 
+void *dc_crc64_polling(void *args){
+  dc_crc_polling_args *dcArgs = (dc_crc_polling_args *)args;
+  CpaInstanceHandle dcInstance = dcArgs->dcInstance;
+  Cpa32U id = dcArgs->id;
+  gPollingDcs[id] = 1;
+  while(gPollingDcs[id] == 1){
+    icp_sal_DcPollInstance(dcInstance, 0); /* Poll here, forward in callback */
+  }
+}
+
 CpaStatus createThread(pthread_t *thread, void *func, void *arg){
   pthread_attr_t attr;
   struct sched_param param;

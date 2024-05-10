@@ -10,6 +10,13 @@
 #include <zlib.h>
 
 #include "buffer_prepare_funcs.h"
+#include "thread_utils.h"
+#include "print_funcs.h"
+
+
+#include "idxd.h"
+#include "dsa.h"
+#include "dsa_funcs.h"
 
 #define CRC64_ECMA182_POLY 0x42F0E1EBA9EA3693ULL
 extern uint64_t crc64table[256];
@@ -36,5 +43,11 @@ CpaStatus validateCompressAndCrc64Sw(
   CpaDcRqResults *dcResults,
   Cpa32U bufferSize,
   CpaCrcData *crcData);
+
+// CpaStatus validateCrc32DSA(waitTask,buf, bufferSize);
+
+CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
+  CpaBufferList **srcBufferLists, Cpa32U bufferSize
+  );
 
 #endif

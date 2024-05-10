@@ -28,6 +28,13 @@ typedef struct _packet_stats{
   Cpa64U receiveTime;
 } packet_stats;
 
+typedef struct _two_stage_packet_stats{
+  Cpa32U packetId;
+  Cpa64U submitTime;
+  Cpa64U cbReceiveTime;
+  Cpa64U receiveTime;
+} two_stage_packet_stats;
+
 typedef struct _callback_args{
   Cpa32U completedOperations; /* number of offloads completed */
   Cpa32U numOperations; /* number of offloads to complete*/
@@ -44,12 +51,19 @@ typedef struct _submit_td_args{
   pthread_barrier_t *pthread_barrier;
 } submitter_args;
 
+typedef struct dc_crc_polling_args{
+  CpaInstanceHandle dcInstance;
+  Cpa32U id;
+} dc_crc_polling_args;
+
 void *dc_polling(void *args);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
 CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg);
 
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
 void dcPerfCallback(void *pCallbackTag, CpaStatus status);
+
+void *dc_crc64_polling(void *args);
 
 
 #endif
