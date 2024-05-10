@@ -23,7 +23,7 @@
 
 #include "dsa_funcs.h"
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 typedef struct _crc_polling_args{
   struct acctest_context *dsa;
@@ -38,6 +38,7 @@ void *crc_polling(void *args){
   struct task_node *tsk_node = crcArgs->dsa->multi_task_node;
   while(tsk_node){
     dsa_wait_crcgen(dsa, tsk_node->tsk); /* Hypo is that callbacks submissions are failing sometimes*/
+    PRINT_DBG("Received CR\n");
     tsk_node = tsk_node->next;
   }
   gPollingCrcs[id] = 0;
@@ -238,14 +239,14 @@ int main(){
   bufIdx = 0;
   while(bufIdx < numOperations){
     dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
-    // rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
-    //   sessionHandle,
-    //   srcBufferLists[bufIdx],
-    //   dstBufferLists[bufIdx],
-    //   opData[bufIdx],
-    //   dcResults[bufIdx],
-    //   args[bufIdx],
-    //   bufIdx);
+    rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+      sessionHandle,
+      srcBufferLists[bufIdx],
+      dstBufferLists[bufIdx],
+      opData[bufIdx],
+      dcResults[bufIdx],
+      args[bufIdx],
+      bufIdx);
 
     bufIdx++;
   }
