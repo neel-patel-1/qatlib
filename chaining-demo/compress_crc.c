@@ -84,10 +84,6 @@ int acctest_duplicate_context(struct acctest_context *ctx, struct acctest_contex
 	return 0;
 }
 
-
-
-
-
 typedef struct _dsaFwderCbArgs {
   Cpa32U packetId;
   struct acctest_context *dsa;
@@ -196,7 +192,7 @@ void create_crc_polling_thread(struct acctest_context *dsa, int id, two_stage_pa
   createThreadJoinable(tid,crc_polling, crcArgs);
 }
 
-void create_dc_polling_thread(struct acctest_context *dsa, int flowId,
+void create_dc_polling_thread(int flowId,
   pthread_t *tid, CpaInstanceHandle dcInstHandle)
 {
   dc_crc_polling_args *dcCrcArgs = NULL;
@@ -234,6 +230,48 @@ CpaStatus submit_all_comp_crc_requests(
 }
 
 
+CpaStatus compCrcStream(Cpa32U numOperations,
+  Cpa32U bufferSize,
+  struct acctest_context *ogDsa, int tflags,
+  CpaInstanceHandle dcInstHandle,
+  CpaDcSessionHandle sessionHandle,
+  CpaDcInstanceCapabilities cap)
+{
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaDcOpData **opData = NULL;
+  struct acctest_context *dsa = NULL;
+  struct COMPLETION_STRUCT complete;
+
+  dsa = acctest_init(tflags);
+  if(NULL == dsa){
+    return CPA_STATUS_FAIL;
+  }
+  int rc = acctest_duplicate_context(dsa, ogDsa);
+
+
+  multiBufferTestAllocations(
+    &cb_args,
+    &stats,
+    &opData,
+    &dcResults,
+    &crcData,
+    numOperations,
+    bufferSize,
+    cap,
+    &srcBufferLists,
+    &dstBufferLists,
+    dcInstHandle,
+    &complete
+  );
+
+}
+
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   Cpa16U numInstances = 0;
@@ -256,9 +294,21 @@ int main(){
   prepareDcInst(&dcInstHandles[0]);
   prepareDcSession(dcInstHandle, &sessionHandle, dcDsaCrcCallback);
 
+  /* one time shared DSA setup */
+  /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+  struct task *tsk;
 
-  Cpa32U numOperations = 1000;
-  Cpa32U bufferSize = 1024;
+
+  /* Setup for each stream */
+  Cpa32U numOperations = 10000;
+  Cpa32U bufferSize = 4096;
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
   CpaDcRqResults **dcResults = NULL;
@@ -283,15 +333,7 @@ int main(){
     &complete
   );
 
-  /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
-  struct acctest_context *dsa = NULL;
-  int tflags = TEST_FLAGS_BOF;
-  int rc;
-  int wq_type = ACCFG_WQ_SHARED;
-  int dev_id = 0;
-  int wq_id = 0;
-  int opcode = 16;
-  struct task *tsk;
+
 
   /* Use seeded value */
   dsa = acctest_init(tflags);
@@ -352,31 +394,17 @@ int main(){
   create_crc_polling_thread(dsa, flowId, stats2Phase, &crcTid);
 
   /* Create intermediate polling thread for forwarding */
-  create_dc_polling_thread(dsa, flowId, &dcToCrcTid, dcInstHandle);
+  create_dc_polling_thread( flowId, &dcToCrcTid, dcInstHandle);
 
-  /* Submit to dcInst */
-  // bufIdx = 0;
-  // while(bufIdx < numOperations){
-  //   rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
-  //     sessionHandle,
-  //     srcBufferLists[bufIdx],
-  //     dstBufferLists[bufIdx],
-  //     opData[bufIdx],
-  //     dcResults[bufIdx],
-  //     args[bufIdx],
-  //     bufIdx);
-
-  //   bufIdx++;
-  // }
-    rc = submit_all_comp_crc_requests(
-      numOperations,
-      dcInstHandle,
-      sessionHandle,
-      srcBufferLists,
-      dstBufferLists,
-      opData,
-      dcResults,
-      args);
+  rc = submit_all_comp_crc_requests(
+    numOperations,
+    dcInstHandle,
+    sessionHandle,
+    srcBufferLists,
+    dstBufferLists,
+    opData,
+    dcResults,
+    args);
 
   pthread_join(crcTid, NULL);
   gPollingDcs[flowId] = 0;
