@@ -235,17 +235,27 @@ CpaStatus compCrcStream(Cpa32U numOperations,
   struct acctest_context *ogDsa, int tflags,
   CpaInstanceHandle dcInstHandle,
   CpaDcSessionHandle sessionHandle,
-  CpaDcInstanceCapabilities cap)
+  CpaDcInstanceCapabilities cap,
+  int flowId,
+  two_stage_packet_stats ***pStats)
 {
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
   CpaDcRqResults **dcResults = NULL;
   CpaCrcData *crcData = NULL;
   callback_args **cb_args = NULL;
-  packet_stats **stats = NULL;
   CpaDcOpData **opData = NULL;
+  packet_stats **dummyStats = NULL; /* to appeaase multiBufferTestAllocations*/
   struct acctest_context *dsa = NULL;
   struct COMPLETION_STRUCT complete;
+
+  two_stage_packet_stats **stats2Phase = NULL;
+  dc_crc_polling_args *dcCrcArgs = NULL;
+  crc_polling_args *crcArgs = NULL;
+  dsa_fwder_args **args;
+
+  pthread_t crcTid, dcToCrcTid;
+  struct task_node *waitTaskNode;
 
   dsa = acctest_init(tflags);
   if(NULL == dsa){
@@ -253,10 +263,9 @@ CpaStatus compCrcStream(Cpa32U numOperations,
   }
   int rc = acctest_duplicate_context(dsa, ogDsa);
 
-
   multiBufferTestAllocations(
     &cb_args,
-    &stats,
+    &dummyStats,
     &opData,
     &dcResults,
     &crcData,
@@ -269,6 +278,58 @@ CpaStatus compCrcStream(Cpa32U numOperations,
     &complete
   );
 
+    /* Create args, stats packet stats, and dsa descs for the callback function to submit*/
+  create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  rc =alloc_crc_test_packet_stats(
+    dsa,
+    &stats2Phase,
+    numOperations
+  );
+  if(rc != CPA_STATUS_SUCCESS){
+    return CPA_STATUS_FAIL;
+  }
+  rc = prep_crc_test_cb_fwd_args(
+    &args,
+    dsa,
+    stats2Phase,
+    numOperations
+  );
+  if(rc != CPA_STATUS_SUCCESS){
+    return CPA_STATUS_FAIL;
+  }
+  /* Create polling thread for DSA */
+  create_crc_polling_thread(dsa, flowId, stats2Phase, &crcTid);
+
+  /* Create intermediate polling thread for forwarding */
+  create_dc_polling_thread( flowId, &dcToCrcTid, dcInstHandle);
+
+  rc = submit_all_comp_crc_requests(
+    numOperations,
+    dcInstHandle,
+    sessionHandle,
+    srcBufferLists,
+    dstBufferLists,
+    opData,
+    dcResults,
+    args);
+
+  pthread_join(crcTid, NULL);
+  gPollingDcs[flowId] = 0;
+
+  /* verify all crcs */
+  rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
+
+  /* print stats */
+  threadStats2P *thrStats = NULL;
+  populate2PhaseThreadStats(stats2Phase, &thrStats, numOperations, bufferSize);
+  printTwoPhaseSingleThreadStatsSummary(thrStats);
+
+
+
+  if( CPA_STATUS_SUCCESS != rc ){
+    PRINT_ERR("Invalid CRC\n");
+  }
+  *pStats = stats2Phase;
 }
 
 
@@ -292,7 +353,8 @@ int main(){
   }
   dcInstHandle = dcInstHandles[0];
   prepareDcInst(&dcInstHandles[0]);
-  prepareDcSession(dcInstHandle, &sessionHandle, dcDsaCrcCallback);
+  prepareDcSession(dcInstHandle, &sessionHandles[0], dcDsaCrcCallback);
+  cpaDcQueryCapabilities(dcInstHandle, &cap);
 
   /* one time shared DSA setup */
   /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
@@ -305,10 +367,31 @@ int main(){
   int opcode = 16;
   struct task *tsk;
 
-
-  /* Setup for each stream */
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 4096;
+  int flowId = 0;
+  int numFlows = 1;
+
+  /* Arrays of packetstat array pointers for access to per-stream stats */
+  /* setup the shared dsa */
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+
+  two_stage_packet_stats **streamStats[numFlows];
+  compCrcStream(numOperations, bufferSize,
+    dsa, tflags, dcInstHandles[0], sessionHandles[0], cap, flowId, &(streamStats[flowId]));
+
+  return 0;
+  /* Setup for each stream */
+
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
   CpaDcRqResults **dcResults = NULL;
@@ -333,19 +416,6 @@ int main(){
     &complete
   );
 
-
-
-  /* Use seeded value */
-  dsa = acctest_init(tflags);
-  dsa->dev_type = ACCFG_DEVICE_DSA;
-
-  if (!dsa)
-		return -ENOMEM;
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-	if (rc < 0)
-		return -ENOMEM;
-
   int bufIdx = 0;
   crc_polling_args *crcArgs = NULL;
   int tid=0;
@@ -356,7 +426,7 @@ int main(){
 
   dsa_fwder_args **args;
   int argsIdx = 0;
-  int flowId = 0;
+  // int flowId = 0;
 
   /* Need a specialized two-stage packet stats structure */
   two_stage_packet_stats **stats2Phase = NULL;
