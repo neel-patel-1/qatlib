@@ -210,6 +210,7 @@ int main(){
     PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
     args[argsIdx]->dsa=dsa;
     args[argsIdx]->toSubmit = waitTaskNode->tsk;
+    args[argsIdx]->stats = stats2Phase;
     waitTaskNode = waitTaskNode->next;
 
     /* packet stats */

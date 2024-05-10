@@ -68,6 +68,8 @@ CpaStatus submitAndStamp(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sess
 }
 
 
+
+
 CpaStatus doSubmissionsCompressAndCrc64AndWaitForFinal(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle,
   CpaBufferList **srcBufferLists, CpaBufferList **dstBufferLists, CpaDcOpData **opData, CpaDcRqResults **dcResults,
   callback_args **cb_args, Cpa32U numOperations, struct COMPLETION_STRUCT *complete){
