@@ -36,10 +36,12 @@ void *crc_polling(void *args){
   gPollingCrcs[id] = 1;
   struct acctest_context *dsa = crcArgs->dsa;
   struct task_node *tsk_node = crcArgs->dsa->multi_task_node;
+  int received = 0;
   while(tsk_node){
     dsa_wait_crcgen(dsa, tsk_node->tsk); /* Hypo is that callbacks submissions are failing sometimes*/
-    PRINT_DBG("Received CR\n");
+    PRINT_DBG("Received CR:%d\n", received);
     tsk_node = tsk_node->next;
+    received++;
   }
   gPollingCrcs[id] = 0;
 }
@@ -104,6 +106,7 @@ CpaStatus submitAndStampBeforeDSAFwdingCb(CpaInstanceHandle dcInstHandle, CpaDcS
   two_stage_packet_stats *stats = cb_args->stats[index];
   Cpa64U submitTime = sampleCoderdtsc();
   stats->submitTime = submitTime;
+retry:
   status = cpaDcCompressData2(
     dcInstHandle,
     sessionHandle,
@@ -112,6 +115,10 @@ CpaStatus submitAndStampBeforeDSAFwdingCb(CpaInstanceHandle dcInstHandle, CpaDcS
     opData,            /* Operational data */
     pDcResults,         /* results structure */
     (void *)cb_args); /* data sent as is to the callback function*/
+  if(status == CPA_STATUS_RETRY){
+    /* don't forget to retry on CPA_STATUS_RETRY for the QAT submission, we will overflow */
+    goto retry;
+  }
   return status;
 
 }
@@ -260,25 +267,25 @@ int main(){
   OS_MALLOC(&dcCrcArgs, sizeof(dc_crc_polling_args));
   dcCrcArgs->dcInstance = dcInstHandle;
   dcCrcArgs->id = flowId;
-  // createThread(&dcToCrcTid, dc_crc64_polling, dcCrcArgs);
+  createThread(&dcToCrcTid, dc_crc64_polling, dcCrcArgs);
 
   /* Submit to dcInst */
   bufIdx = 0;
   while(bufIdx < numOperations){
-    dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
-    // rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
-    //   sessionHandle,
-    //   srcBufferLists[bufIdx],
-    //   dstBufferLists[bufIdx],
-    //   opData[bufIdx],
-    //   dcResults[bufIdx],
-    //   args[bufIdx],
-    //   bufIdx);
+    rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+      sessionHandle,
+      srcBufferLists[bufIdx],
+      dstBufferLists[bufIdx],
+      opData[bufIdx],
+      dcResults[bufIdx],
+      args[bufIdx],
+      bufIdx);
 
     bufIdx++;
   }
 
   pthread_join(pTid, NULL);
+  gPollingDcs[flowId] = 0;
 
   /* verify all crcs */
   rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
