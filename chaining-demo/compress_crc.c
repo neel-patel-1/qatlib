@@ -379,25 +379,13 @@ void *compCrcStreamThreadFn(void *args){
     threadArgs->pStats, threadArgs->barrier);
 }
 
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  CpaDcInstanceCapabilities cap = {0};
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
+CpaStatus cpaDcDsaCrcPerf(
+  Cpa32U numOperations,
+  Cpa32U bufferSize ,
+  int numFlows,
+  CpaInstanceHandle *dcInstHandles,
+  CpaDcSessionHandle* sessionHandles
+){
 
   /* one time shared DSA setup */
   /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
@@ -410,9 +398,7 @@ int main(){
   int opcode = 16;
   struct task *tsk;
 
-  Cpa32U numOperations = 10000;
-  Cpa32U bufferSize = 4096;
-  int numFlows = 2;
+  CpaDcInstanceCapabilities cap = {0};
 
   /* Arrays of packetstat array pointers for access to per-stream stats */
   two_stage_packet_stats **streamStats[numFlows];
@@ -428,8 +414,7 @@ int main(){
 	if (rc < 0)
 		return -ENOMEM;
 
-  cpaDcQueryCapabilities(dcInstHandle, &cap);
-
+  cpaDcQueryCapabilities(dcInstHandles[0], &cap);
   pthread_barrier_t barrier;
   pthread_t streamTds[numFlows];
   pthread_barrier_init(&barrier, NULL, numFlows);
@@ -452,7 +437,43 @@ int main(){
     pthread_join(streamTds[flowId], NULL);
   }
 
-  printTwoPhaseMultiThreadStatsSummary(streamStats, numFlows, numOperations, bufferSize, CPA_TRUE);
+
+  printf("------------\nSw AxChain Offload Performance Test\n");
+  printTwoPhaseMultiThreadStatsSummary(streamStats, numFlows, numOperations, bufferSize, CPA_FALSE);
+}
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
+
+  int numOperations = 1000;
+  int bufferSize = 4096;
+  int numFlows = 10;
+
+  if(numFlows > numInstances){
+    numFlows = numInstances;
+  }
+
+  multiStreamSwCompressCrc64Func(numOperations, bufferSize, numFlows, dcInstHandle);
+  cpaDcDsaCrcPerf(100000, bufferSize, numFlows, dcInstHandles, sessionHandles);
+  multiStreamCompressCrc64PerformanceTest(numFlows,numOperations,bufferSize,dcInstHandles,sessionHandles,numInstances);
+
+
 
 
 exit:
