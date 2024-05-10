@@ -146,29 +146,38 @@ int main(){
   Cpa8U *buf;
   struct task_node *waitTaskNode;
 
-  dsa_fwder_args *args;
+  dsa_fwder_args **args;
+  int argsIdx = 0;
 
 
-  create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  /* Create polling thread for DSA */
   OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
   crcArgs->dsa=dsa;
   crcArgs->id = tid;
   createThreadJoinable(&pTid,crc_polling, crcArgs);
 
+
+  /* Create args and dsa descs for the callback function to submit*/
+  PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args *)*numOperations);
+  create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
   waitTaskNode = dsa->multi_task_node;
-
   while(waitTaskNode){
-    PHYS_CONTIG_ALLOC(&args, sizeof(dsa_fwder_args));
-    args->dsa=dsa;
-    args->toSubmit = waitTaskNode->tsk;
-    dcDsaCrcCallback(args, CPA_STATUS_SUCCESS);
-    // waitTask = waitTaskNode->tsk;
-    // single_crc_submit_task(dsa, waitTask);
-
+    PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
+    args[argsIdx]->dsa=dsa;
+    args[argsIdx]->toSubmit = waitTaskNode->tsk;
+    argsIdx++;
     waitTaskNode = waitTaskNode->next;
   }
+
+  bufIdx = 0;
+  while(bufIdx < numOperations){
+    dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
+    bufIdx++;
+  }
+
   pthread_join(pTid, NULL);
 
+  bufIdx = 0;
   waitTaskNode = dsa->multi_task_node;
   for(int i=0; i<numOperations; i++){
     waitTask = waitTaskNode->tsk;
