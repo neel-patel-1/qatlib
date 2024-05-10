@@ -23,10 +23,18 @@
 
 #include "dsa_funcs.h"
 
-int gDebugParam = 1;
+int gDebugParam = 0;
+
+struct _two_stage_packet_stats{
+  Cpa32U packetId;
+  Cpa64U submitTime;
+  Cpa64U cbReceiveTime;
+  Cpa64U receiveTime;
+};
 
 typedef struct _crc_polling_args{
   struct acctest_context *dsa;
+  struct _two_stage_packet_stats *stats;
   int id;
 } crc_polling_args;
 
@@ -38,8 +46,10 @@ void *crc_polling(void *args){
   struct task_node *tsk_node = crcArgs->dsa->multi_task_node;
   int received = 0;
   while(tsk_node){
-    dsa_wait_crcgen(dsa, tsk_node->tsk); /* Hypo is that callbacks submissions are failing sometimes*/
+    dsa_wait_crcgen(dsa, tsk_node->tsk);
+
     PRINT_DBG("Received CR:%d\n", received);
+    /* Assume received in order, this has been the case throughout testing*/
     tsk_node = tsk_node->next;
     received++;
   }
@@ -61,17 +71,7 @@ void *dc_crc64_polling(void *args){
   }
 }
 
-/* Callback needs to know which task to submit to DSA */
-/* Who populates - initial submitter
-  How to populate with the right task to submit
-  what does sub
-*/
-struct _two_stage_packet_stats{
-  Cpa32U packetId;
-  Cpa64U submitTime;
-  Cpa64U cbReceiveTime;
-  Cpa64U receiveTime;
-};
+
 typedef struct _dsaFwderCbArgs {
   Cpa32U packetId;
   struct acctest_context *dsa;
@@ -149,6 +149,35 @@ CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
   }
 }
 
+typedef struct _threadStats2P {
+  Cpa64U avgLatencyS1;
+  Cpa64U avgLatencyS2;
+  Cpa64U avgLatency;
+  Cpa64U minLatency;
+  Cpa64U maxLatency;
+  Cpa64U exeTimeUs;
+  Cpa32U operations;
+  Cpa32U operationSize;
+  Cpa32U id;
+} threadStats2P;
+
+
+void printTwoPhaseSingleThreadStatsSummary(threadStats2P *stats){
+    Cpa64U exeTimeUs = stats->exeTimeUs;
+    Cpa32U numOperations = stats->operations;
+    Cpa32U bufferSize = stats->operationSize;
+    double offloadsPerSec = numOperations / (double)exeTimeUs;
+    offloadsPerSec = offloadsPerSec * 1000000;
+    printf("Thread: %d\n", stats->id);
+    printf("AvgLatency: %ld\n", stats->avgLatency);
+    printf("MinLatency: %ld\n", stats->minLatency);
+    printf("MaxLatency: %ld\n", stats->maxLatency);
+    printf("AvgPhase1Latency: %ld\n", stats->avgLatencyS1);
+    printf("AvgPhase2Latency: %ld\n", stats->avgLatencyS2);
+    printf("OffloadsPerSec: %f\n", offloadsPerSec);
+    printf("Throughput(GB/s): %f\n", offloadsPerSec * bufferSize / 1024 / 1024 / 1024);
+
+}
 
 
 int main(){
@@ -289,6 +318,53 @@ int main(){
 
   /* verify all crcs */
   rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
+
+  /* Print latencies for each phase */
+  Cpa32U id = 0;
+  threadStats2P *thrStats = NULL;
+  Cpa32U freqKHz = 2080;
+  Cpa64U avgLatency = 0;
+  Cpa64U minLatency = UINT64_MAX;
+  Cpa64U maxLatency = 0;
+  Cpa64U firstSubmitTime = stats2Phase[0]->submitTime;
+  Cpa64U lastReceiveTime = stats2Phase[numOperations-1]->receiveTime;
+  Cpa64U exeCycles = lastReceiveTime - firstSubmitTime;
+  Cpa64U exeTimeUs = exeCycles/freqKHz;
+  Cpa64U avgLatencyP2 = 0;
+  Cpa64U avgLatencyP1 = 0;
+  double offloadsPerSec = numOperations / (double)exeTimeUs;
+  offloadsPerSec = offloadsPerSec * 1000000;
+
+  OS_MALLOC(&thrStats, sizeof(threadStats2P));
+  for(int i=0; i<numOperations; i++){
+    Cpa64U latencyP2 = stats2Phase[i]->receiveTime - stats2Phase[i]->cbReceiveTime;
+    Cpa64U latencyP1 = stats2Phase[i]->cbReceiveTime - stats2Phase[i]->submitTime;
+    Cpa64U latency = stats2Phase[i]->cbReceiveTime - stats2Phase[i]->submitTime;
+    uint64_t e2eMicros = latency / freqKHz;
+    uint64_t p1Micros = latencyP1 / freqKHz;
+    uint64_t p2Micros = latencyP2 / freqKHz;
+
+    avgLatencyP1 += p1Micros;
+    avgLatencyP2 += p2Micros;
+    if(e2eMicros < minLatency){
+      minLatency = e2eMicros;
+    }
+    if(e2eMicros > maxLatency){
+      maxLatency = e2eMicros;
+    }
+  }
+  avgLatency = avgLatency / numOperations;
+  thrStats->avgLatencyS1 = avgLatencyP1 / numOperations;
+  thrStats->avgLatencyS2 = avgLatencyP2 / numOperations;
+  thrStats->avgLatency = avgLatency;
+  thrStats->minLatency = minLatency;
+  thrStats->maxLatency = maxLatency;
+  thrStats->exeTimeUs = exeTimeUs;
+  thrStats->operations = numOperations;
+  thrStats->operationSize = bufferSize;
+  thrStats->id = id;
+  printTwoPhaseSingleThreadStatsSummary(thrStats);
+
 
 
   if( CPA_STATUS_SUCCESS != rc ){
