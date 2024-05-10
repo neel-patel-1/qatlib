@@ -38,4 +38,9 @@ void printMultiThreadStats(packet_stats ***arrayOfPacketStatsArrayPointers, Cpa3
 
 void populate2PhaseThreadStats(two_stage_packet_stats ** stats2Phase, threadStats2P **pThrStats, Cpa32U numOperations, Cpa32U bufferSize, Cpa32U flowId);
 void printTwoPhaseSingleThreadStatsSummary(threadStats2P *stats);
+
+void printTwoPhaseMultiThreadStatsSummary(
+  two_stage_packet_stats ***arrayOfPacketStatsArrayPointers,
+  Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize, CpaBoolean printThreadStats);
+
 #endif
