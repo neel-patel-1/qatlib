@@ -351,10 +351,6 @@ int main(){
     fprintf(stderr, "No instances found\n");
     return CPA_STATUS_FAIL;
   }
-  dcInstHandle = dcInstHandles[0];
-  prepareDcInst(&dcInstHandles[0]);
-  prepareDcSession(dcInstHandle, &sessionHandles[0], dcDsaCrcCallback);
-  cpaDcQueryCapabilities(dcInstHandle, &cap);
 
   /* one time shared DSA setup */
   /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
@@ -369,10 +365,11 @@ int main(){
 
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 4096;
-  int flowId = 0;
   int numFlows = 1;
 
   /* Arrays of packetstat array pointers for access to per-stream stats */
+  two_stage_packet_stats **streamStats[numFlows];
+
   /* setup the shared dsa */
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -384,113 +381,18 @@ int main(){
 	if (rc < 0)
 		return -ENOMEM;
 
+  cpaDcQueryCapabilities(dcInstHandle, &cap);
 
-  two_stage_packet_stats **streamStats[numFlows];
-  compCrcStream(numOperations, bufferSize,
-    dsa, tflags, dcInstHandles[0], sessionHandles[0], cap, flowId, &(streamStats[flowId]));
+  for(int flowId=0; flowId<2; flowId++){
+    /* prepare per flow dc inst/sess*/
+    prepareDcInst(&dcInstHandles[flowId]);
+    prepareDcSession(dcInstHandles[flowId], &sessionHandles[flowId], dcDsaCrcCallback);
 
-  return 0;
-  /* Setup for each stream */
-
-  CpaBufferList **srcBufferLists = NULL;
-  CpaBufferList **dstBufferLists = NULL;
-  CpaDcRqResults **dcResults = NULL;
-  CpaCrcData *crcData = NULL;
-  callback_args **cb_args = NULL;
-  packet_stats **stats = NULL;
-  CpaDcOpData **opData = NULL;
-  struct COMPLETION_STRUCT complete;
-
-  multiBufferTestAllocations(
-    &cb_args,
-    &stats,
-    &opData,
-    &dcResults,
-    &crcData,
-    numOperations,
-    bufferSize,
-    cap,
-    &srcBufferLists,
-    &dstBufferLists,
-    dcInstHandle,
-    &complete
-  );
-
-  int bufIdx = 0;
-  crc_polling_args *crcArgs = NULL;
-  int tid=0;
-  pthread_t crcTid, dcToCrcTid;
-  struct task *waitTask;
-  Cpa8U *buf;
-  struct task_node *waitTaskNode;
-
-  dsa_fwder_args **args;
-  int argsIdx = 0;
-  // int flowId = 0;
-
-  /* Need a specialized two-stage packet stats structure */
-  two_stage_packet_stats **stats2Phase = NULL;
-  dc_crc_polling_args *dcCrcArgs = NULL;
-
-  // struct acctest_context *crc32Ctx = NULL;
-  // crc32Ctx = acctest_init(TEST_FLAGS_BOF);
-  // rc = acctest_duplicate_context(crc32Ctx, dsa );
-  // if(rc < 0){
-  //   PRINT_ERR("Failed to allocate shared wq for crc32Ctx\n");
-  //   goto exit;
-  // }
-  // return rc;
-
-  /* Create args, stats packet stats, and dsa descs for the callback function to submit*/
-  create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
-  rc =alloc_crc_test_packet_stats(
-    dsa,
-    &stats2Phase,
-    numOperations
-  );
-  if(rc != CPA_STATUS_SUCCESS){
-    return CPA_STATUS_FAIL;
+    /* start the comp streams */
+    compCrcStream(numOperations, bufferSize,
+      dsa, tflags, dcInstHandles[flowId], sessionHandles[flowId], cap, flowId, &(streamStats[flowId]));
   }
-  rc = prep_crc_test_cb_fwd_args(
-    &args,
-    dsa,
-    stats2Phase,
-    numOperations
-  );
-  if(rc != CPA_STATUS_SUCCESS){
-    return CPA_STATUS_FAIL;
-  }
-  /* Create polling thread for DSA */
-  create_crc_polling_thread(dsa, flowId, stats2Phase, &crcTid);
 
-  /* Create intermediate polling thread for forwarding */
-  create_dc_polling_thread( flowId, &dcToCrcTid, dcInstHandle);
-
-  rc = submit_all_comp_crc_requests(
-    numOperations,
-    dcInstHandle,
-    sessionHandle,
-    srcBufferLists,
-    dstBufferLists,
-    opData,
-    dcResults,
-    args);
-
-  pthread_join(crcTid, NULL);
-  gPollingDcs[flowId] = 0;
-
-  /* verify all crcs */
-  rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
-
-  threadStats2P *thrStats = NULL;
-  populate2PhaseThreadStats(stats2Phase, &thrStats, numOperations, bufferSize);
-  printTwoPhaseSingleThreadStatsSummary(thrStats);
-
-
-
-  if( CPA_STATUS_SUCCESS != rc ){
-    PRINT_ERR("Invalid CRC\n");
-  }
 
 exit:
 
