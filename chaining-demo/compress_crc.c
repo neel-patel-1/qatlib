@@ -25,6 +25,8 @@
 
 #include "validate_compress_and_crc.h"
 
+#include "accel_test.h"
+
 
 int gDebugParam = 0;
 
@@ -56,8 +58,32 @@ void *crc_polling(void *args){
 }
 
 
+/* allocate the og and switch submitter / poller over to new tasks from this guy */
 
+/* Enable multiple acctests to use the same work queue */
+int acctest_duplicate_context(struct acctest_context *ctx, struct acctest_context *srcCtx){
+  ctx->wq = srcCtx->wq;
+  ctx->wq_reg = srcCtx->wq_reg;
+  ctx->wq_size = srcCtx->wq_size;
+  ctx->threshold = srcCtx->threshold;
+  ctx->wq_idx = srcCtx->wq_idx;
+  ctx->bof = srcCtx->bof;
+  ctx->wq_max_batch_size = srcCtx->wq_max_batch_size;
+  ctx->wq_max_xfer_size = srcCtx->wq_max_xfer_size;
+  ctx->ats_disable = srcCtx->ats_disable;
 
+  ctx->max_batch_size = srcCtx->max_batch_size;
+  ctx->max_xfer_size = srcCtx->max_xfer_size;
+  ctx->max_xfer_bits = srcCtx->max_xfer_bits;
+  ctx->compl_size = srcCtx->compl_size;
+  ctx->dedicated = srcCtx->dedicated;
+
+	info("alloc wq %d %s size %d addr %p batch sz %#x xfer sz %#x\n",
+	     ctx->wq_idx, (ctx->dedicated == ACCFG_WQ_SHARED) ? "shared" : "dedicated",
+	     ctx->wq_size, ctx->wq_reg, ctx->max_batch_size, ctx->max_xfer_size);
+
+	return 0;
+}
 
 
 
@@ -203,6 +229,14 @@ int main(){
   two_stage_packet_stats **stats2Phase = NULL;
   PHYS_CONTIG_ALLOC(&stats2Phase, sizeof(two_stage_packet_stats*) * numOperations);
 
+  struct acctest_context *crc32Ctx = NULL;
+  crc32Ctx = acctest_init(TEST_FLAGS_BOF);
+  rc = acctest_duplicate_context(crc32Ctx, dsa );
+  if(rc < 0){
+    PRINT_ERR("Failed to allocate shared wq for crc32Ctx\n");
+    goto exit;
+  }
+  return rc;
 
   /* Create args and dsa descs for the callback function to submit*/
   PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args*)*numOperations);
