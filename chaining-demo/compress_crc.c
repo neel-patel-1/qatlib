@@ -23,7 +23,7 @@
 
 #include "dsa_funcs.h"
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 typedef struct _crc_polling_args{
   struct acctest_context *dsa;
@@ -63,10 +63,17 @@ void *dc_crc64_polling(void *args){
   How to populate with the right task to submit
   what does sub
 */
+struct _two_stage_packet_stats{
+  Cpa32U packetId;
+  Cpa64U submitTime;
+  Cpa64U cbReceiveTime;
+  Cpa64U receiveTime;
+};
 typedef struct _dsaFwderCbArgs {
+  Cpa32U packetId;
   struct acctest_context *dsa;
   struct task *toSubmit;
-  Cpa64U intermediateTimestamp; /* allows us to see dsa crc32 latency */
+  struct _two_stage_packet_stats **stats;
 } dsa_fwder_args;
 
 void dcDsaCrcCallback(void *pCallbackTag, CpaStatus status){
@@ -74,13 +81,38 @@ void dcDsaCrcCallback(void *pCallbackTag, CpaStatus status){
   dsa_fwder_args *args = (dsa_fwder_args *)pCallbackTag;
   struct acctest_context *dsa;
   struct task *toSubmit;
+  struct _two_stage_packet_stats **stats;
+  Cpa32U idx;
 
   if(NULL != pCallbackTag){
     dsa = args->dsa;
-    args->intermediateTimestamp = sampleCoderdtsc();
+    stats = args->stats;
+    idx = args->packetId;
+    stats[idx]->cbReceiveTime = sampleCoderdtsc();
     toSubmit = args->toSubmit;
     single_crc_submit_task(dsa, toSubmit);
   }
+}
+
+typedef struct _two_stage_packet_stats two_stage_packet_stats;
+
+CpaStatus submitAndStampBeforeDSAFwdingCb(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle, CpaBufferList *pBufferListSrc,
+  CpaBufferList *pBufferListDst, CpaDcOpData *opData, CpaDcRqResults *pDcResults, dsa_fwder_args *cb_args, int index){
+
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  two_stage_packet_stats *stats = cb_args->stats[index];
+  Cpa64U submitTime = sampleCoderdtsc();
+  stats->submitTime = submitTime;
+  status = cpaDcCompressData2(
+    dcInstHandle,
+    sessionHandle,
+    pBufferListSrc,     /* source buffer list */
+    pBufferListDst,     /* destination buffer list */
+    opData,            /* Operational data */
+    pDcResults,         /* results structure */
+    (void *)cb_args); /* data sent as is to the callback function*/
+  return status;
+
 }
 
 
@@ -164,17 +196,26 @@ int main(){
   dsa_fwder_args **args;
   int argsIdx = 0;
 
+  /* Need a specialized two-stage packet stats structure */
+  two_stage_packet_stats **stats2Phase = NULL;
+  PHYS_CONTIG_ALLOC(&stats2Phase, sizeof(two_stage_packet_stats*) * numOperations);
+
 
   /* Create args and dsa descs for the callback function to submit*/
-  PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args *)*numOperations);
+  PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args*)*numOperations);
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
   waitTaskNode = dsa->multi_task_node;
   while(waitTaskNode){
+    /* args */
     PHYS_CONTIG_ALLOC(&(args[argsIdx]), sizeof(dsa_fwder_args));
     args[argsIdx]->dsa=dsa;
     args[argsIdx]->toSubmit = waitTaskNode->tsk;
-    argsIdx++;
     waitTaskNode = waitTaskNode->next;
+
+    /* packet stats */
+    PHYS_CONTIG_ALLOC(&(stats2Phase[argsIdx]), sizeof(two_stage_packet_stats));
+    memset(stats2Phase[argsIdx], 0, sizeof(two_stage_packet_stats));
+      argsIdx++;
   }
 
   /* Create polling thread for DSA */
@@ -183,14 +224,25 @@ int main(){
   crcArgs->id = tid;
   createThreadJoinable(&pTid,crc_polling, crcArgs);
 
+  /* Submit to dcInst */
   bufIdx = 0;
   while(bufIdx < numOperations){
     dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
+    // rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+    // sessionHandle,
+    // srcBufferLists[bufIdx],
+    // dstBufferLists[bufIdx],
+    // opData[bufIdx],
+    // dcResults[bufIdx],
+    // args[bufIdx],
+    // bufIdx);
+
     bufIdx++;
   }
 
   pthread_join(pTid, NULL);
 
+  /* verify all crcs */
   bufIdx = 0;
   waitTaskNode = dsa->multi_task_node;
   for(int i=0; i<numOperations; i++){
