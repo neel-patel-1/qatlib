@@ -43,6 +43,29 @@ void *crc_polling(void *args){
   gPollingCrcs[id] = 0;
 }
 
+/* Callback needs to know which task to submit to DSA */
+/* Who populates - initial submitter
+  How to populate with the right task to submit
+  what does sub
+*/
+typedef struct _dsaFwderCbArgs {
+  struct acctest_context *dsa;
+  struct task *toSubmit;
+  Cpa64U intermediateTimestamp; /* allows us to see dsa crc32 latency */
+} dsa_fwder_args;
+
+void dcDsaCrcCallback(void *pCallbackTag, CpaStatus status){
+  PRINT_DBG("DSA Fwding Callback Invoked\n");
+  dsa_fwder_args *args = (dsa_fwder_args *)pCallbackTag;
+  struct acctest_context *dsa;
+  struct task *toSubmit;
+
+  if(NULL != pCallbackTag){
+    dsa = args->dsa;
+    toSubmit = args->toSubmit;
+    single_crc_submit_task(dsa, toSubmit);
+  }
+}
 
 
 int main(){
