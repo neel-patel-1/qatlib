@@ -116,6 +116,33 @@ CpaStatus submitAndStampBeforeDSAFwdingCb(CpaInstanceHandle dcInstHandle, CpaDcS
 
 }
 
+/* verify crcs */
+CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
+  CpaBufferList **srcBufferLists, Cpa32U bufferSize
+  )
+{
+  int bufIdx = 0;
+  Cpa8U *buf;
+  struct task *waitTask;
+  int rc = CPA_STATUS_SUCCESS;
+
+  while(waitTaskNode){
+    waitTask = waitTaskNode->tsk;
+    buf = srcBufferLists[bufIdx]->pBuffers[0].pData;
+
+    rc = validateCrc32DSA(waitTask,buf, bufferSize);
+    if(rc != CPA_STATUS_SUCCESS){
+      PRINT_ERR("DSA CRC32 Incorrect\n");
+      rc = CPA_STATUS_FAIL;
+      break;
+    }
+
+    waitTaskNode = waitTaskNode->next;
+    bufIdx++;
+  }
+}
+
+
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -239,14 +266,14 @@ int main(){
   bufIdx = 0;
   while(bufIdx < numOperations){
     dcDsaCrcCallback(args[bufIdx], CPA_STATUS_SUCCESS);
-    rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
-      sessionHandle,
-      srcBufferLists[bufIdx],
-      dstBufferLists[bufIdx],
-      opData[bufIdx],
-      dcResults[bufIdx],
-      args[bufIdx],
-      bufIdx);
+    // rc = submitAndStampBeforeDSAFwdingCb(dcInstHandle,
+    //   sessionHandle,
+    //   srcBufferLists[bufIdx],
+    //   dstBufferLists[bufIdx],
+    //   opData[bufIdx],
+    //   dcResults[bufIdx],
+    //   args[bufIdx],
+    //   bufIdx);
 
     bufIdx++;
   }
@@ -254,30 +281,13 @@ int main(){
   pthread_join(pTid, NULL);
 
   /* verify all crcs */
-  bufIdx = 0;
-  waitTaskNode = dsa->multi_task_node;
-  for(int i=0; i<numOperations; i++){
-    waitTask = waitTaskNode->tsk;
-    buf = srcBufferLists[bufIdx]->pBuffers[0].pData;
-
-    rc = validateCrc32DSA(waitTask,buf, bufferSize);
-    if(rc != CPA_STATUS_SUCCESS){
-      PRINT_ERR("DSA CRC32 Incorrect\n");
-      break;
-    }
-
-    waitTaskNode = waitTaskNode->next;
-    bufIdx++;
-  }
+  rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
 
 
   if( CPA_STATUS_SUCCESS != rc ){
-    goto exit;
+    PRINT_ERR("Invalid CRC\n");
   }
-  // tsk=dstBufCrcTaskNodes->tsk;
-  // single_crc_submit_task(dsa, tsk);
 
-  // singleSubmitValidation(srcBufferLists);
 exit:
 
   icp_sal_userStop();
