@@ -23,7 +23,7 @@
 
 #include "dsa_funcs.h"
 
-int gDebugParam = 1;
+int gDebugParam = 0;
 
 typedef struct _crc_polling_args{
   struct acctest_context *dsa;
@@ -41,6 +41,21 @@ void *crc_polling(void *args){
     tsk_node = tsk_node->next;
   }
   gPollingCrcs[id] = 0;
+}
+
+typedef struct dc_crc_polling_args{
+  CpaInstanceHandle dcInstance;
+  Cpa32U id;
+} dc_crc_polling_args;
+
+void *dc_crc64_polling(void *args){
+  dc_crc_polling_args *dcArgs = (dc_crc_polling_args *)args;
+  CpaInstanceHandle dcInstance = dcArgs->dcInstance;
+  Cpa32U id = dcArgs->id;
+  gPollingDcs[id] = 1;
+  while(gPollingDcs[id] == 1){
+    icp_sal_DcPollInstance(dcInstance, 0); /* Poll here, forward in callback */
+  }
 }
 
 /* Callback needs to know which task to submit to DSA */
@@ -150,13 +165,6 @@ int main(){
   int argsIdx = 0;
 
 
-  /* Create polling thread for DSA */
-  OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
-  crcArgs->dsa=dsa;
-  crcArgs->id = tid;
-  createThreadJoinable(&pTid,crc_polling, crcArgs);
-
-
   /* Create args and dsa descs for the callback function to submit*/
   PHYS_CONTIG_ALLOC(&(args), sizeof(dsa_fwder_args *)*numOperations);
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
@@ -168,6 +176,12 @@ int main(){
     argsIdx++;
     waitTaskNode = waitTaskNode->next;
   }
+
+  /* Create polling thread for DSA */
+  OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
+  crcArgs->dsa=dsa;
+  crcArgs->id = tid;
+  createThreadJoinable(&pTid,crc_polling, crcArgs);
 
   bufIdx = 0;
   while(bufIdx < numOperations){
@@ -184,9 +198,7 @@ int main(){
     buf = srcBufferLists[bufIdx]->pBuffers[0].pData;
 
     rc = validateCrc32DSA(waitTask,buf, bufferSize);
-    if(rc == CPA_STATUS_SUCCESS){
-      PRINT_DBG("DSA CRC32 Correct\n");
-    } else{
+    if(rc != CPA_STATUS_SUCCESS){
       PRINT_ERR("DSA CRC32 Incorrect\n");
       break;
     }

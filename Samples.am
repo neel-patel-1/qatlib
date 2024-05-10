@@ -238,8 +238,8 @@ compress_crc_CFLAGS = \
 	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
-	-g3 \
-	$(COMMON_FLAGS)
+	$(COMMON_FLAGS) \
+	#-fsanitize=thread,undefined -g3
 
 compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la -lz /home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a
 
