@@ -237,7 +237,8 @@ CpaStatus compCrcStream(Cpa32U numOperations,
   CpaDcSessionHandle sessionHandle,
   CpaDcInstanceCapabilities cap,
   int flowId,
-  two_stage_packet_stats ***pStats)
+  two_stage_packet_stats ***pStats,
+  pthread_barrier_t *barrier)
 {
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
@@ -303,6 +304,8 @@ CpaStatus compCrcStream(Cpa32U numOperations,
   /* Create intermediate polling thread for forwarding */
   create_dc_polling_thread( flowId, &dcToCrcTid, dcInstHandle);
 
+  pthread_barrier_wait(barrier);
+
   rc = submit_all_comp_crc_requests(
     numOperations,
     dcInstHandle,
@@ -330,6 +333,51 @@ CpaStatus compCrcStream(Cpa32U numOperations,
     PRINT_ERR("Invalid CRC\n");
   }
   *pStats = stats2Phase;
+}
+
+typedef struct _compCrcStreamThreadArgs{
+  Cpa32U numOperations;
+  Cpa32U bufferSize;
+  struct acctest_context *dsa;
+  int tflags;
+  CpaInstanceHandle dcInstHandle;
+  CpaDcSessionHandle sessionHandle;
+  CpaDcInstanceCapabilities cap;
+  int flowId;
+  two_stage_packet_stats ***pStats;
+  pthread_barrier_t *barrier;
+} compCrcStreamThreadArgs;
+
+void populateCrcStreamThreadArgs(compCrcStreamThreadArgs *args,
+  Cpa32U numOperations,
+  Cpa32U bufferSize,
+  struct acctest_context *dsa,
+  int tflags,
+  CpaInstanceHandle dcInstHandle,
+  CpaDcSessionHandle sessionHandle,
+  CpaDcInstanceCapabilities cap,
+  int flowId,
+  two_stage_packet_stats ***pStats,
+  pthread_barrier_t *barrier)
+{
+  args->numOperations = numOperations;
+  args->bufferSize = bufferSize;
+  args->dsa = dsa;
+  args->tflags = tflags;
+  args->dcInstHandle = dcInstHandle;
+  args->sessionHandle = sessionHandle;
+  args->cap = cap;
+  args->flowId = flowId;
+  args->pStats = pStats;
+  args->barrier = barrier;
+}
+
+void *compCrcStreamThreadFn(void *args){
+  compCrcStreamThreadArgs *threadArgs = (compCrcStreamThreadArgs *)args;
+  compCrcStream(threadArgs->numOperations, threadArgs->bufferSize,
+    threadArgs->dsa, threadArgs->tflags, threadArgs->dcInstHandle,
+    threadArgs->sessionHandle, threadArgs->cap, threadArgs->flowId,
+    threadArgs->pStats, threadArgs->barrier);
 }
 
 
@@ -365,7 +413,7 @@ int main(){
 
   Cpa32U numOperations = 10000;
   Cpa32U bufferSize = 4096;
-  int numFlows = 1;
+  int numFlows = 2;
 
   /* Arrays of packetstat array pointers for access to per-stream stats */
   two_stage_packet_stats **streamStats[numFlows];
@@ -383,14 +431,29 @@ int main(){
 
   cpaDcQueryCapabilities(dcInstHandle, &cap);
 
-  for(int flowId=0; flowId<2; flowId++){
+  pthread_barrier_t barrier;
+  pthread_t streamTds[numFlows];
+  pthread_barrier_init(&barrier, NULL, numFlows);
+  for(int flowId=0; flowId<numFlows; flowId++){
     /* prepare per flow dc inst/sess*/
     prepareDcInst(&dcInstHandles[flowId]);
     prepareDcSession(dcInstHandles[flowId], &sessionHandles[flowId], dcDsaCrcCallback);
 
+    compCrcStreamThreadArgs *args;
+    OS_MALLOC(&args, sizeof(compCrcStreamThreadArgs));
+    populateCrcStreamThreadArgs(args, numOperations, bufferSize,
+      dsa, tflags, dcInstHandles[flowId], sessionHandles[flowId], cap,
+      flowId, &(streamStats[flowId]), &barrier);
+
+    createThreadJoinable(&streamTds[flowId], compCrcStreamThreadFn, args);
     /* start the comp streams */
-    compCrcStream(numOperations, bufferSize,
-      dsa, tflags, dcInstHandles[flowId], sessionHandles[flowId], cap, flowId, &(streamStats[flowId]));
+    // compCrcStream(numOperations, bufferSize,
+    //   dsa, tflags, dcInstHandles[flowId],
+    //   sessionHandles[flowId], cap, flowId,
+    //   &(streamStats[flowId]), &barrier);
+  }
+  for(int flowId=0; flowId<numFlows; flowId++){
+    pthread_join(streamTds[flowId], NULL);
   }
 
 
