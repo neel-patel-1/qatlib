@@ -73,6 +73,67 @@ void *dc_crc64_polling(void *args){
   }
 }
 
+typedef struct _threadStats2P {
+  Cpa64U avgLatencyS1;
+  Cpa64U avgLatencyS2;
+  Cpa64U avgLatency;
+  Cpa64U minLatency;
+  Cpa64U maxLatency;
+  Cpa64U exeTimeUs;
+  Cpa32U operations;
+  Cpa32U operationSize;
+  Cpa32U id;
+} threadStats2P;
+
+
+void populate2PhaseThreadStats(two_stage_packet_stats ** stats2Phase, threadStats2P **pThrStats, Cpa32U numOperations, Cpa32U bufferSize){
+/* Print latencies for each phase */
+  threadStats2P *thrStats;
+  Cpa32U id = 0;
+  Cpa32U freqKHz = 2080;
+  Cpa64U avgLatency = 0;
+  Cpa64U minLatency = UINT64_MAX;
+  Cpa64U maxLatency = 0;
+  Cpa64U firstSubmitTime = stats2Phase[0]->submitTime;
+  Cpa64U lastReceiveTime = stats2Phase[numOperations-1]->receiveTime;
+  Cpa64U exeCycles = lastReceiveTime - firstSubmitTime;
+  Cpa64U exeTimeUs = exeCycles/freqKHz;
+  Cpa64U avgLatencyP2 = 0;
+  Cpa64U avgLatencyP1 = 0;
+  double offloadsPerSec = numOperations / (double)exeTimeUs;
+  offloadsPerSec = offloadsPerSec * 1000000;
+
+  OS_MALLOC(&thrStats, sizeof(threadStats2P));
+  for(int i=0; i<numOperations; i++){
+    Cpa64U latencyP2 = stats2Phase[i]->receiveTime - stats2Phase[i]->cbReceiveTime;
+    Cpa64U latencyP1 = stats2Phase[i]->cbReceiveTime - stats2Phase[i]->submitTime;
+    Cpa64U latency = stats2Phase[i]->cbReceiveTime - stats2Phase[i]->submitTime;
+    uint64_t e2eMicros = latency / freqKHz;
+    uint64_t p1Micros = latencyP1 / freqKHz;
+    uint64_t p2Micros = latencyP2 / freqKHz;
+
+    avgLatencyP1 += p1Micros;
+    avgLatencyP2 += p2Micros;
+    avgLatency += (p1Micros + p2Micros);
+    if(e2eMicros < minLatency){
+      minLatency = e2eMicros;
+    }
+    if(e2eMicros > maxLatency){
+      maxLatency = e2eMicros;
+    }
+  }
+  avgLatency = avgLatency / numOperations;
+  thrStats->avgLatencyS1 = avgLatencyP1 / numOperations;
+  thrStats->avgLatencyS2 = avgLatencyP2 / numOperations;
+  thrStats->avgLatency = avgLatency;
+  thrStats->minLatency = minLatency;
+  thrStats->maxLatency = maxLatency;
+  thrStats->exeTimeUs = exeTimeUs;
+  thrStats->operations = numOperations;
+  thrStats->operationSize = bufferSize;
+  thrStats->id = id;
+  *pThrStats = thrStats;
+}
 
 typedef struct _dsaFwderCbArgs {
   Cpa32U packetId;
@@ -151,17 +212,6 @@ CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
   }
 }
 
-typedef struct _threadStats2P {
-  Cpa64U avgLatencyS1;
-  Cpa64U avgLatencyS2;
-  Cpa64U avgLatency;
-  Cpa64U minLatency;
-  Cpa64U maxLatency;
-  Cpa64U exeTimeUs;
-  Cpa32U operations;
-  Cpa32U operationSize;
-  Cpa32U id;
-} threadStats2P;
 
 
 void printTwoPhaseSingleThreadStatsSummary(threadStats2P *stats){
@@ -323,51 +373,8 @@ int main(){
   /* verify all crcs */
   rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
 
-  /* Print latencies for each phase */
-  Cpa32U id = 0;
   threadStats2P *thrStats = NULL;
-  Cpa32U freqKHz = 2080;
-  Cpa64U avgLatency = 0;
-  Cpa64U minLatency = UINT64_MAX;
-  Cpa64U maxLatency = 0;
-  Cpa64U firstSubmitTime = stats2Phase[0]->submitTime;
-  Cpa64U lastReceiveTime = stats2Phase[numOperations-1]->receiveTime;
-  Cpa64U exeCycles = lastReceiveTime - firstSubmitTime;
-  Cpa64U exeTimeUs = exeCycles/freqKHz;
-  Cpa64U avgLatencyP2 = 0;
-  Cpa64U avgLatencyP1 = 0;
-  double offloadsPerSec = numOperations / (double)exeTimeUs;
-  offloadsPerSec = offloadsPerSec * 1000000;
-
-  OS_MALLOC(&thrStats, sizeof(threadStats2P));
-  for(int i=0; i<numOperations; i++){
-    Cpa64U latencyP2 = stats2Phase[i]->receiveTime - stats2Phase[i]->cbReceiveTime;
-    Cpa64U latencyP1 = stats2Phase[i]->cbReceiveTime - stats2Phase[i]->submitTime;
-    Cpa64U latency = stats2Phase[i]->cbReceiveTime - stats2Phase[i]->submitTime;
-    uint64_t e2eMicros = latency / freqKHz;
-    uint64_t p1Micros = latencyP1 / freqKHz;
-    uint64_t p2Micros = latencyP2 / freqKHz;
-
-    avgLatencyP1 += p1Micros;
-    avgLatencyP2 += p2Micros;
-    avgLatency += (p1Micros + p2Micros);
-    if(e2eMicros < minLatency){
-      minLatency = e2eMicros;
-    }
-    if(e2eMicros > maxLatency){
-      maxLatency = e2eMicros;
-    }
-  }
-  avgLatency = avgLatency / numOperations;
-  thrStats->avgLatencyS1 = avgLatencyP1 / numOperations;
-  thrStats->avgLatencyS2 = avgLatencyP2 / numOperations;
-  thrStats->avgLatency = avgLatency;
-  thrStats->minLatency = minLatency;
-  thrStats->maxLatency = maxLatency;
-  thrStats->exeTimeUs = exeTimeUs;
-  thrStats->operations = numOperations;
-  thrStats->operationSize = bufferSize;
-  thrStats->id = id;
+  populate2PhaseThreadStats(stats2Phase, &thrStats, numOperations, bufferSize);
   printTwoPhaseSingleThreadStatsSummary(thrStats);
 
 
