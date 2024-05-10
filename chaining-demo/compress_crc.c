@@ -57,7 +57,6 @@ void *crc_polling(void *args){
   gPollingCrcs[id] = 0;
 }
 
-
 /* allocate the og and switch submitter / poller over to new tasks from this guy */
 
 /* Enable multiple acctests to use the same work queue */
@@ -188,9 +187,24 @@ CpaStatus alloc_crc_test_packet_stats(
   return CPA_STATUS_SUCCESS;
 }
 
-CpaStatus create_crc_polling_thread(){}
+void create_crc_polling_thread(struct acctest_context *dsa, int id, two_stage_packet_stats **stats, pthread_t *tid){
+  crc_polling_args *crcArgs;
+  OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
+  crcArgs->dsa=dsa;
+  crcArgs->id = id;
+  crcArgs->stats = stats;
+  createThreadJoinable(tid,crc_polling, crcArgs);
+}
 
-CpaStatus create_dc_polling_thread(){}
+void create_dc_polling_thread(struct acctest_context *dsa, int flowId,
+  pthread_t *tid, CpaInstanceHandle dcInstHandle)
+{
+  dc_crc_polling_args *dcCrcArgs = NULL;
+  OS_MALLOC(&dcCrcArgs, sizeof(dc_crc_polling_args));
+  dcCrcArgs->dcInstance = dcInstHandle;
+  dcCrcArgs->id = flowId;
+  createThread(tid, dc_crc64_polling, dcCrcArgs);
+}
 
 CpaStatus submit_all_comp_crc_requests(){}
 
@@ -268,7 +282,7 @@ int main(){
   int bufIdx = 0;
   crc_polling_args *crcArgs = NULL;
   int tid=0;
-  pthread_t pTid, dcToCrcTid;
+  pthread_t crcTid, dcToCrcTid;
   struct task *waitTask;
   Cpa8U *buf;
   struct task_node *waitTaskNode;
@@ -290,7 +304,7 @@ int main(){
   // }
   // return rc;
 
-  /* Create args and dsa descs for the callback function to submit*/
+  /* Create args, stats packet stats, and dsa descs for the callback function to submit*/
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
   rc =alloc_crc_test_packet_stats(
     dsa,
@@ -300,7 +314,6 @@ int main(){
   if(rc != CPA_STATUS_SUCCESS){
     return CPA_STATUS_FAIL;
   }
-
   rc = prep_crc_test_cb_fwd_args(
     &args,
     dsa,
@@ -310,22 +323,11 @@ int main(){
   if(rc != CPA_STATUS_SUCCESS){
     return CPA_STATUS_FAIL;
   }
-
-
-
-
   /* Create polling thread for DSA */
-  OS_MALLOC(&crcArgs, sizeof(crc_polling_args));
-  crcArgs->dsa=dsa;
-  crcArgs->id = tid;
-  crcArgs->stats = stats2Phase;
-  createThreadJoinable(&pTid,crc_polling, crcArgs);
+  create_crc_polling_thread(dsa, flowId, stats2Phase, &crcTid);
 
   /* Create intermediate polling thread for forwarding */
-  OS_MALLOC(&dcCrcArgs, sizeof(dc_crc_polling_args));
-  dcCrcArgs->dcInstance = dcInstHandle;
-  dcCrcArgs->id = flowId;
-  createThread(&dcToCrcTid, dc_crc64_polling, dcCrcArgs);
+  create_dc_polling_thread(dsa, flowId, &dcToCrcTid, dcInstHandle);
 
   /* Submit to dcInst */
   bufIdx = 0;
@@ -342,7 +344,7 @@ int main(){
     bufIdx++;
   }
 
-  pthread_join(pTid, NULL);
+  pthread_join(crcTid, NULL);
   gPollingDcs[flowId] = 0;
 
   /* verify all crcs */
