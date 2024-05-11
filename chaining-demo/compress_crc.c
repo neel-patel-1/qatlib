@@ -32,7 +32,26 @@
 
 int gDebugParam = 0;
 
-/* allocate the og and switch submitter / poller over to new tasks from this guy */
+void multiConfigTest(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
+  int numConfigs = 2;
+  int numOperations = 1000;
+  int bufferSizes[] = {4096, 65536, 2*1024*1024};
+  int numFlows = 10;
+
+  if(numFlows > numInstances){
+    numFlows = numInstances;
+  }
+
+  CpaInstanceHandle *dcInstHandle = dcInstHandles[0];
+  for(int i=0; i<numConfigs; i++){
+    multiStreamSwCompressCrc64Func(numOperations, bufferSizes[i], numFlows, dcInstHandle);
+    cpaDcDsaCrcPerf(numOperations, bufferSizes[i], numFlows, dcInstHandles, sessionHandles);
+    multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
+  }
+}
+
+
+
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -52,21 +71,35 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
-  int numConfigs = 2;
-  int numOperations = 1000;
-  int bufferSizes[] = {4096, 65536, 2*1024*1024};
-  int numFlows = 10;
+  int numOperations = 100000;
 
-  if(numFlows > numInstances){
-    numFlows = numInstances;
-  }
+  multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
+    4,
+    numOperations,
+    4096,
+    dcInstHandles,
+    sessionHandles,
+    numInstances,
+    4
+  );
 
-  for(int i=0; i<numConfigs; i++){
-    multiStreamSwCompressCrc64Func(numOperations, bufferSizes[i], numFlows, dcInstHandle);
-    cpaDcDsaCrcPerf(numOperations, bufferSizes[i], numFlows, dcInstHandles, sessionHandles);
-    multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
-  }
+  multiStreamCompressCrc64PerformanceTestSharedSMTThreads(
+    4,
+    numOperations,
+    4096,
+    dcInstHandles,
+    sessionHandles,
+    numInstances
+  );
 
+  multiStreamCompressCrc64PerformanceTest(
+    4,
+    numOperations,
+    4096,
+    dcInstHandles,
+    sessionHandles,
+    numInstances
+  );
 
 
 

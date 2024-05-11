@@ -223,6 +223,7 @@ compress_crc_SOURCES = \
 	chaining-demo/dsa_funcs.c \
 	chaining-demo/print_funcs.c \
 	chaining-demo/sw_chain_comp_crc_funcs.c \
+	chaining-demo/smt-thread-exps.c \
 	$(srcdir)/idxd/test/libaccfg.c \
 	$(srcdir)/idxd/test/core.c \
 	$(srcdir)/idxd/test/dsa.c \
