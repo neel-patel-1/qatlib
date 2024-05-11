@@ -470,7 +470,7 @@ int main(){
   }
 
   multiStreamSwCompressCrc64Func(numOperations, bufferSize, numFlows, dcInstHandle);
-  cpaDcDsaCrcPerf(100000, bufferSize, numFlows, dcInstHandles, sessionHandles);
+  cpaDcDsaCrcPerf(numOperations, bufferSize, numFlows, dcInstHandles, sessionHandles);
   multiStreamCompressCrc64PerformanceTest(numFlows,numOperations,bufferSize,dcInstHandles,sessionHandles,numInstances);
 
 
