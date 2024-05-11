@@ -64,9 +64,11 @@ void logLatencies2Phase(two_stage_packet_stats **packetStatsPtrsArray, Cpa32U nu
   uint64_t freqKhz = 2080;
 
   for(int i=0; i<numOperations; i++){
-    Cpa64U latency = packetStatsPtrsArray[i]->receiveTime - packetStatsPtrsArray[i]->submitTime;
-    uint64_t micros = latency / freqKhz;
-    fprintf(file, "%ld\n", micros );
+    Cpa64U latencyP1 = packetStatsPtrsArray[i]->cbReceiveTime - packetStatsPtrsArray[i]->submitTime;
+    uint64_t microsP1 = latencyP1 / freqKhz;
+    Cpa64U latencyP2 = packetStatsPtrsArray[i]->cbReceiveTime - packetStatsPtrsArray[i]->submitTime;
+    uint64_t microsP2 = latencyP2 / freqKhz;
+    fprintf(file, "%ld %ld\n", microsP1, microsP2 );
   }
 }
 
