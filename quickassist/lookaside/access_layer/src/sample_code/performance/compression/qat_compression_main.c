@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- *
+ * 
  *   GPL LICENSE SUMMARY
- *
+ * 
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- *
+ * 
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- *
+ * 
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- *
+ * 
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- *
+ * 
  *   Contact Information:
  *   Intel Corporation
- *
+ * 
  *   BSD LICENSE
- *
+ * 
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- *
+ * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- *
+ * 
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- *
+ * 
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *
+ * 
+ * 
  *
  ***************************************************************************/
 
@@ -76,7 +76,6 @@ extern void dcPerformCallback(void *pCallbackTag, CpaStatus status);
 
 extern CpaStatus createStartandWaitForCompletion(Cpa32U instType);
 
-extern struct acctest_context *dsa;
 
 #define COUNT_RESPONSES dcPerformCallback(setup, status)
 
@@ -188,10 +187,6 @@ CpaStatus setupDcTest(CpaDcCompType algorithm,
                                corpusType,
                                syncFlag,
                                numLoops);
-
-    // dcSetup = (compression_test_params_t *)&thread_setup_g[testTypeCount_g][0];
-    // dcSetup->dsa = dsa;
-    // dcSetup->next_task = dsa->multi_task_node;
 
     return status;
 }
@@ -345,9 +340,6 @@ static CpaStatus setupDcCommonTest(compression_test_params_t *dcSetup,
     dcSetup->setupData.autoSelectBestHuffmanTree = gAutoSelectBestMode;
     dcSetup->setupData.checksum = gChecksum;
     dcSetup->passCriteria = getPassCriteria();
-    dcSetup->dsa = dsa;
-    dcSetup->dsaSetHint = 100;
-    dcSetup->next_task = dsa->multi_task_node;
     return status;
 }
 
@@ -382,9 +374,6 @@ void dcPerformance(single_thread_test_data_t *testSetup)
     dcSetup.setNsRequest = tmpSetup->setNsRequest;
     dcSetup.useE2E = tmpSetup->useE2E;
     dcSetup.useE2EVerify = tmpSetup->useE2EVerify;
-    dcSetup.dsa = tmpSetup->dsa;
-    dcSetup.dsaSetHint = tmpSetup->dsaSetHint;
-    dcSetup.next_task = tmpSetup->next_task;
 
     /*give our thread a unique memory location to store performance stats*/
     dcSetup.performanceStats = testSetup->performanceStats;
@@ -668,7 +657,6 @@ CpaStatus qatDcPerform(compression_test_params_t *setup)
                                          &cmpBufferListArray,
                                          &resultArray);
 
-    setup->dstBuffer = destBufferListArray;
     // Allocate the CpaFlatBuffers in each list
     if (CPA_STATUS_SUCCESS == status)
     {
@@ -1237,7 +1225,6 @@ CpaStatus qatCompressData(compression_test_params_t *setup,
                  */
                 arrayOfResults[listNum].checksum = previousChecksum;
                 /*submit request*/
-                setup->dstBuffer = arrayOfDestBufferLists;
                 status = qatDcSubmitRequest(setup,
                                             instanceInfo2,
                                             compressDirection,

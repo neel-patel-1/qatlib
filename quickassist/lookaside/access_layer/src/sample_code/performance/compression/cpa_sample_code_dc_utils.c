@@ -2,38 +2,38 @@
  *
  * This file is provided under a dual BSD/GPLv2 license.  When using or
  *   redistributing this file, you may do so under either license.
- *
+ * 
  *   GPL LICENSE SUMMARY
- *
+ * 
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
- *
+ * 
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of version 2 of the GNU General Public License as
  *   published by the Free Software Foundation.
- *
+ * 
  *   This program is distributed in the hope that it will be useful, but
  *   WITHOUT ANY WARRANTY; without even the implied warranty of
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  *   General Public License for more details.
- *
+ * 
  *   You should have received a copy of the GNU General Public License
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
  *   The full GNU General Public License is included in this distribution
  *   in the file called LICENSE.GPL.
- *
+ * 
  *   Contact Information:
  *   Intel Corporation
- *
+ * 
  *   BSD LICENSE
- *
+ * 
  *   Copyright(c) 2007-2022 Intel Corporation. All rights reserved.
  *   All rights reserved.
- *
+ * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- *
+ * 
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
@@ -43,7 +43,7 @@
  *     * Neither the name of Intel Corporation nor the names of its
  *       contributors may be used to endorse or promote products derived
  *       from this software without specific prior written permission.
- *
+ * 
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -55,8 +55,8 @@
  *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *
+ * 
+ * 
  *
  ***************************************************************************/
 
@@ -195,44 +195,8 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
             pPerfData->submissions);
         pPerfData->threadReturnStatus = CPA_STATUS_FAIL;
     }
-
-
-
     if (latency_enable)
     {
-        if(dsa_enable){
-            CpaBufferList *dstBufferList = test_struct->dstBuffer;
-            CpaFlatBuffer * dstBuffer = dstBufferList->pBuffers;
-            Cpa8U *dstBufferData = dstBuffer->pData;
-
-            struct task_node *tsk_node = test_struct->next_task;
-            struct acctest_context * dsa = test_struct->dsa;
-            // printf("complen: %d\n", test_struct->dstBuffer->pBuffers[0].dataLenInBytes);
-            if(tsk_node == NULL){
-                tsk_node = dsa->multi_task_node;
-            }
-
-            struct task *tsk  = tsk_node->tsk;
-            tsk->src1 = dstBufferData;
-            tsk->crc_seed = 0x12345678;
-            uint64_t payloadSize = test_struct->dstBuffer->pBuffers[0].dataLenInBytes;
-            tsk->xfer_size = payloadSize;
-            dsa_prep_crcgen(tsk);
-            struct hw_desc *hw = tsk->desc;
-            // struct timespec start, end;
-            // clock_gettime(CLOCK_MONOTONIC, &start);
-            acctest_desc_submit(dsa, hw);
-
-            /*mwait on desc*/
-            acctest_wait_on_desc_timeout(tsk->comp, dsa, 3000);
-            if(test_struct->next_task == NULL){
-                test_struct->next_task = dsa->multi_task_node;
-            } else {
-                test_struct->next_task = test_struct->next_task->next;
-            }
-            // clock_gettime(CLOCK_MONOTONIC, &end);
-            // printf("latency: %ld\n", (end.tv_sec - start.tv_sec) * 1000000000 + end.tv_nsec - start.tv_nsec);
-        }
         /* Did we setup the array pointer? */
         QAT_PERF_CHECK_NULL_POINTER_AND_UPDATE_STATUS(
             pPerfData->response_times, pPerfData->threadReturnStatus);
@@ -255,8 +219,6 @@ void dcPerformCallback(void *pCallbackTag, CpaStatus status)
             pPerfData->nextCount += pPerfData->countIncrement;
             pPerfData->latencyCount++;
         }
-    } else {
-
     }
 
     if ((CPA_TRUE == gUseStatefulLite) ||

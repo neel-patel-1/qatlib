@@ -51,5 +51,8 @@ CpaStatus create_tsk_nodes_for_stage2_offload(CpaBufferList **srcBufferLists,
 CpaStatus singleSubmitValidation(CpaBufferList **srcBufferLists);
 CpaStatus validateCrc32DSA(struct task *tsk, Cpa8U *buf, Cpa64U bufLen);
 
+int acctest_duplicate_context(struct acctest_context *ctx, struct acctest_context *srcCtx);
+
+
 
 #endif

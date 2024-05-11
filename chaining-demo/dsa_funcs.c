@@ -685,3 +685,29 @@ uint32_t dsa_calculate_crc32(void *data, size_t length, uint32_t seed, uint32_t 
 	/* Same as crc ^ 0xFFFFFFFF */
 	return ~crc;
 }
+
+
+/* Enable multiple acctests to use the same work queue */
+int acctest_duplicate_context(struct acctest_context *ctx, struct acctest_context *srcCtx){
+  ctx->wq = srcCtx->wq;
+  ctx->wq_reg = srcCtx->wq_reg;
+  ctx->wq_size = srcCtx->wq_size;
+  ctx->threshold = srcCtx->threshold;
+  ctx->wq_idx = srcCtx->wq_idx;
+  ctx->bof = srcCtx->bof;
+  ctx->wq_max_batch_size = srcCtx->wq_max_batch_size;
+  ctx->wq_max_xfer_size = srcCtx->wq_max_xfer_size;
+  ctx->ats_disable = srcCtx->ats_disable;
+
+  ctx->max_batch_size = srcCtx->max_batch_size;
+  ctx->max_xfer_size = srcCtx->max_xfer_size;
+  ctx->max_xfer_bits = srcCtx->max_xfer_bits;
+  ctx->compl_size = srcCtx->compl_size;
+  ctx->dedicated = srcCtx->dedicated;
+
+	info("alloc wq %d %s size %d addr %p batch sz %#x xfer sz %#x\n",
+	     ctx->wq_idx, (ctx->dedicated == ACCFG_WQ_SHARED) ? "shared" : "dedicated",
+	     ctx->wq_size, ctx->wq_reg, ctx->max_batch_size, ctx->max_xfer_size);
+
+	return 0;
+}
