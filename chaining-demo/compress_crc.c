@@ -34,9 +34,9 @@
 int gDebugParam = 0;
 
 void allTests(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
-  int numConfigs = 2;
+  int numConfigs = 3;
   int numOperations = 1000;
-  int bufferSizes[] = {4096, 65536, 2*1024*1024};
+  int bufferSizes[] = {4096, 65536, 1*1024*1024};
   int numFlows = 10;
 
   if(numFlows > numInstances){

@@ -53,6 +53,22 @@ void logLatencies(packet_stats **packetStatsPtrsArray, Cpa32U numOperations,char
     fprintf(file, "%ld\n", micros );
   }
 }
+void logLatencies2Phase(two_stage_packet_stats **packetStatsPtrsArray, Cpa32U numOperations,char *configName){
+  char filename[256];
+  sprintf(filename, "%s_latencies.txt", configName);
+  FILE *file = fopen(filename, "w");
+  if (file == NULL) {
+      PRINT_ERR("Error opening file!\n");
+      return;
+  }
+  uint64_t freqKhz = 2080;
+
+  for(int i=0; i<numOperations; i++){
+    Cpa64U latency = packetStatsPtrsArray[i]->receiveTime - packetStatsPtrsArray[i]->submitTime;
+    uint64_t micros = latency / freqKhz;
+    fprintf(file, "%ld\n", micros );
+  }
+}
 
 
 /* TODO: https://github.com/rxi/log.c*/

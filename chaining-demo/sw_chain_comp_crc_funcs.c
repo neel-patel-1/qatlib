@@ -255,7 +255,10 @@ CpaStatus compCrcStream(Cpa32U numOperations,
   threadStats2P *thrStats = NULL;
   populate2PhaseThreadStats(stats2Phase, &thrStats, numOperations, bufferSize, flowId);
 
-
+  char filename[256];
+  sprintf(filename, "sw-managed-hw-deflate-hw-crc32_bufsize_%d", bufferSize);
+  logLatencies2Phase(stats2Phase, numOperations, filename );
+  COMPLETION_DESTROY(&complete);
 
   if( CPA_STATUS_SUCCESS != rc ){
     PRINT_ERR("Invalid CRC\n");

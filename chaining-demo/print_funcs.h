@@ -46,4 +46,5 @@ void printTwoPhaseMultiThreadStatsSummary(
   Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize, CpaBoolean printThreadStats);
 
 void logLatencies(packet_stats **packetStatsPtrsArray, Cpa32U numOperations, char *configName);
+void logLatencies2Phase(two_stage_packet_stats **packetStatsPtrsArray, Cpa32U numOperations,char *configName);
 #endif

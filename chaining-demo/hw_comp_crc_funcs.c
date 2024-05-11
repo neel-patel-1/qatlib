@@ -146,6 +146,9 @@ CpaStatus singleStreamOfCompressAndCrc64(CpaInstanceHandle dcInstHandle, CpaDcSe
       }
     }
     *ppStats = stats;
+    char filename[256];
+    sprintf(filename, "hw-deflate-crc64_bufsize_%d", bufferSize);
+    logLatencies(stats, numOperations, filename );
     COMPLETION_DESTROY(&complete);
 }
 
