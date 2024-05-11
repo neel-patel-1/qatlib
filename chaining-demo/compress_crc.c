@@ -32,7 +32,7 @@
 
 int gDebugParam = 0;
 
-void multiConfigTest(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
+void allTests(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numConfigs = 2;
   int numOperations = 1000;
   int bufferSizes[] = {4096, 65536, 2*1024*1024};
@@ -48,30 +48,6 @@ void multiConfigTest(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSe
     cpaDcDsaCrcPerf(numOperations, bufferSizes[i], numFlows, dcInstHandles, sessionHandles);
     multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
   }
-}
-
-
-
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-  int numOperations = 100000;
 
   multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
     4,
@@ -100,6 +76,32 @@ int main(){
     sessionHandles,
     numInstances
   );
+}
+
+
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
+
+  int numOperations = 100000;
+
+
 
 
 
