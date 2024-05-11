@@ -461,17 +461,21 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
+  int numConfigs = 2;
   int numOperations = 1000;
-  int bufferSize = 4096;
+  int bufferSizes[] = {4096, 65536, 2*1024*1024};
   int numFlows = 10;
 
   if(numFlows > numInstances){
     numFlows = numInstances;
   }
 
-  multiStreamSwCompressCrc64Func(numOperations, bufferSize, numFlows, dcInstHandle);
-  cpaDcDsaCrcPerf(numOperations, bufferSize, numFlows, dcInstHandles, sessionHandles);
-  multiStreamCompressCrc64PerformanceTest(numFlows,numOperations,bufferSize,dcInstHandles,sessionHandles,numInstances);
+  for(int i=0; i<numConfigs; i++){
+    multiStreamSwCompressCrc64Func(numOperations, bufferSizes[i], numFlows, dcInstHandle);
+    cpaDcDsaCrcPerf(numOperations, bufferSizes[i], numFlows, dcInstHandles, sessionHandles);
+    multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
+  }
+
 
 
 
