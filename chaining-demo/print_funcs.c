@@ -10,10 +10,12 @@ void statsThreadPopulate(packet_stats **packetStatsPtrsArray, Cpa32U numOperatio
   Cpa64U lastReceiveTime = packetStatsPtrsArray[numOperations-1]->receiveTime;
   Cpa64U exeCycles = lastReceiveTime - firstSubmitTime;
   Cpa64U exeTimeUs = exeCycles/freqKHz;
+  Cpa64U latencies[numOperations];
   double offloadsPerSec = numOperations / (double)exeTimeUs;
   offloadsPerSec = offloadsPerSec * 1000000;
   for(int i=0; i<numOperations; i++){
     Cpa64U latency = packetStatsPtrsArray[i]->receiveTime - packetStatsPtrsArray[i]->submitTime;
+    latencies[i] = latency;
     uint64_t micros = latency / freqKHz;
     avgLatency += micros;
     if(micros < minLatency){
@@ -32,7 +34,26 @@ void statsThreadPopulate(packet_stats **packetStatsPtrsArray, Cpa32U numOperatio
   thrStats->operationSize = bufferSize;
   thrStats->id = id;
 
+
 }
+
+void logLatencies(packet_stats **packetStatsPtrsArray, Cpa32U numOperations,char *configName){
+  char filename[256];
+  sprintf(filename, "%s_latencies.txt", configName);
+  FILE *file = fopen(filename, "w");
+  if (file == NULL) {
+      PRINT_ERR("Error opening file!\n");
+      return;
+  }
+  uint64_t freqKhz = 2080;
+
+  for(int i=0; i<numOperations; i++){
+    Cpa64U latency = packetStatsPtrsArray[i]->receiveTime - packetStatsPtrsArray[i]->submitTime;
+    uint64_t micros = latency / freqKhz;
+    fprintf(file, "%ld\n", micros );
+  }
+}
+
 
 /* TODO: https://github.com/rxi/log.c*/
 

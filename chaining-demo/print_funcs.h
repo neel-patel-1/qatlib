@@ -9,6 +9,8 @@
 #include "qae_mem.h"
 #include "cpa_sample_utils.h"
 
+#include "log.h"
+
 #include "thread_utils.h"
 
 typedef struct _threadStats2P {
@@ -43,4 +45,5 @@ void printTwoPhaseMultiThreadStatsSummary(
   two_stage_packet_stats ***arrayOfPacketStatsArrayPointers,
   Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize, CpaBoolean printThreadStats);
 
+void logLatencies(packet_stats **packetStatsPtrsArray, Cpa32U numOperations, char *configName);
 #endif

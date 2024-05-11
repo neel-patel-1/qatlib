@@ -78,6 +78,10 @@ void syncSwComp(void *args){
     }
   }
 
+  char filename[256];
+  sprintf(filename, "sw-deflate-sw-crc_bufsize_%d", bufferSize);
+  logLatencies(stats, numOperations, filename );
+
   return;
 }
 

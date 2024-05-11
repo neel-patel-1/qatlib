@@ -28,6 +28,7 @@
 #include "accel_test.h"
 
 #include "sw_chain_comp_crc_funcs.h"
+#include "smt-thread-exps.h"
 
 
 int gDebugParam = 0;
@@ -49,33 +50,33 @@ void allTests(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHa
     multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
   }
 
-  multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
-    4,
-    numOperations,
-    4096,
-    dcInstHandles,
-    sessionHandles,
-    numInstances,
-    4
-  );
+  // multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
+  //   4,
+  //   numOperations,
+  //   4096,
+  //   dcInstHandles,
+  //   sessionHandles,
+  //   numInstances,
+  //   4
+  // );
 
-  multiStreamCompressCrc64PerformanceTestSharedSMTThreads(
-    4,
-    numOperations,
-    4096,
-    dcInstHandles,
-    sessionHandles,
-    numInstances
-  );
+  // multiStreamCompressCrc64PerformanceTestSharedSMTThreads(
+  //   4,
+  //   numOperations,
+  //   4096,
+  //   dcInstHandles,
+  //   sessionHandles,
+  //   numInstances
+  // );
 
-  multiStreamCompressCrc64PerformanceTest(
-    4,
-    numOperations,
-    4096,
-    dcInstHandles,
-    sessionHandles,
-    numInstances
-  );
+  // multiStreamCompressCrc64PerformanceTest(
+  //   4,
+  //   numOperations,
+  //   4096,
+  //   dcInstHandles,
+  //   sessionHandles,
+  //   numInstances
+  // );
 }
 
 
@@ -99,10 +100,9 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
-  int numOperations = 100000;
+  int numOperations = 1000;
 
-
-
+  allTests(numInstances,dcInstHandles, sessionHandles );
 
 
 
