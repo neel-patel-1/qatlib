@@ -166,7 +166,7 @@ typedef struct _cryptoPollingArgs{
     Cpa32U id;
 } cryptoPollingArgs ;
 
-static void sal_polling(void *args)
+void sal_polling(void *args)
 {
   cryptoPollingArgs *pollingArgs = (cryptoPollingArgs *)args;
   CpaInstanceHandle cyInstHandle = pollingArgs->cyInstHandle;
@@ -179,6 +179,9 @@ static void sal_polling(void *args)
   }
   sampleThreadExit();
 }
+
+
+
 
 CpaStatus populateAesGcmSessionSetupData(CpaCySymSessionSetupData *pSessionSetupData){
   CpaCySymSessionSetupData sessionSetupData;
@@ -383,6 +386,40 @@ CpaStatus functionalSymTest(){
   return CPA_STATUS_SUCCESS;
 }
 
+typedef struct _encFwderArgs {
+  CpaInstanceHandle cyInstHandle;
+  CpaCySymOpData *opData;
+  struct COMPLETION_STRUCT *completion;
+  CpaBufferList *pBufferList;
+  Cpa32U totalOps;
+  Cpa32U packetId;
+  struct _two_stage_packet_stats **stats;
+} enc_fwder_args;
+
+void dcToEncFwderCallback(void *pCallbackTag, CpaStatus status){
+  if(CPA_STATUS_SUCCESS != status){
+    PRINT_ERR("Error in callback\n");
+  }
+  PRINT_DBG("Callback called with status = %d.\n", status);
+
+  enc_fwder_args *args = (enc_fwder_args *)pCallbackTag;
+  CpaInstanceHandle cyInstHandle = args->cyInstHandle;
+  CpaCySymOpData *opData = args->opData;
+  struct COMPLETION_STRUCT *completion = args->completion;
+  CpaBufferList *pBufferList = args->pBufferList;
+
+  if(NULL != pCallbackTag){
+      status = cpaCySymPerformOp(
+        cyInstHandle,
+        (void *)&completion, /* data sent as is to the callback function*/
+        opData,           /* operational data struct */
+        pBufferList,       /* source buffer list */
+        pBufferList,       /* same src & dst for an in-place operation*/
+        NULL);
+    PRINT_DBG("Forwarding to encryption\n");
+  }
+}
+
 int main()
 {
   CpaStatus stat;
@@ -414,14 +451,17 @@ int main()
   struct COMPLETION_STRUCT complete;
   INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
+  /* Prepare DC Handles*/
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  Cpa16U numInstances = 1;
-  int numOperations = 1000;
+  Cpa16U numInstances = 4;
+  int numOperations = 1;
   int numFlows = 1; /* Spawn a crc poller to encrypt fwder */
 
 
-  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numFlows);
+  prepareMultipleDcInstancesAndSessions(dcInstHandles, sessionHandles,
+    numInstances, numInstances, dcToEncFwderCallback);
+  PRINT_DBG("%d DC Instances initialized\n", numInstances);
 
   CpaInstanceHandle dcInstHandle = dcInstHandles[0];
   CpaDcSessionHandle sessionHandle = sessionHandles[0];
@@ -437,18 +477,15 @@ int main()
     return CPA_STATUS_FAIL;;
   }
 
+  /* Spawn the DC Poller */
+  thread_args *dcPollerArgs = NULL;
+  pthread_t dcPoller;
+  OS_MALLOC(&dcPollerArgs, sizeof(thread_args));
+  dcPollerArgs->dcInstHandle = dcInstHandle;
+  dcPollerArgs->id = 0;
+  createThreadPinnedDetached(&dcPoller, dc_polling, dcPollerArgs, 0);
 
-  /*
-    * Now, we initialize the completion variable which is used by the
-    * callback
-    * function to indicate that the operation is complete.  We then perform
-    * the
-    * operation.
-    */
-  PRINT_DBG("cpaDcCompressData2\n");
-
-  //<snippet name="perfOp">
-  COMPLETION_INIT(&complete);
+  COMPLETION_INIT(&complete); /* Used to signal completion by enc fn*/
 
   /* enable integrityCrcCheck */
   cpaDcQueryCapabilities(dcInstHandle, &cap);
@@ -459,6 +496,49 @@ int main()
     opData.pCrcData = &crcData;
   }
 
+  /* Prepare Sym Handles */
+  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+  CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
+  CpaCySymSessionSetupData sessionSetupData;
+  Cpa16U numSymInstances;
+  populateAesGcmSessionSetupData(&sessionSetupData);
+  status =
+    initializeSymInstancesAndSessions(cyInstHandles,
+    sessionCtxs, &numSymInstances, sessionSetupData);
+  PRINT_DBG("%d Sym Instances initialized\n", numSymInstances);
+
+  /* Spawn the sym poller */
+  pthread_t cyPoller;
+  cryptoPollingArgs *cyPollerArgs;
+  OS_MALLOC(&cyPollerArgs, sizeof(cryptoPollingArgs));
+  cyPollerArgs->cyInstHandle = cyInstHandles[0];
+  cyPollerArgs->id = 0;
+
+  /* Create arguments for the Dc Callback to use for forwarding to the enc poller */
+  int i=0;
+  enc_fwder_args *encFwderArgs = NULL;
+  OS_MALLOC(&encFwderArgs, sizeof(enc_fwder_args));
+  encFwderArgs->cyInstHandle = dcInstHandle;
+  /* We need to create the opdata that the forwarder will use for submitting to enc */
+  CpaCySymOpData *pOpData = NULL;
+  OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+  Cpa8U *pIvBuffer = NULL;
+  status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+  pOpData->sessionCtx = sessionCtxs[i];
+  pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+  pOpData->pIv = pIvBuffer;
+  pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+  pOpData->cryptoStartSrcOffsetInBytes = 0;
+  pOpData->messageLenToCipherInBytes = bufferSize;
+  encFwderArgs->opData = pOpData;
+  encFwderArgs->completion = &complete;
+  encFwderArgs->pBufferList = pBufferListDst;
+  encFwderArgs->totalOps = numOperations;
+
+
+
+  createThreadPinnedDetached(&cyPoller, sal_polling, cyPollerArgs, 0);
+
   status = cpaDcCompressData2(
       dcInstHandle,
       sessionHandle,
@@ -466,7 +546,7 @@ int main()
       pBufferListDst,     /* destination buffer list */
       &opData,            /* Operational data */
       &dcResults,         /* results structure */
-      (void *)&complete); /* data sent as is to the callback function*/
+      encFwderArgs); /* data sent as is to the callback function*/
                               //</snippet>
 
   if (CPA_STATUS_SUCCESS != status)

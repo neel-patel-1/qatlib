@@ -13,6 +13,7 @@
 #include "validate_compress_and_crc.h"
 #include "print_funcs.h"
 
+typedef void (*dc_callback)(void *pCallbackTag, CpaStatus status);
 
 void createCompressCrc64Submitter(
   CpaInstanceHandle dcInstHandle,
@@ -27,6 +28,9 @@ void createCompressCrc64Submitter(
 
 CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
   Cpa16U numInstances, Cpa16U numSessions);
+
+CpaStatus prepareMultipleDcInstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances, Cpa16U numSessions, dc_callback callback);
 
 void createCompressCrc64Poller(CpaInstanceHandle dcInstHandle, Cpa16U id, pthread_t *threadId);
 

@@ -33,6 +33,18 @@ CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessions(CpaInstanceHandle 
   return status;
 }
 
+CpaStatus prepareMultipleDcInstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances, Cpa16U numSessions, dc_callback callback){
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  for(int i=0; i<numInstances; i++){
+    dcInstHandles[i] = dcInstHandles[i];
+    prepareDcInst(&dcInstHandles[i]);
+    sessionHandles[i] = sessionHandles[i];
+    prepareDcSession(dcInstHandles[i], &sessionHandles[i], callback);
+  }
+  return status;
+}
+
 
 void createCompressCrc64Poller(CpaInstanceHandle dcInstHandle, Cpa16U id, pthread_t *threadId){
   CpaInstanceInfo2 info2 = {0};
