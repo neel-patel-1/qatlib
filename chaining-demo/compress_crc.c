@@ -411,7 +411,7 @@ void dcToEncFwderCallback(void *pCallbackTag, CpaStatus status){
   if(NULL != pCallbackTag){
       status = cpaCySymPerformOp(
         cyInstHandle,
-        (void *)&completion, /* data sent as is to the callback function*/
+        (void *)completion, /* data sent as is to the callback function*/
         opData,           /* operational data struct */
         pBufferList,       /* source buffer list */
         pBufferList,       /* same src & dst for an in-place operation*/
@@ -519,6 +519,9 @@ int main()
   enc_fwder_args *encFwderArgs = NULL;
   OS_MALLOC(&encFwderArgs, sizeof(enc_fwder_args));
   encFwderArgs->cyInstHandle = dcInstHandle;
+  encFwderArgs->packetId = 0;
+  encFwderArgs->stats = NULL;
+
   /* We need to create the opdata that the forwarder will use for submitting to enc */
   CpaCySymOpData *pOpData = NULL;
   OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
@@ -565,6 +568,8 @@ int main()
           PRINT_ERR("timeout or interruption in cpaDcCompressData2\n");
           status = CPA_STATUS_FAIL;
       }
+      gPollingDcs[0] = 0;
+      gPollingCys[0] = 0; /* end the polling threads */
   }
 
   /*
