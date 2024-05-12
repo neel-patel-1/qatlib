@@ -138,7 +138,10 @@ int main(){
   // allTests(numInstances,dcInstHandles, sessionHandles );
 
   CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
-  CpaCySymSessionCtx sessionCtx;
+  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+  pthread_t cyPollers[numInstances];
+  cryptoPollingArgs *cyPollerArgs[numInstances];
+  int firstPollingLogical = 5;
 
   status = cpaCyGetNumInstances(&numInstances);
   if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
@@ -162,6 +165,25 @@ int main(){
         PRINT_ERR("cpaCyStartInstance failed, status=%d\n", status);
         return status;
     }
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+      /*
+        * Set the address translation function for the instance
+        */
+      //<snippet name="virt2phys">
+    for(int i=0; i<numInstances; i++){
+      status = cpaCySetAddressTranslation(cyInstHandles[i], sampleVirtToPhys);
+    }
+  }
+
+  OS_MALLOC(&cyPollerArgs, numInstances * sizeof(cryptoPollingArgs));
+
+  for(int i=0; i<numInstances; i++){
+    OS_MALLOC(&cyPollerArgs[i], sizeof(cryptoPollingArgs));
+    cyPollerArgs[i]->cyInstHandle = cyInstHandles[i];
+    cyPollerArgs[i]->id = i;
+    createThreadPinned(&cyPollers[i], sal_polling, cyPollerArgs[i], firstPollingLogical + i);
   }
 
 
