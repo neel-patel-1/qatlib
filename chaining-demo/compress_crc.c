@@ -420,6 +420,31 @@ void dcToEncFwderCallback(void *pCallbackTag, CpaStatus status){
   }
 }
 
+void createSymOpData(CpaCySymOpData **ppOpData, Cpa8U *pIvBuffer, CpaCySymSessionCtx sessionCtx, Cpa32U bufferSize){
+  CpaCySymOpData *pOpData = NULL;
+  OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+  pOpData->sessionCtx = sessionCtx;
+  pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+  pOpData->pIv = pIvBuffer;
+  pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+  pOpData->cryptoStartSrcOffsetInBytes = 0;
+  pOpData->messageLenToCipherInBytes = bufferSize;
+  *ppOpData = pOpData;
+}
+
+void createEncFwderArgs(enc_fwder_args **ppEncFwderArgs, CpaInstanceHandle cyInstHandle, CpaCySymOpData *opData,
+  struct COMPLETION_STRUCT *completion, CpaBufferList *pBufferList, Cpa32U totalOps, Cpa32U packetId){
+  enc_fwder_args *encFwderArgs = NULL;
+  OS_MALLOC(&encFwderArgs, sizeof(enc_fwder_args));
+  encFwderArgs->cyInstHandle = cyInstHandle;
+  encFwderArgs->opData = opData;
+  encFwderArgs->completion = completion;
+  encFwderArgs->pBufferList = pBufferList;
+  encFwderArgs->totalOps = totalOps;
+  encFwderArgs->packetId = packetId;
+  *ppEncFwderArgs = encFwderArgs;
+}
+
 int functionalDcFwdToEncTest(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, int numDcInstances,
   CpaInstanceHandle *cyInstHandles, CpaCySymSessionCtx *sessionCtxs, int numCyInstances, CpaCySymSessionSetupData sessionSetupData)
 {
@@ -496,29 +521,17 @@ int functionalDcFwdToEncTest(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandl
   cyPollerArgs->cyInstHandle = cyInstHandles[0];
   cyPollerArgs->id = 0;
 
-  /* Create arguments for the Dc Callback to use for forwarding to the enc poller */
-  int i=0;
-  enc_fwder_args *encFwderArgs = NULL;
-  OS_MALLOC(&encFwderArgs, sizeof(enc_fwder_args));
-  encFwderArgs->cyInstHandle = dcInstHandle;
-  encFwderArgs->packetId = 0;
-  encFwderArgs->stats = NULL;
 
-  /* We need to create the opdata that the forwarder will use for submitting to enc */
-  CpaCySymOpData *pOpData = NULL;
-  OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+  int i=0;
   Cpa8U *pIvBuffer = NULL;
   status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-  pOpData->sessionCtx = sessionCtxs[i];
-  pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
-  pOpData->pIv = pIvBuffer;
-  pOpData->ivLenInBytes = sizeof(sampleCipherIv);
-  pOpData->cryptoStartSrcOffsetInBytes = 0;
-  pOpData->messageLenToCipherInBytes = bufferSize;
-  encFwderArgs->opData = pOpData;
-  encFwderArgs->completion = &complete;
-  encFwderArgs->pBufferList = pBufferListDst;
-  encFwderArgs->totalOps = numOperations;
+  /* We need to create the opdata that the forwarder will use for submitting to enc */
+  CpaCySymOpData *pOpData = NULL;
+  createSymOpData(&pOpData, pIvBuffer, sessionCtxs[i], bufferSize);
+
+  /* Create arguments for the Dc Callback to use for forwarding to the enc poller */
+  enc_fwder_args *encFwderArgs = NULL;
+  createEncFwderArgs(&encFwderArgs, dcInstHandle, pOpData, &complete, pBufferListDst, numOperations, 0);
 
 
 
@@ -584,6 +597,10 @@ int functionalDcFwdToEncTest(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandl
   COMPLETION_DESTROY(&complete);
 
   return 0;
+}
+
+CpaStatus performanceHwDcAndEncTest(){
+
 }
 
 
