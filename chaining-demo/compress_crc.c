@@ -81,7 +81,7 @@ void allTests(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHa
   // );
 }
 
-int prepareFlatBufferList(CpaBufferList **ppBufferList, int numBuffers, int bufferSize){
+int prepareFlatBufferList(CpaBufferList **ppBufferList, int numBuffers, int bufferSize, int metaSize){
   CpaStatus status = CPA_STATUS_SUCCESS;
   CpaBufferList *pBufferList = NULL;
   CpaFlatBuffer *pFlatBuffers = NULL;
@@ -109,6 +109,7 @@ int prepareFlatBufferList(CpaBufferList **ppBufferList, int numBuffers, int buff
       {
           PRINT_ERR("Failed to allocate memory for flat buffers\n");
       }
+      status = PHYS_CONTIG_ALLOC(&(pBufferList->pPrivateMetaData), metaSize);
   }
   else
   {
@@ -337,11 +338,16 @@ int main(){
   spawnPoller(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances, sal_polling);
 
   /*Generate BufferList With One Flat Buffer */
+  Cpa32U bufferMetaSize = 0;
+  Cpa32U bufferSize = 4096;
   Cpa8U *pSrcBuffer = NULL;
   CpaBufferList *pBufferList = NULL;
+  Cpa32U numBuffersPerList = 1;
 
+  status =
+    cpaCyBufferListGetMetaSize(cyInstHandles[0], numBuffersPerList, &bufferMetaSize);
 
-  status = prepareFlatBufferList(&pBufferList, 1, 4096);
+  status = prepareFlatBufferList(&pBufferList, numBuffersPerList, bufferSize, bufferMetaSize);
   pSrcBuffer = pBufferList->pBuffers[0].pData;
 
   /* Setup Operational Data for encrypting a single Fltbflist with a single phys_contig flatbuf*/
@@ -366,9 +372,6 @@ int main(){
 
     struct COMPLETION_STRUCT complete;
     COMPLETION_INIT(&complete);
-
-    // status =
-    //     cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
 
     //<snippet name="opData">
     pOpData->sessionCtx = sessionCtxs[0];
