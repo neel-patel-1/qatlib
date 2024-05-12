@@ -420,7 +420,7 @@ void dcToEncFwderCallback(void *pCallbackTag, CpaStatus status){
   }
 }
 
-int main()
+int functionalDcFwdToEncTest()
 {
   CpaStatus stat;
 
@@ -605,5 +605,11 @@ int main()
 
   icp_sal_userStop();
   qaeMemDestroy();
+  return 0;
+}
+
+
+int main(){
+  functionalDcFwdToEncTest();
   return 0;
 }
