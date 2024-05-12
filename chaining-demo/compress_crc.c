@@ -33,6 +33,11 @@
 
 int gDebugParam = 0;
 
+static Cpa8U sampleCipherKey[] = {
+    0xEE, 0xE2, 0x7B, 0x5B, 0x10, 0xFD, 0xD2, 0x58, 0x49, 0x77, 0xF1, 0x22,
+    0xD7, 0x1B, 0xA4, 0xCA, 0xEC, 0xBD, 0x15, 0xE2, 0x52, 0x6A, 0x21, 0x0B,
+    0x41, 0x4C, 0x41, 0x4E, 0xA1, 0xAA, 0x01, 0x3F};
+
 void allTests(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numConfigs = 3;
   int numOperations = 1000;
@@ -135,13 +140,14 @@ int main(){
 
   int numOperations = 1000;
 
-  // allTests(numInstances,dcInstHandles, sessionHandles );
-
   CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
-  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
   pthread_t cyPollers[numInstances];
   cryptoPollingArgs *cyPollerArgs[numInstances];
   int firstPollingLogical = 5;
+  CpaCySymSessionSetupData sessionSetupData;
+  Cpa32U pSessionCtxSizeInBytes;
+  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+
 
   status = cpaCyGetNumInstances(&numInstances);
   if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
@@ -186,7 +192,34 @@ int main(){
     createThreadPinned(&cyPollers[i], sal_polling, cyPollerArgs[i], firstPollingLogical + i);
   }
 
+  sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+  sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+  sessionSetupData.cipherSetupData.cipherAlgorithm =
+      CPA_CY_SYM_CIPHER_AES_GCM;
+  sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+  sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+      sizeof(sampleCipherKey);
+  sessionSetupData.cipherSetupData.cipherDirection =
+      CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
 
+  cpaCySymSessionCtxGetDynamicSize(cyInstHandles[0],
+    &sessionSetupData, &pSessionCtxSizeInBytes);
+
+  if (CPA_STATUS_SUCCESS == status) {
+      PRINT_DBG("cpaCySymInitSession\n");
+      for(int i=0; i<numInstances; i++){
+        status = PHYS_CONTIG_ALLOC(&sessionCtxs[i], pSessionCtxSizeInBytes);
+        if(CPA_STATUS_SUCCESS != status){
+          status = cpaCySymInitSession(
+              cyInstHandles[i],
+              symCallback, /* Callback function */
+              &sessionSetupData, /* Session setup data */
+              sessionCtxs[i]); /* Output of the function */
+        } else{
+          PRINT_ERR("Failed to allocate memory for sessionCtx\n");
+        }
+    }
+  }
 
   icp_sal_userStop();
   qaeMemDestroy();
