@@ -31,7 +31,7 @@
 #include "smt-thread-exps.h"
 
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 
 
@@ -158,6 +158,8 @@ static void symCallback(void *pCallbackTag,
     }
 }
 
+typedef void (*sal_thread_func_t)(void *args);
+
 typedef struct _cryptoPollingArgs{
     CpaInstanceHandle cyInstHandle;
     Cpa32U id;
@@ -277,6 +279,25 @@ CpaStatus spawnSymPollers(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs
 
 }
 
+CpaStatus spawnPoller(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs, CpaInstanceHandle *cyInstHandles,
+  Cpa16U numInstances, cpu_set_t *coreMaps, Cpa32U numCores, sal_thread_func_t pollFunc){
+
+  int logical = 0;
+  for(int i=0; i<numInstances; i++){
+    cpu_set_t cpuset = coreMaps[i];
+    for (int core = 0; core < numCores; core++) {
+        if (CPU_ISSET(core, &cpuset)) {
+            logical = core;
+        }
+    }
+    OS_MALLOC(&cyPollerArgs[i], sizeof(cryptoPollingArgs));
+    cyPollerArgs[i]->cyInstHandle = cyInstHandles[i];
+    cyPollerArgs[i]->id = i;
+    createThreadPinned(&cyPollers[i], pollFunc, cyPollerArgs[i], logical);
+  }
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
@@ -313,11 +334,13 @@ int main(){
     CPU_ZERO(&coreMaps[i]);
     CPU_SET(i, &coreMaps[i]);
   }
-  spawnSymPollers(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances);
+  spawnPoller(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances, sal_polling);
 
   /*Generate BufferList With One Flat Buffer */
   Cpa8U *pSrcBuffer = NULL;
   CpaBufferList *pBufferList = NULL;
+
+
   status = prepareFlatBufferList(&pBufferList, 1, 4096);
   pSrcBuffer = pBufferList->pBuffers[0].pData;
 
@@ -343,6 +366,9 @@ int main(){
 
     struct COMPLETION_STRUCT complete;
     COMPLETION_INIT(&complete);
+
+    // status =
+    //     cpaCyBufferListGetMetaSize(cyInstHandle, numBuffers, &bufferMetaSize);
 
     //<snippet name="opData">
     pOpData->sessionCtx = sessionCtxs[0];
