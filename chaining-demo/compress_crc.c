@@ -155,8 +155,16 @@ int main(){
       PRINT_ERR("Also make sure to use config file version 2.\n");
   }
 
+  for(int i=0; i<numInstances; i++){
+    status = cpaCyStartInstance(cyInstHandles[i]);
+    if (status != CPA_STATUS_SUCCESS)
+    {
+        PRINT_ERR("cpaCyStartInstance failed, status=%d\n", status);
+        return status;
+    }
+  }
 
-exit:
+
 
   icp_sal_userStop();
   qaeMemDestroy();
