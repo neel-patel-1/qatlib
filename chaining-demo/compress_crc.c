@@ -119,41 +119,37 @@ static void sal_polling(void *args)
   sampleThreadExit();
 }
 
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-  int numOperations = 1000;
-
-  CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
-  pthread_t cyPollers[numInstances];
-  cryptoPollingArgs *cyPollerArgs[numInstances];
-  int firstPollingLogical = 5;
+CpaStatus populateAesGcmSessionSetupData(CpaCySymSessionSetupData *pSessionSetupData){
   CpaCySymSessionSetupData sessionSetupData;
+  sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
+  sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
+  sessionSetupData.cipherSetupData.cipherAlgorithm =
+      CPA_CY_SYM_CIPHER_AES_CBC;
+  sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
+  sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
+      sizeof(sampleCipherKey);
+  sessionSetupData.cipherSetupData.cipherDirection =
+      CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
+  *pSessionSetupData = sessionSetupData;
+}
+
+CpaStatus initializeSymInstancesAndSessions(
+  CpaInstanceHandle *cyInstHandles,
+  CpaCySymSessionCtx *sessionCtxs,
+  Cpa16U *pNumInstances,
+  CpaCySymSessionSetupData sessionSetupData
+  ){
+
+  // CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
+  Cpa16U numInstances;
+  CpaStatus status = cpaCyGetNumInstances(&numInstances);
   Cpa32U pSessionCtxSizeInBytes;
-  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+  // CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
 
-
-  status = cpaCyGetNumInstances(&numInstances);
   if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
   {
-      status = cpaCyGetInstances(numInstances, cyInstHandles);
-      PRINT_DBG("Number of instances found = %d\n", numInstances);
+    status = cpaCyGetInstances(numInstances, cyInstHandles);
+    PRINT_DBG("Number of instances found = %d\n", numInstances);
   }
 
   if (0 == numInstances) //sudo sed -i 's/ServicesEnabled=.*/ServicesEnabled=sym;dc/g' /etc/sysconfig/qat
@@ -183,6 +179,66 @@ int main(){
     }
   }
 
+  cpaCySymSessionCtxGetDynamicSize(cyInstHandles[0],
+    &sessionSetupData, &pSessionCtxSizeInBytes);
+
+  if (CPA_STATUS_SUCCESS == status) {
+      PRINT_DBG("cpaCySymInitSession\n");
+      for(int i=0; i<numInstances; i++){
+        status = PHYS_CONTIG_ALLOC(&sessionCtxs[i], pSessionCtxSizeInBytes);
+        if(CPA_STATUS_SUCCESS == status){
+          status = cpaCySymInitSession(
+              cyInstHandles[i],
+              symCallback, /* Callback function */
+              &sessionSetupData, /* Session setup data */
+              sessionCtxs[i]); /* Output of the function */
+        } else{
+          PRINT_ERR("Failed to allocate memory for sessionCtx: %d\n", status);
+        }
+    }
+  }
+  return status;
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
+
+  int numOperations = 1000;
+
+
+  pthread_t cyPollers[numInstances];
+  cryptoPollingArgs *cyPollerArgs[numInstances];
+  int firstPollingLogical = 5;
+  CpaCySymSessionSetupData sessionSetupData;
+
+  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+  CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
+
+  populateAesGcmSessionSetupData(&sessionSetupData);
+  status =
+    initializeSymInstancesAndSessions(cyInstHandles,
+    sessionCtxs, &numInstances, sessionSetupData);
+
+  if(CPA_STATUS_SUCCESS != status){
+    PRINT_ERR("Failed to initialize Sym Instances and Sessions\n");
+    return status;
+  }
+
   OS_MALLOC(&cyPollerArgs, numInstances * sizeof(cryptoPollingArgs));
 
   for(int i=0; i<numInstances; i++){
@@ -192,34 +248,8 @@ int main(){
     createThreadPinned(&cyPollers[i], sal_polling, cyPollerArgs[i], firstPollingLogical + i);
   }
 
-  sessionSetupData.sessionPriority = CPA_CY_PRIORITY_NORMAL;
-  sessionSetupData.symOperation = CPA_CY_SYM_OP_CIPHER;
-  sessionSetupData.cipherSetupData.cipherAlgorithm =
-      CPA_CY_SYM_CIPHER_AES_GCM;
-  sessionSetupData.cipherSetupData.pCipherKey = sampleCipherKey;
-  sessionSetupData.cipherSetupData.cipherKeyLenInBytes =
-      sizeof(sampleCipherKey);
-  sessionSetupData.cipherSetupData.cipherDirection =
-      CPA_CY_SYM_CIPHER_DIRECTION_ENCRYPT;
 
-  cpaCySymSessionCtxGetDynamicSize(cyInstHandles[0],
-    &sessionSetupData, &pSessionCtxSizeInBytes);
 
-  if (CPA_STATUS_SUCCESS == status) {
-      PRINT_DBG("cpaCySymInitSession\n");
-      for(int i=0; i<numInstances; i++){
-        status = PHYS_CONTIG_ALLOC(&sessionCtxs[i], pSessionCtxSizeInBytes);
-        if(CPA_STATUS_SUCCESS != status){
-          status = cpaCySymInitSession(
-              cyInstHandles[i],
-              symCallback, /* Callback function */
-              &sessionSetupData, /* Session setup data */
-              sessionCtxs[i]); /* Output of the function */
-        } else{
-          PRINT_ERR("Failed to allocate memory for sessionCtx\n");
-        }
-    }
-  }
 
   icp_sal_userStop();
   qaeMemDestroy();
