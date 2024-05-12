@@ -80,6 +80,39 @@ void allTests(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHa
 }
 
 
+static void symCallback(void *pCallbackTag,
+                        CpaStatus status,
+                        const CpaCySymOp operationType,
+                        void *pOpData,
+                        CpaBufferList *pDstBuffer,
+                        CpaBoolean verifyResult)
+{
+    PRINT_DBG("Callback called with status = %d.\n", status);
+
+    if (NULL != pCallbackTag) {
+        /* Indicate that the function has been called */
+        COMPLETE((struct COMPLETION_STRUCT *)pCallbackTag);
+    }
+}
+
+typedef struct _cryptoPollingArgs{
+    CpaInstanceHandle cyInstHandle;
+    Cpa32U id;
+} cryptoPollingArgs ;
+
+static void sal_polling(void *args)
+{
+  cryptoPollingArgs *pollingArgs = (cryptoPollingArgs *)args;
+  CpaInstanceHandle cyInstHandle = pollingArgs->cyInstHandle;
+  Cpa32U id = pollingArgs->id;
+  gPollingCys[id] = 1;
+  PRINT_DBG("CyPoller: %d started\n", id);
+  while (gPollingCys[id])
+  {
+      icp_sal_CyPollInstance(cyInstHandle, 0);
+  }
+  sampleThreadExit();
+}
 
 
 int main(){
@@ -102,8 +135,25 @@ int main(){
 
   int numOperations = 1000;
 
-  allTests(numInstances,dcInstHandles, sessionHandles );
+  // allTests(numInstances,dcInstHandles, sessionHandles );
 
+  CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
+  CpaCySymSessionCtx sessionCtx;
+
+  status = cpaCyGetNumInstances(&numInstances);
+  if ((status == CPA_STATUS_SUCCESS) && (numInstances > 0))
+  {
+      status = cpaCyGetInstances(numInstances, cyInstHandles);
+      PRINT_DBG("Number of instances found = %d\n", numInstances);
+  }
+
+  if (0 == numInstances) //sudo sed -i 's/ServicesEnabled=.*/ServicesEnabled=sym;dc/g' /etc/sysconfig/qat
+  {
+      PRINT_ERR("No instances found for 'SSL'\n");
+      PRINT_ERR("Please check your section names");
+      PRINT_ERR(" in the config file.\n");
+      PRINT_ERR("Also make sure to use config file version 2.\n");
+  }
 
 
 exit:

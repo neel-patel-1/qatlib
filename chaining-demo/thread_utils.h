@@ -15,6 +15,7 @@
 #define MAX_DSAS 8
 extern int gDebugParam;
 extern _Atomic int gPollingDcs[MAX_INSTANCES];
+extern _Atomic int gPollingCys[MAX_INSTANCES];
 extern _Atomic int gPollingCrcs[MAX_DSAS];
 
 typedef struct _thread_args{
