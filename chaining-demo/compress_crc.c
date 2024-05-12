@@ -420,12 +420,9 @@ void dcToEncFwderCallback(void *pCallbackTag, CpaStatus status){
   }
 }
 
-int functionalDcFwdToEncTest()
+int functionalDcFwdToEncTest(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, int numDcInstances,
+  CpaInstanceHandle *cyInstHandles, CpaCySymSessionCtx *sessionCtxs, int numCyInstances, CpaCySymSessionSetupData sessionSetupData)
 {
-  CpaStatus stat;
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
   CpaStatus status = CPA_STATUS_SUCCESS;
   Cpa8U *pBufferMetaDst2 = NULL;
@@ -451,17 +448,11 @@ int functionalDcFwdToEncTest()
   struct COMPLETION_STRUCT complete;
   INIT_OPDATA(&opData, CPA_DC_FLUSH_FINAL);
 
-  /* Prepare DC Handles*/
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  Cpa16U numInstances = 4;
+
   int numOperations = 1;
   int numFlows = 1; /* Spawn a crc poller to encrypt fwder */
 
 
-  prepareMultipleDcInstancesAndSessions(dcInstHandles, sessionHandles,
-    numInstances, numInstances, dcToEncFwderCallback);
-  PRINT_DBG("%d DC Instances initialized\n", numInstances);
 
   CpaInstanceHandle dcInstHandle = dcInstHandles[0];
   CpaDcSessionHandle sessionHandle = sessionHandles[0];
@@ -496,16 +487,7 @@ int functionalDcFwdToEncTest()
     opData.pCrcData = &crcData;
   }
 
-  /* Prepare Sym Handles */
-  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
-  CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
-  CpaCySymSessionSetupData sessionSetupData;
-  Cpa16U numSymInstances;
-  populateAesGcmSessionSetupData(&sessionSetupData);
-  status =
-    initializeSymInstancesAndSessions(cyInstHandles,
-    sessionCtxs, &numSymInstances, sessionSetupData);
-  PRINT_DBG("%d Sym Instances initialized\n", numSymInstances);
+
 
   /* Spawn the sym poller */
   pthread_t cyPoller;
@@ -601,15 +583,47 @@ int functionalDcFwdToEncTest()
 
   COMPLETION_DESTROY(&complete);
 
-
-
-  icp_sal_userStop();
-  qaeMemDestroy();
   return 0;
 }
 
 
 int main(){
-  functionalDcFwdToEncTest();
+  CpaStatus stat, status;
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  /* Prepare DC Handles*/
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+  Cpa16U numInstances = 4;
+
+  prepareMultipleDcInstancesAndSessions(dcInstHandles, sessionHandles,
+    numInstances, numInstances, dcToEncFwderCallback);
+  PRINT_DBG("%d DC Instances initialized\n", numInstances);
+
+   /* Prepare Sym Handles */
+  CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+  CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
+  CpaCySymSessionSetupData sessionSetupData;
+  Cpa16U numSymInstances;
+  populateAesGcmSessionSetupData(&sessionSetupData);
+  status =
+    initializeSymInstancesAndSessions(cyInstHandles,
+    sessionCtxs, &numSymInstances, sessionSetupData);
+  PRINT_DBG("%d Sym Instances initialized\n", numSymInstances);
+
+
+  stat = functionalDcFwdToEncTest(dcInstHandles, sessionHandles, numInstances,
+    cyInstHandles, sessionCtxs, numSymInstances, sessionSetupData);
+
+  if (CPA_STATUS_SUCCESS != stat)
+  {
+      PRINT_ERR("functionalDcFwdToEncTest failed\n");
+  }
+
+
+  icp_sal_userStop();
+  qaeMemDestroy();
   return 0;
 }
