@@ -281,7 +281,7 @@ CpaStatus spawnSymPollers(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs
 
 }
 
-CpaStatus spawnPinnedPollers(pthread_t **cyPollers, cryptoPollingArgs **cyPollerArgs, CpaInstanceHandle *cyInstHandles,
+CpaStatus spawnPinnedPollers(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs, CpaInstanceHandle *cyInstHandles,
   Cpa16U numInstances, cpu_set_t *coreMaps, Cpa32U numCores, sal_thread_func_t pollFunc){
 
   int logical = 0;
@@ -295,14 +295,14 @@ CpaStatus spawnPinnedPollers(pthread_t **cyPollers, cryptoPollingArgs **cyPoller
     OS_MALLOC(&cyPollerArgs[i], sizeof(cryptoPollingArgs));
     cyPollerArgs[i]->cyInstHandle = cyInstHandles[i];
     cyPollerArgs[i]->id = i;
-    createThreadPinned(cyPollers[i], pollFunc, cyPollerArgs[i], logical);
+    createThreadPinned(&(cyPollers[i]), pollFunc, cyPollerArgs[i], logical);
   }
 
 }
 
 CpaStatus functionalSymTest(){
   Cpa16U numInstances = 1;
-  pthread_t **cyPollers;
+  pthread_t cyPollers[numInstances];
   cryptoPollingArgs *cyPollerArgs[numInstances];
   CpaCySymSessionSetupData sessionSetupData;
 
@@ -332,12 +332,9 @@ CpaStatus functionalSymTest(){
     return status;
   }
 
-  OS_MALLOC(&cyPollers, sizeof(pthread_t*)*numInstances);
   for(int i=0; i<numInstances; i++){
     CPU_ZERO(&coreMaps[i]);
     CPU_SET(i, &coreMaps[i]);
-    // OS_MALLOC(&(cyPollers[i]), sizeof(pthread_t));
-    cyPollers[i] = malloc(sizeof(pthread_t));
   }
   spawnPinnedPollers(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances, sal_polling);
 
@@ -380,8 +377,8 @@ CpaStatus functionalSymTest(){
     COMPLETION_WAIT(&complete, 50);
   }
   for(int i=0; i<numInstances; i++){
+    // pthread_join(cyPollers[i], NULL);
     gPollingCys[i] = 0;
-    pthread_join((cyPollers[i]), NULL);
   }
 }
 

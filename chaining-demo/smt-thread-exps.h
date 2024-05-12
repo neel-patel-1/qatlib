@@ -43,6 +43,7 @@ void multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
 );
 
 CpaStatus createThreadPinned(pthread_t *thread, void *func, void *arg, int coreId);
+CpaStatus createThreadPinnedDetached(pthread_t *thread, void *func, void *arg, int coreId);
 
 void createCompressCrc64SubmitterPinned(
   CpaInstanceHandle dcInstHandle,
