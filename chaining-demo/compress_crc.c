@@ -202,25 +202,13 @@ CpaStatus initializeSymInstancesAndSessions(
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
   int numOperations = 1000;
 
-
+  Cpa16U numInstances = 1;
   pthread_t cyPollers[numInstances];
   cryptoPollingArgs *cyPollerArgs[numInstances];
   int firstPollingLogical = 5;
@@ -248,7 +236,7 @@ int main(){
     createThreadPinned(&cyPollers[i], sal_polling, cyPollerArgs[i], firstPollingLogical + i);
   }
 
-
+  pthread_join(cyPollers[0], NULL);
 
 
   icp_sal_userStop();
