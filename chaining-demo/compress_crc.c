@@ -200,6 +200,25 @@ CpaStatus initializeSymInstancesAndSessions(
   return status;
 }
 
+CpaStatus spawnSymPollers(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs, CpaInstanceHandle *cyInstHandles,
+  Cpa16U numInstances, cpu_set_t *coreMaps, Cpa32U numCores){
+
+  int logical = 0;
+  for(int i=0; i<numInstances; i++){
+    cpu_set_t cpuset = coreMaps[i];
+    for (int core = 0; core < numCores; core++) {
+        if (CPU_ISSET(core, &cpuset)) {
+            logical = core;
+        }
+    }
+    OS_MALLOC(&cyPollerArgs[i], sizeof(cryptoPollingArgs));
+    cyPollerArgs[i]->cyInstHandle = cyInstHandles[i];
+    cyPollerArgs[i]->id = i;
+    createThreadPinned(&cyPollers[i], sal_polling, cyPollerArgs[i], logical);
+  }
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
@@ -229,12 +248,14 @@ int main(){
 
   OS_MALLOC(&cyPollerArgs, numInstances * sizeof(cryptoPollingArgs));
 
+  /* Populate Core mapping sequential */
+  cpu_set_t coreMaps[numInstances];
   for(int i=0; i<numInstances; i++){
-    OS_MALLOC(&cyPollerArgs[i], sizeof(cryptoPollingArgs));
-    cyPollerArgs[i]->cyInstHandle = cyInstHandles[i];
-    cyPollerArgs[i]->id = i;
-    createThreadPinned(&cyPollers[i], sal_polling, cyPollerArgs[i], firstPollingLogical + i);
+    CPU_ZERO(&coreMaps[i]);
+    CPU_SET(i, &coreMaps[i]);
   }
+  spawnSymPollers(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances);
+
 
   pthread_join(cyPollers[0], NULL);
 
