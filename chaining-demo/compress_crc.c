@@ -220,6 +220,7 @@ CpaStatus initializeSymInstancesAndSessions(
       PRINT_ERR(" in the config file.\n");
       PRINT_ERR("Also make sure to use config file version 2.\n");
   }
+  *pNumInstances = numInstances;
 
   for(int i=0; i<numInstances; i++){
     status = cpaCyStartInstance(cyInstHandles[i]);
@@ -280,7 +281,7 @@ CpaStatus spawnSymPollers(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs
 
 }
 
-CpaStatus spawnPoller(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs, CpaInstanceHandle *cyInstHandles,
+CpaStatus spawnPinnedPollers(pthread_t **cyPollers, cryptoPollingArgs **cyPollerArgs, CpaInstanceHandle *cyInstHandles,
   Cpa16U numInstances, cpu_set_t *coreMaps, Cpa32U numCores, sal_thread_func_t pollFunc){
 
   int logical = 0;
@@ -294,23 +295,15 @@ CpaStatus spawnPoller(pthread_t *cyPollers, cryptoPollingArgs **cyPollerArgs, Cp
     OS_MALLOC(&cyPollerArgs[i], sizeof(cryptoPollingArgs));
     cyPollerArgs[i]->cyInstHandle = cyInstHandles[i];
     cyPollerArgs[i]->id = i;
-    createThreadPinned(&cyPollers[i], pollFunc, cyPollerArgs[i], logical);
+    createThreadPinned(cyPollers[i], pollFunc, cyPollerArgs[i], logical);
   }
 
 }
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  int numOperations = 1000;
-
+CpaStatus functionalSymTest(){
   Cpa16U numInstances = 1;
-  pthread_t cyPollers[numInstances];
+  pthread_t **cyPollers;
   cryptoPollingArgs *cyPollerArgs[numInstances];
-  int firstPollingLogical = 5;
   CpaCySymSessionSetupData sessionSetupData;
 
   CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
@@ -318,6 +311,16 @@ int main(){
 
   CpaCySymOpData *pOpData = NULL;
   Cpa8U *pIvBuffer = NULL;
+
+  cpu_set_t coreMaps[numInstances];
+
+  Cpa32U bufferMetaSize = 0;
+  Cpa32U bufferSize = 4096;
+  Cpa8U *pSrcBuffer = NULL;
+  CpaBufferList *pBufferList = NULL;
+  Cpa32U numBuffersPerList = 1;
+
+  CpaStatus status = CPA_STATUS_SUCCESS;
 
   populateAesGcmSessionSetupData(&sessionSetupData);
   status =
@@ -329,20 +332,14 @@ int main(){
     return status;
   }
 
-  /* Populate Core mapping sequential */
-  cpu_set_t coreMaps[numInstances];
+  OS_MALLOC(&cyPollers, sizeof(pthread_t*)*numInstances);
   for(int i=0; i<numInstances; i++){
     CPU_ZERO(&coreMaps[i]);
     CPU_SET(i, &coreMaps[i]);
+    // OS_MALLOC(&(cyPollers[i]), sizeof(pthread_t));
+    cyPollers[i] = malloc(sizeof(pthread_t));
   }
-  spawnPoller(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances, sal_polling);
-
-  /*Generate BufferList With One Flat Buffer */
-  Cpa32U bufferMetaSize = 0;
-  Cpa32U bufferSize = 4096;
-  Cpa8U *pSrcBuffer = NULL;
-  CpaBufferList *pBufferList = NULL;
-  Cpa32U numBuffersPerList = 1;
+  spawnPinnedPollers(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances, sal_polling);
 
   status =
     cpaCyBufferListGetMetaSize(cyInstHandles[0], numBuffersPerList, &bufferMetaSize);
@@ -350,50 +347,140 @@ int main(){
   status = prepareFlatBufferList(&pBufferList, numBuffersPerList, bufferSize, bufferMetaSize);
   pSrcBuffer = pBufferList->pBuffers[0].pData;
 
-  /* Setup Operational Data for encrypting a single Fltbflist with a single phys_contig flatbuf*/
   status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
   if (CPA_STATUS_SUCCESS != status)
   {
       PRINT_ERR("Failed to allocate memory for operational data\n");
       return status;
   }
-    /*
-      * Populate the structure containing the operational data needed
-      * to run the algorithm:
-      * - packet type information (the algorithm can operate on a full
-      *   packet, perform a partial operation and maintain the state or
-      *   complete the last part of a multi-part operation)
-      * - the initialization vector and its length
-      * - the offset in the source buffer
-      * - the length of the source message
-      */
-    status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
-    memcpy(pSrcBuffer, sampleCipherSrc, sizeof(sampleCipherSrc));
 
+  status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+  memcpy(pSrcBuffer, sampleCipherSrc, sizeof(sampleCipherSrc));
+
+
+
+  for(int i=0; i<numInstances; i++){ /* Test each polling thread in order */
     struct COMPLETION_STRUCT complete;
     COMPLETION_INIT(&complete);
-
-    //<snippet name="opData">
-    pOpData->sessionCtx = sessionCtxs[0];
+    pOpData->sessionCtx = sessionCtxs[i];
     pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
     pOpData->pIv = pIvBuffer;
     pOpData->ivLenInBytes = sizeof(sampleCipherIv);
     pOpData->cryptoStartSrcOffsetInBytes = 0;
     pOpData->messageLenToCipherInBytes = sizeof(sampleCipherSrc);
     status = cpaCySymPerformOp(
-      cyInstHandles[0],
+      cyInstHandles[i],
       (void *)&complete, /* data sent as is to the callback function*/
       pOpData,           /* operational data struct */
       pBufferList,       /* source buffer list */
       pBufferList,       /* same src & dst for an in-place operation*/
       NULL);
-    //</snippet>
+      //</snippet>
 
-  COMPLETION_WAIT(&complete, 50);
+    COMPLETION_WAIT(&complete, 50);
+  }
+  for(int i=0; i<numInstances; i++){
+    gPollingCys[i] = 0;
+    pthread_join((cyPollers[i]), NULL);
+  }
+}
 
-  /* Submit Sym Requests */
-  pthread_join(cyPollers[0], NULL);
-  COMPLETION_DESTROY(&complete);
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  int numOperations = 1000;
+
+  functionalSymTest();
+
+  // Cpa16U numInstances = 1;
+  // pthread_t cyPollers[numInstances];
+  // cryptoPollingArgs *cyPollerArgs[numInstances];
+  // CpaCySymSessionSetupData sessionSetupData;
+
+  // CpaCySymSessionCtx sessionCtxs[MAX_INSTANCES];
+  // CpaInstanceHandle cyInstHandles[MAX_INSTANCES];
+
+  // CpaCySymOpData *pOpData = NULL;
+  // Cpa8U *pIvBuffer = NULL;
+
+  // populateAesGcmSessionSetupData(&sessionSetupData);
+  // status =
+  //   initializeSymInstancesAndSessions(cyInstHandles,
+  //   sessionCtxs, &numInstances, sessionSetupData);
+
+  // if(CPA_STATUS_SUCCESS != status){
+  //   PRINT_ERR("Failed to initialize Sym Instances and Sessions\n");
+  //   return status;
+  // }
+
+  // /* Populate Core mapping sequential */
+  // cpu_set_t coreMaps[numInstances];
+  // for(int i=0; i<numInstances; i++){
+  //   CPU_ZERO(&coreMaps[i]);
+  //   CPU_SET(i, &coreMaps[i]);
+  // }
+  // spawnPinnedPollers(cyPollers, cyPollerArgs, cyInstHandles, numInstances, coreMaps, numInstances, sal_polling);
+
+  // /*Generate BufferList With One Flat Buffer */
+  // Cpa32U bufferMetaSize = 0;
+  // Cpa32U bufferSize = 4096;
+  // Cpa8U *pSrcBuffer = NULL;
+  // CpaBufferList *pBufferList = NULL;
+  // Cpa32U numBuffersPerList = 1;
+
+  // status =
+  //   cpaCyBufferListGetMetaSize(cyInstHandles[0], numBuffersPerList, &bufferMetaSize);
+
+  // status = prepareFlatBufferList(&pBufferList, numBuffersPerList, bufferSize, bufferMetaSize);
+  // pSrcBuffer = pBufferList->pBuffers[0].pData;
+
+  // /* Setup Operational Data for encrypting a single Fltbflist with a single phys_contig flatbuf*/
+  // status = OS_MALLOC(&pOpData, sizeof(CpaCySymOpData));
+  // if (CPA_STATUS_SUCCESS != status)
+  // {
+  //     PRINT_ERR("Failed to allocate memory for operational data\n");
+  //     return status;
+  // }
+  //   /*
+  //     * Populate the structure containing the operational data needed
+  //     * to run the algorithm:
+  //     * - packet type information (the algorithm can operate on a full
+  //     *   packet, perform a partial operation and maintain the state or
+  //     *   complete the last part of a multi-part operation)
+  //     * - the initialization vector and its length
+  //     * - the offset in the source buffer
+  //     * - the length of the source message
+  //     */
+  // status = PHYS_CONTIG_ALLOC(&pIvBuffer, sizeof(sampleCipherIv));
+  // memcpy(pSrcBuffer, sampleCipherSrc, sizeof(sampleCipherSrc));
+
+  // struct COMPLETION_STRUCT complete;
+  // COMPLETION_INIT(&complete);
+
+  // //<snippet name="opData">
+  // pOpData->sessionCtx = sessionCtxs[0];
+  // pOpData->packetType = CPA_CY_SYM_PACKET_TYPE_FULL;
+  // pOpData->pIv = pIvBuffer;
+  // pOpData->ivLenInBytes = sizeof(sampleCipherIv);
+  // pOpData->cryptoStartSrcOffsetInBytes = 0;
+  // pOpData->messageLenToCipherInBytes = sizeof(sampleCipherSrc);
+  // status = cpaCySymPerformOp(
+  //   cyInstHandles[0],
+  //   (void *)&complete, /* data sent as is to the callback function*/
+  //   pOpData,           /* operational data struct */
+  //   pBufferList,       /* source buffer list */
+  //   pBufferList,       /* same src & dst for an in-place operation*/
+  //   NULL);
+  //   //</snippet>
+
+  // COMPLETION_WAIT(&complete, 50);
+
+  // /* Submit Sym Requests */
+  // pthread_join(cyPollers[0], NULL);
+  // COMPLETION_DESTROY(&complete);
 
 
   icp_sal_userStop();
