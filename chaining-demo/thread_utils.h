@@ -22,6 +22,12 @@ typedef struct _thread_args{
   Cpa16U id;
 } thread_args;
 
+typedef struct _mp_thread_args{
+  CpaInstanceHandle *dcInstHandle;
+  Cpa32U numDcInstances;
+  Cpa16U id;
+} mp_thread_args;
+
 typedef struct _packet_stats{
   Cpa32U packetId;
   Cpa64U submitTime;
@@ -57,6 +63,7 @@ typedef struct dc_crc_polling_args{
 } dc_crc_polling_args;
 
 void *dc_polling(void *args);
+void *dc_multipolling(void *arg);
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
 CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg);
 

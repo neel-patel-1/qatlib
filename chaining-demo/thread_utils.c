@@ -26,6 +26,19 @@ void *dc_crc64_polling(void *args){
   }
 }
 
+void *dc_multipolling(void *arg){
+  mp_thread_args *args = (mp_thread_args *)arg;
+  CpaInstanceHandle *dcInstHandle = args->dcInstHandle;
+  Cpa32U numDcInstances = args->numDcInstances;
+  Cpa16U id = args->id;
+  gPollingDcs[id] = 1;
+  while(gPollingDcs[id]){
+    for(Cpa32U i = 0; i < numDcInstances; i++){
+      icp_sal_DcPollInstance(dcInstHandle[i], 0);
+    }
+  }
+}
+
 CpaStatus createThread(pthread_t *thread, void *func, void *arg){
   pthread_attr_t attr;
   struct sched_param param;

@@ -213,6 +213,56 @@ void multiStreamCompressCrc64PerformanceTest(
   printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
 }
 
+void multiStreamCompressCrc64PerformanceTestMultiPoller(
+  Cpa32U numFlows,
+  Cpa32U numOperations,
+  Cpa32U bufferSize,
+  CpaInstanceHandle *dcInstHandles,
+  CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances
+)
+{
+  /* multiple instance for latency test */
+  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numFlows);
+
+  /* Create Polling Threads */
+  pthread_t thread;
+  mp_thread_args *args = NULL;
+  args = (mp_thread_args *)malloc(sizeof(mp_thread_args));
+  args->dcInstHandle = dcInstHandles;
+  args->numDcInstances = numInstances;
+  args->id = 0;
+  createThreadPinned(&thread,dc_multipolling, (void *)args, 5);
+
+  /* Create submitting threads */
+  pthread_t subThreads[numFlows];
+  packet_stats **arrayOfPacketStatsArrayPointers[numFlows];
+  pthread_barrier_t *pthread_barrier = NULL;
+  pthread_barrier = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
+  pthread_barrier_init(pthread_barrier, NULL, numFlows);
+  for(int i=0; i<numFlows; i++){
+    createCompressCrc64Submitter(
+      dcInstHandles[i],
+      sessionHandles[i],
+      numOperations,
+      bufferSize,
+      &(arrayOfPacketStatsArrayPointers[i]),
+      pthread_barrier,
+      &(subThreads[i])
+    );
+  }
+
+  /* Join Submitting Threads -- and terminate associated polling thread busy wait loops*/
+  for(int i=0; i<numFlows; i++){
+    pthread_join(subThreads[i], NULL);
+    gPollingDcs[i] = 0;
+  }
+
+  /*  Print Stats */
+  printf("------------\nHW Offload Performance Test (Polling for Responses from a Single Physical Core)");
+  printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
+}
+
 CpaStatus functionalCompressAndCrc64(CpaInstanceHandle dcInstHandle,
   CpaDcSessionHandle sessionHandle){
   CpaStatus status = CPA_STATUS_SUCCESS;

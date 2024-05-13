@@ -240,7 +240,11 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
-  multiAccelPollerDsaTest();
+  int numOperations = 1000;
+
+  // chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
+  threadCoschedulingTest(numInstances, dcInstHandles, sessionHandles );
+
 
 
 exit:
