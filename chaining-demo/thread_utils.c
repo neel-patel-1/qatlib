@@ -2,6 +2,7 @@
 
 _Atomic int gPollingDcs[MAX_INSTANCES];
 _Atomic int gPollingCrcs[MAX_DSAS];
+_Atomic int gMultiPollers[MAX_INSTANCES + MAX_DSAS];
 
 void *dc_polling(void *args){
   thread_args *targs = (thread_args *)args;

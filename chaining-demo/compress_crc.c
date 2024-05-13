@@ -33,10 +33,145 @@
 #include "tests.h"
 
 int gDebugParam = 0;
+extern _Atomic int gMultiPollers[MAX_INSTANCES + MAX_DSAS];
 
 
+// poll an arbitrary number of response rings using their respective interfaces following a polling priority associated with each response ring
+// maybe round robin is good enough
+// can multiAcc Poller poll all the rings we give it?
+ typedef struct _multiAccelPollerArgs {
+  int numDcInstances;
+  CpaInstanceHandle *dcInstances;
+  int numCyInstances;
+  CpaInstanceHandle *cyInstances;
 
+  int numCtxs;
+  struct acctest_context **ctxs;
 
+  int id;
+
+  int *completedOperations;
+  int neededOps;
+ } multiAccelPollerArgs;
+
+void multiAccelPoller(void *arg){
+  multiAccelPollerArgs *mArgs = (multiAccelPollerArgs *)arg;
+  CpaInstanceHandle *dcInstances = mArgs->dcInstances;
+  CpaInstanceHandle *cyInstances = mArgs->cyInstances;
+  struct acctest_context **ctxs = mArgs->ctxs;
+
+  int numDcInstances = mArgs->numDcInstances;
+  int numCyInstances = mArgs->numCyInstances;
+  int numCtxs = mArgs->numCtxs;
+
+  struct task_node *taskNode = NULL;
+  struct task *tsk = NULL;
+  struct completion_record *comp = NULL;
+
+  int id = mArgs->id;
+
+  /* need the multi-task nodes from each ctx */
+  struct task_node **taskNodes = malloc(numCtxs * sizeof(struct task_node*));
+  int i;
+  for(i=0; i<numCtxs; i++){
+    taskNodes[i] = ctxs[i]->multi_task_node;
+  }
+
+  /* Poll all taskNode's Ctxs in RR order */
+  /* How does the host know that all offloads have completed?*/
+  /* the polling thread serves no purpose unless the host gets to know when the offloads are completed and perform some action in response */
+  /* In reality, there should be some callback performed each time the response is received -- here it is just checking whether this is the last offload and updating the polling thread's monitoring set*/
+  /* There is a total number of offloads expected to be completed on each accelerator in a stream, there is a total number of offloads expected to be completed per stream */
+  int numFinished = 0;
+  int streamsCompleted = 0;
+  int neededOps = mArgs->neededOps;
+  int *completedOperations = mArgs->completedOperations;
+  /* what if we would like a single polling thread to poll multiple streams ? - At the end of the day, the host can just stop the polling thread once all the offloads for the streams are
+  completed. Here we just count and compare against the total number of expected operations across all accelerators in all streams. */
+  while(gMultiPollers[id]){
+    /*accel-cfg type*/
+    for(int i=0; i<numCtxs; i++){
+      taskNode = taskNodes[i];
+      if(taskNode){
+        tsk = taskNode->tsk;
+        if(comp->status != 0){
+          /* Callback function */
+          (*completedOperations) ++ ;
+          if((*completedOperations) >= neededOps){
+            gMultiPollers[id] = 0; /* We can stop ourself */
+          }
+
+          /* update next wait response */
+          taskNode = taskNode->next;
+        }
+      }
+    }
+    /*cpa type*/
+    for(int i=0 ; i<numDcInstances; i++){
+      icp_sal_DcPollInstance(dcInstances[i], 0);
+      if((*completedOperations) >= neededOps){
+        gMultiPollers[id] = 0; /* We can stop ourself */
+      }
+    }
+    for(int i=0; i<numCyInstances; i++){
+      icp_sal_CyPollInstance(cyInstances[i], 0);
+      if((*completedOperations) >= neededOps){
+        gMultiPollers[id] = 0; /* We can stop ourself */
+      }
+    }
+  }
+  sampleThreadExit();
+
+}
+typedef struct dcCountCallbackArgs {
+  int *count;
+} dcCountCallbackArgs;
+
+void dcCountCallback(void *pCallbackTag, CpaStatus status){
+  dcCountCallbackArgs *args = (dcCountCallbackArgs *)pCallbackTag;
+  int *count = args->count;
+  (*count)++;
+}
+
+typedef struct cyCountCallbackArgs {
+  int *count;
+} cyCountCallbackArgs;
+
+void cyCountCallback(void *pCallbackTag,
+                        CpaStatus status,
+                        const CpaCySymOp operationType,
+                        void *pOpData,
+                        CpaBufferList *pDstBuffer,
+                        CpaBoolean verifyResult){
+  cyCountCallbackArgs *args = (cyCountCallbackArgs *)pCallbackTag;
+  (*args->count)++;
+                        }
+
+void multiAccelPollerDsaTest(){
+  int numCyInsts = 0;
+  int dsaInsts = 1;
+  int numDcInsts = 1;
+  int iaaInsts = 0;
+  int totalAccels = numCyInsts + dsaInsts + numDcInsts + iaaInsts;
+  int totalStreams = 1;
+  int numOpsPerStream = 1;
+
+  int totalOpsAcrossStreams = numOpsPerStream * totalAccels * totalStreams;
+
+  CpaInstanceHandle dcInstHandles[numDcInsts];
+  CpaDcSessionHandle dcSessionHandles[numDcInsts];
+  // prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, dcSessionHandles, numDcInsts, numDcInsts);
+
+  /* Assume a single CpaDc + dsa stream - total ops is 2*/
+  CpaInstanceHandle dcInstHandle = dcInstHandles[0];
+
+  /* get a dc inst and generate a request for a compression operation */
+  /* share the count variable with the call backs and poller thread -- don't allocate, the poller thread will allocate and terminate itself */
+  CpaDcOpData *dcOpData = NULL;
+  OS_MALLOC(&dcOpData, sizeof(CpaDcOpData));
+
+  /* get a dsa ctx and generate a request that the dc callback can use to submit -- put it in the callback args*/
+}
 
 
 int main(){
@@ -57,10 +192,7 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
-  int numOperations = 1000;
-
-  chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
-
+  multiAccelPollerDsaTest();
 
 
 exit:
