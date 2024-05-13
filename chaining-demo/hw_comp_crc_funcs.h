@@ -12,6 +12,7 @@
 #include "buffer_prepare_funcs.h"
 #include "validate_compress_and_crc.h"
 #include "print_funcs.h"
+#include "smt-thread-exps.h"
 
 
 void createCompressCrc64Submitter(
@@ -44,6 +45,15 @@ CpaStatus doSubmissionsCompressAndCrc64AndWaitForFinal(CpaInstanceHandle dcInstH
   callback_args **cb_args, Cpa32U numOperations, struct COMPLETION_STRUCT *complete);
 
 void multiStreamCompressCrc64PerformanceTest(
+  Cpa32U numFlows,
+  Cpa32U numOperations,
+  Cpa32U bufferSize,
+  CpaInstanceHandle *dcInstHandles,
+  CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances
+);
+
+void multiStreamCompressCrc64PerformanceTestMultiPoller(
   Cpa32U numFlows,
   Cpa32U numOperations,
   Cpa32U bufferSize,

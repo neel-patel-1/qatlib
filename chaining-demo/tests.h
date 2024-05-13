@@ -52,6 +52,15 @@ void chainingDeflateAndCrcComparison(int numInstances, CpaInstanceHandle *dcInst
 
 }
 
+void chainingDeflateAndCrcComparisonSinglePhys(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
+  int numConfigs = 3;
+  int numOperations = 1000;
+  int bufferSizes[] = {4096, 65536, 1*1024*1024};
+  int numFlows = 10;
+  int i=0;
+  multiStreamCompressCrc64PerformanceTestMultiPoller(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
+}
+
 void threadCoschedulingTest(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numConfigs = 3;
   int numOperations = 1000;
