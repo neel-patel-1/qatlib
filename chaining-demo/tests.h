@@ -63,7 +63,7 @@ void chainingDeflateAndCrcComparisonSinglePhys(int numInstances, CpaInstanceHand
 
 void threadCoschedulingTest(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numConfigs = 3;
-  int numOperations = 1000;
+  int numOperations = 10000;
   int bufferSizes[] = {4096, 65536, 1*1024*1024};
   int numFlows = 10;
   multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
@@ -93,6 +93,15 @@ void threadCoschedulingTest(int numInstances, CpaInstanceHandle *dcInstHandles, 
     sessionHandles,
     numInstances
   );
+
+  multiStreamCompressCrc64PerformanceTestMultiPoller(
+    4,
+    numOperations,
+    4096,
+    dcInstHandles,
+    sessionHandles,
+    numInstances);
+
 }
 
 

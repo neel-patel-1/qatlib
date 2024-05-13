@@ -59,7 +59,8 @@ int main(){
 
   int numOperations = 1000;
 
-  chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
+  // chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
+  threadCoschedulingTest(numInstances, dcInstHandles, sessionHandles );
 
 
 
