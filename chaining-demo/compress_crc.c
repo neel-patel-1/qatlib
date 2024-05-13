@@ -32,7 +32,7 @@
 
 #include "tests.h"
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 extern _Atomic int gMultiPollers[MAX_INSTANCES + MAX_DSAS];
 
 
@@ -150,7 +150,7 @@ void cyCountCallback(void *pCallbackTag,
 void multiAccelPollerDsaTest(){
   int numCyInsts = 0;
   int dsaInsts = 1;
-  int numDcInsts = 1;
+  int numDcInsts = 0;
   int iaaInsts = 0;
   int totalAccels = numCyInsts + dsaInsts + numDcInsts + iaaInsts;
   int totalStreams = 1;
@@ -160,6 +160,54 @@ void multiAccelPollerDsaTest(){
 
   CpaInstanceHandle dcInstHandles[numDcInsts];
   CpaDcSessionHandle dcSessionHandles[numDcInsts];
+
+  struct acctest_context *ctxs[dsaInsts];
+  struct task_node *taskNodes[dsaInsts];
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = 0;
+  int dev_id = 0;
+  int wq_id = 0;
+
+  int taskNodesPerDsa = numOpsPerStream/totalAccels; /*each accel can be used once per stream*/
+
+  CpaBufferList *srcBuffers[numOpsPerStream];
+  Cpa8U *srcBuffer = NULL;
+  Cpa8U *pBufferMetaSrc = NULL;
+
+
+  for(int i=0; i<dsaInsts; i++){
+    ctxs[i] = malloc(sizeof(struct acctest_context));
+    ctxs[i] = acctest_init(tflags);
+    rc = acctest_alloc(ctxs[i],wq_type,dev_id,wq_id);
+    acctest_alloc_multiple_tasks(ctxs[i],taskNodesPerDsa);
+
+    /*
+    @ name: generateBufferList
+    @ description: generate a buffer list with data
+    @ input: CpaBufferList **ppBufferList, Cpa32U bufferSize, Cpa32U bufferListMetaSize, Cpa32U numBuffers
+    */
+    Cpa32U numBuffers = 1;
+    Cpa32U bufferSize = 4096;
+    Cpa32U bufferListMemSize = sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+    Cpa32U bufferMetaSize = 0;
+    generateBufferList(&srcBuffers[i], bufferSize, bufferListMemSize, numBuffers, prepareZeroSampleBuffer);
+
+    taskNodes[i] = ctxs[i]->multi_task_node;
+    while(taskNodes[i]){
+      PRINT_DBG("taskNode 0x%p\n", taskNodes[i]->tsk);
+      prepare_crc_task(
+        taskNodes[i]->tsk,
+        ctxs[i],
+        srcBuffers[i]->pBuffers[0].pData,
+        srcBuffers[i]->pBuffers[0].dataLenInBytes);
+      taskNodes[i] = taskNodes[i]->next;
+      for(int j=0; j<bufferSize; j++){
+        PRINT_DBG("%d ", srcBuffers[i]->pBuffers[0].pData[j]);
+      }
+    }
+  }
+
   // prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, dcSessionHandles, numDcInsts, numDcInsts);
 
   /* Assume a single CpaDc + dsa stream - total ops is 2*/
