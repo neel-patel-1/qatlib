@@ -201,3 +201,49 @@ CpaStatus createSourceBufferList(CpaBufferList **ppBufferList, Cpa8U *buffer, Cp
 
   return CPA_STATUS_SUCCESS;
 }
+
+
+void prepareZeroSampleBuffer(Cpa8U *pBuffer, Cpa32U bufferSize){
+  memset(pBuffer, 0, bufferSize);
+}
+
+CpaStatus generateBufferList(CpaBufferList **ppBufferList, Cpa32U bufferSize, Cpa32U bufferListMetaSize, Cpa32U numBuffers, buffer_gen genBuffer){
+  Cpa8U *pBufferMetaSrc = NULL;
+  Cpa8U *pSrcBuffer = NULL;
+  CpaFlatBuffer *pFlatBuffer = NULL;
+  CpaBufferList *pBufferListSrc = NULL;
+  CpaStatus status = CPA_STATUS_SUCCESS;
+
+
+  status = OS_MALLOC(&pBufferListSrc, sizeof(CpaBufferList));
+  PHYS_CONTIG_ALLOC(&pBufferListSrc->pBuffers, numBuffers * sizeof(CpaFlatBuffer));
+
+  if (CPA_STATUS_SUCCESS == status)
+  {
+    if(bufferListMetaSize > 0){
+      status = PHYS_CONTIG_ALLOC(&pBufferMetaSrc, bufferListMetaSize);
+      pBufferListSrc->pPrivateMetaData = pBufferMetaSrc;
+    } else {
+      pBufferListSrc->pPrivateMetaData = NULL;
+    }
+  }
+  if (CPA_STATUS_SUCCESS == status)
+  {
+
+    for(int i=0; i<numBuffers; i++){
+      status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufferSize);
+      if(CPA_STATUS_SUCCESS != status){
+        PRINT_ERR("Failed to allocate buffer for buffer list\n");
+        return status;
+      }
+      genBuffer(pSrcBuffer, bufferSize);
+      pBufferListSrc->pBuffers[i].pData = pSrcBuffer;
+      pBufferListSrc->pBuffers[i].dataLenInBytes = bufferSize;
+    }
+
+  }
+  pBufferListSrc->numBuffers = numBuffers;
+  *ppBufferList = pBufferListSrc;
+
+  return CPA_STATUS_SUCCESS;
+}
