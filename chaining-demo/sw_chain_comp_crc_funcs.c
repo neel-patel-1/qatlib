@@ -20,6 +20,45 @@ void *crc_polling(void *args) {
   gPollingCrcs[id] = 0;
 }
 
+void *crc_multi_polling(void *args) {
+  multi_idxd_poller_args *mArgs = (multi_idxd_poller_args *)(args);
+  struct acctest_context **ctxs = mArgs->ctxs;
+  int numCtxs = mArgs->numCtxs;
+  int id = mArgs->id;
+
+  struct task_node *taskNode = NULL;
+  struct task *tsk = NULL;
+  struct completion_record *comp = NULL;
+
+  struct task_node **taskNodes = malloc(numCtxs * sizeof(struct task_node*));
+  int i;
+  for(i=0; i<numCtxs; i++){
+    taskNodes[i] = ctxs[i]->multi_task_node;
+  }
+  gPollingCrcs[id] = 1;
+
+  CpaBoolean allIdxdCtxsCollected = CPA_FALSE;
+  while(gPollingCrcs[id]){ /* Stopping condition for crc and dc multi-poller -- this is just crc multipoller ?*/
+  /*accel-cfg type*/
+    allIdxdCtxsCollected = CPA_TRUE;
+    for(int i=0; i<numCtxs; i++){
+      taskNode = taskNodes[i];
+      if(taskNode){
+        allIdxdCtxsCollected = CPA_FALSE;
+        tsk = taskNode->tsk;
+        comp = tsk->comp;
+        if(comp->status != 0){
+          tsk = taskNode->tsk;
+
+        }
+      }
+    }
+    if(allIdxdCtxsCollected == CPA_TRUE){
+      gPollingCrcs[id] = 0;
+    }
+  }
+}
+
 void dcDsaCrcCallback(void *pCallbackTag, CpaStatus status){
   PRINT_DBG("DSA Fwding Callback Invoked\n");
   dsa_fwder_args *args = (dsa_fwder_args *)pCallbackTag;

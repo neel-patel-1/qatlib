@@ -259,7 +259,7 @@ void multiStreamCompressCrc64PerformanceTestMultiPoller(
   }
 
   /*  Print Stats */
-  printf("------------\nHW Offload Performance Test");
+  printf("------------\nHW Offload Performance Test (Polling for Responses from a Single Physical Core)");
   printMultiThreadStats(arrayOfPacketStatsArrayPointers, numFlows, numOperations, bufferSize);
 }
 

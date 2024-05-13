@@ -36,6 +36,15 @@ typedef struct _crc_polling_args{
   int id;
 } crc_polling_args;
 
+ typedef struct _multi_idxd_poller_args {
+
+  int numCtxs;
+  struct acctest_context **ctxs;
+
+  int id;
+
+ } multi_idxd_poller_args;
+
 typedef struct _dsaFwderCbArgs {
   Cpa32U packetId;
   struct acctest_context *dsa;
@@ -59,6 +68,8 @@ typedef struct _compCrcStreamThreadArgs{
 typedef struct _two_stage_packet_stats two_stage_packet_stats;
 
 void *crc_polling(void *args);
+void *crc_multi_polling(void *args);
+
 
 void dcDsaCrcCallback(void *pCallbackTag, CpaStatus status);
 
