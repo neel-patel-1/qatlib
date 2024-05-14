@@ -33,33 +33,10 @@
 #include "tests.h"
 
 int gDebugParam = 1;
+volatile int c = 0;
 
-
-
-
-
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-  int numOperations = 1000;
-  int bufferSize = 4096;
-
+int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, Cpa32U numInstances){
+  CpaStatus status;
   CpaDcInstanceCapabilities cap = {0};
   CpaDcOpData **opData = NULL;
   CpaDcRqResults **dcResults = NULL;
@@ -72,10 +49,10 @@ int main(){
 
   /* Streaming submission from a single thread single inst hw*/
   prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
-      cpaDcQueryCapabilities(dcInstHandle, &cap);
 
-  sessionHandle = sessionHandles[0];
-  dcInstHandle = dcInstHandles[0];
+  CpaDcSessionHandle sessionHandle = sessionHandles[0];
+  CpaInstanceHandle dcInstHandle = dcInstHandles[0];
+    cpaDcQueryCapabilities(dcInstHandle, &cap);
 
   int *completed = malloc(sizeof(int));
   *completed = 0;
@@ -107,11 +84,41 @@ retry:
     if(status == CPA_STATUS_RETRY){
       goto retry;
     }
-    PRINT_DBG("Submitted %d\n", *completed);
-    icp_sal_DcPollInstance(dcInstHandle, 0);
+    printf("Submitted %d\n", *completed);
+    status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
+  c = *completed;
   uint64_t endTime = sampleCoderdtsc();
+  printf("Submitted %d\n", *completed);
   printThroughputStats(endTime, startTime, *completed);
+}
+
+
+
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
+
+  int numOperations = 1000;
+  int bufferSize = 4096;
+
+  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
 
   // for(int i=0; i<numOperations; i++){
   //   if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
