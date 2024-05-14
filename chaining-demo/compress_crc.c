@@ -147,10 +147,10 @@ void cyCountCallback(void *pCallbackTag,
   (*args->count)++;
                         }
 
-void multiAccelPollerDsaTest(){
+void multiAccelPollerCpaDcDsaCrcTest(){
   int numCyInsts = 0;
   int dsaInsts = 1;
-  int numDcInsts = 0;
+  int numDcInsts = 1;
   int iaaInsts = 0;
   int totalAccels = numCyInsts + dsaInsts + numDcInsts + iaaInsts;
   int totalStreams = 1;
@@ -171,10 +171,29 @@ void multiAccelPollerDsaTest(){
 
   int taskNodesPerDsa = numOpsPerStream/totalAccels; /*each accel can be used once per stream*/
 
+  /* Single stream for now */ /* Goal is to lift polling thread spinup and assignment out of stream control flow */
   CpaBufferList *srcBuffers[numOpsPerStream];
   Cpa8U *srcBuffer = NULL;
   Cpa8U *pBufferMetaSrc = NULL;
 
+  Cpa32U numBuffers = 1;
+  Cpa32U bufferSize = 4096;
+  Cpa32U bufferListMemSize = sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
+  Cpa32U bufferMetaSize = 0;
+
+  /* Generate buffer list for stream */ /*task node is a linked list -- don't have time to modify, but should be simple to use arrays of tasks instead -- no pointer chasing */
+  for(int i=0; i<numOpsPerStream; i++){
+    generateBufferList(&srcBuffers[i], bufferSize, bufferListMemSize, numBuffers, prepareZeroSampleBuffer);
+  }
+
+  /* Spin up a dsa crc poller, crc on the bufs and validate expected */
+  multiAccelPollerArgs *mArgs[totalStreams];
+  OS_MALLOC(&(mArgs[0]), sizeof( multiAccelPollerArgs));
+  multiAccelPollerArgs *crcTestArg = mArgs[0];
+  crcTestArg->numDcInstances = 0;
+  crcTestArg->numCtxs = dsaInsts + iaaInsts;
+  printf("numDcInsts %d\n", crcTestArg->numCtxs);
+  return;
 
   for(int i=0; i<dsaInsts; i++){
     ctxs[i] = malloc(sizeof(struct acctest_context));
@@ -182,16 +201,6 @@ void multiAccelPollerDsaTest(){
     rc = acctest_alloc(ctxs[i],wq_type,dev_id,wq_id);
     acctest_alloc_multiple_tasks(ctxs[i],taskNodesPerDsa);
 
-    /*
-    @ name: generateBufferList
-    @ description: generate a buffer list with data
-    @ input: CpaBufferList **ppBufferList, Cpa32U bufferSize, Cpa32U bufferListMetaSize, Cpa32U numBuffers
-    */
-    Cpa32U numBuffers = 1;
-    Cpa32U bufferSize = 4096;
-    Cpa32U bufferListMemSize = sizeof(CpaBufferList) + (numBuffers * sizeof(CpaFlatBuffer));
-    Cpa32U bufferMetaSize = 0;
-    generateBufferList(&srcBuffers[i], bufferSize, bufferListMemSize, numBuffers, prepareZeroSampleBuffer);
 
     taskNodes[i] = ctxs[i]->multi_task_node;
     while(taskNodes[i]){
@@ -208,10 +217,23 @@ void multiAccelPollerDsaTest(){
     }
   }
 
-  // prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, dcSessionHandles, numDcInsts, numDcInsts);
+  int numFlows = 1;
+
+  /*
+  @ param dcInstHandles, dcSessionHandles, *numDcInsts
+  */
+  CpaInstanceHandle dcInstHandle = dcInstHandles[0];
+  CpaDcInstanceCapabilities cap = {0};
+  cpaDcQueryCapabilities(dcInstHandle, &cap);
+
+  /* spawned submitters need to wait on this barrier */
+  pthread_barrier_t barrier;
+  pthread_t streamTds[numFlows];
+
+  allocateDcInstances(dcInstHandles, &numDcInsts);
+  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, dcSessionHandles, numDcInsts, numDcInsts);
 
   /* Assume a single CpaDc + dsa stream - total ops is 2*/
-  CpaInstanceHandle dcInstHandle = dcInstHandles[0];
 
   /* get a dc inst and generate a request for a compression operation */
   /* share the count variable with the call backs and poller thread -- don't allocate, the poller thread will allocate and terminate itself */
@@ -243,8 +265,8 @@ int main(){
   int numOperations = 1000;
 
   // chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
-  threadCoschedulingTest(numInstances, dcInstHandles, sessionHandles );
-
+  // threadCoschedulingTest(numInstances, dcInstHandles, sessionHandles );
+  multiAccelPollerCpaDcDsaCrcTest();
 
 
 exit:
