@@ -32,7 +32,7 @@
 
 #include "tests.h"
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 
 
@@ -94,7 +94,6 @@ int main(){
       &complete);
   while(completed < numOperations){
 retry:
-    icp_sal_DcPollInstance(dcInstHandle, 0);
     status = cpaDcCompressData2(
       dcInstHandle,
       sessionHandle,
@@ -107,6 +106,7 @@ retry:
       goto retry;
     }
     PRINT_DBG("Submitted %d\n", completed);
+    icp_sal_DcPollInstance(dcInstHandle, 0);
   }
 
   // for(int i=0; i<numOperations; i++){
