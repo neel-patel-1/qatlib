@@ -191,6 +191,9 @@ void dcPerfCallback(void *pCallbackTag, CpaStatus status){
 }
 
 void dcCallback2(void *pCallbackTag, CpaStatus status){
+  if(CPA_STATUS_SUCCESS != status){
+    PRINT_ERR("Error in callback\n");
+  }
   int *completed = (int *)pCallbackTag;
   *completed += 1;
 }
