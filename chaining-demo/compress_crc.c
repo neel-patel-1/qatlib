@@ -309,6 +309,7 @@ int main(){
     dcInstHandle,
     &complete);
 
+  uint64_t startTime = sampleCoderdtsc();
   for(int i=0; i<numOperations; i++){
     z_stream strm;
     int ret;
@@ -336,6 +337,8 @@ int main(){
     crcData->integrityCrc64b.oCrc = crc64;
 
   }
+  uint64_t endTime = sampleCoderdtsc();
+  printThroughputStats(endTime, startTime, numOperations);
 
   // streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
   // streamingSwChainCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
