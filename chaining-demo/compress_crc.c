@@ -320,6 +320,16 @@ int singleSwCompCrc(int bufferSize, int numOperations, CpaInstanceHandle *dcInst
 
   }
   uint64_t endTime = sampleCoderdtsc();
+  for(int i=0; i<numOperations; i++){
+    int rc = validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize);
+    if(rc != CPA_STATUS_SUCCESS){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
+    rc = validateCompressAndCrc64Sw(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize, crcData);
+    if(rc != CPA_STATUS_SUCCESS){
+      PRINT_ERR("Buffer not checksumed correctly\n");
+    }
+  }
   printf("---\nSwCompAndCrcStream");
   printThroughputStats(endTime, startTime, numOperations, bufferSize);
   printf("---\n");
@@ -348,12 +358,12 @@ int main(){
 
 
   int numOperations = 1000;
-  int bufferSizes[] = { 32*1024};
+  int bufferSizes[] = {4096, 65536, 1024*1024};
 
-  for(int i=0; i<1; i++){
+  for(int i=0; i<3; i++){
   singleSwCompCrc(bufferSizes[i], numOperations, dcInstHandles, sessionHandles);
-  streamingHwCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
-  streamingSwChainCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
+  // streamingSwChainCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
+  // streamingHwCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
   }
 
 
