@@ -248,6 +248,7 @@ retry:
     }
     _mm_sfence();
     printf("Completed %d\n", *completed);
+    lastBufIdxSubmitted = *completed;
     }
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
@@ -347,9 +348,9 @@ int main(){
 
 
   int numOperations = 1000;
-  int bufferSizes[] = {4096, 65536, 1048576};
+  int bufferSizes[] = { 32*1024};
 
-  for(int i=0; i<3; i++){
+  for(int i=0; i<1; i++){
   singleSwCompCrc(bufferSizes[i], numOperations, dcInstHandles, sessionHandles);
   streamingHwCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
   streamingSwChainCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
