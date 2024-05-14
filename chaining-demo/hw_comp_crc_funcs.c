@@ -18,7 +18,7 @@ void createCompressCrc64Submitter(
   submitterArgs->bufferSize = bufferSize;
   submitterArgs->pArrayPacketStatsPtrs = pArrayPacketStatsPtrs;
   submitterArgs->pthread_barrier = pthread_barrier;
-  createThreadJoinable(threadId, streamFn, (void *)submitterArgs);
+  createThreadPinned(threadId, streamFn, (void *)submitterArgs, 10);
 }
 
 CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
@@ -44,7 +44,7 @@ void createCompressCrc64Poller(CpaInstanceHandle dcInstHandle, Cpa16U id, pthrea
       args = (thread_args *)malloc(sizeof(thread_args));
       args->dcInstHandle = dcInstHandle;
       args->id = id;
-      createThread(threadId, dc_polling, (void *)args);
+      createThreadPinned(threadId, dc_polling, (void *)args, 10);
   }
 }
 

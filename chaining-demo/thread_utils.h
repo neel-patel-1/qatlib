@@ -64,8 +64,11 @@ typedef struct dc_crc_polling_args{
 
 void *dc_polling(void *args);
 void *dc_multipolling(void *arg);
+
+/* Create threads in joinable/non joinable states */
 CpaStatus createThread(pthread_t *thread, void *func, void *arg);
 CpaStatus createThreadJoinable(pthread_t *thread, void *func, void *arg);
+CpaStatus createThreadPinnedNotJoinable(pthread_t *thread, void *func, void *arg, int coreId);
 
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
 void dcPerfCallback(void *pCallbackTag, CpaStatus status);

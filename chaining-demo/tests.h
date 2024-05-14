@@ -37,6 +37,7 @@ void chainingDeflateAndCrcComparisonSingleCore(int numOperations, int bufferSize
 
   multiStreamSwCompressCrc64Func(numOperations,bufferSize,1, dcInstHandles[0]);
   cpaDcDsaCrcPerf(numOperations, bufferSize,1,dcInstHandles,sessionHandles);
+  multiStreamCompressCrc64PerformanceTest(1,numOperations, bufferSize,dcInstHandles,sessionHandles,1);
 }
 
 void chainingDeflateAndCrcComparisonUnboundedPhys(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){

@@ -157,7 +157,7 @@ void create_crc_polling_thread(struct acctest_context *dsa, int id, two_stage_pa
   crcArgs->dsa=dsa;
   crcArgs->id = id;
   crcArgs->stats = stats;
-  createThreadJoinable(tid,crc_polling, crcArgs);
+  createThreadPinned(tid,crc_polling, crcArgs, 10);
 }
 
 
@@ -169,7 +169,7 @@ void create_dc_polling_thread(int flowId,
   OS_MALLOC(&dcCrcArgs, sizeof(dc_crc_polling_args));
   dcCrcArgs->dcInstance = dcInstHandle;
   dcCrcArgs->id = flowId;
-  createThread(tid, dc_crc64_polling, dcCrcArgs);
+  createThreadPinned(tid, dc_crc64_polling, dcCrcArgs, 10);
 }
 
 
@@ -393,7 +393,7 @@ CpaStatus cpaDcDsaCrcPerf(
       flowId, &(streamStats[flowId]), &barrier);
 
     /* start the comp streams */
-    createThreadJoinable(&streamTds[flowId], compCrcStreamThreadFn, args);
+    createThreadPinned(&streamTds[flowId], compCrcStreamThreadFn, args, 10);
 
   }
   for(int flowId=0; flowId<numFlows; flowId++){
