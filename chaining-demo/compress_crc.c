@@ -234,7 +234,9 @@ int main(){
     we should not submit another compression request for a bufIdx we
     already submitted  */
   task_node = dsa->multi_task_node;
-  while(bufIdx < numOperations){
+  struct completion_record *comp = task_node->tsk->comp;
+  while(task_node){
+    comp = task_node->tsk->comp;
   if(bufIdx > lastBufIdxSubmitted){
 retry_comp_crc:
     status = cpaDcCompressData2(
@@ -255,8 +257,11 @@ retry_comp_crc:
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
     _mm_sfence();
 
+    /* poll for crc completion and increment if completed */
 
-    task_node = task_node->next;
+    if(comp->status != 0){
+      task_node = task_node->next;
+    }
   }
 
 
