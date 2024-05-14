@@ -450,6 +450,13 @@ retry:
   printf("---\nHwAxChainCompAndCrcSync\n");
   printSyncLatencyStats(endTime, startTime, numOperations, bufferSize);
   printf("---\n");
+
+
+  for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
+  }
 }
 
 int singleSwCompCrc(int bufferSize, int numOperations, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){
