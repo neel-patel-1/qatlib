@@ -32,6 +32,8 @@
 
 #include "tests.h"
 
+#include <xmmintrin.h>
+
 int gDebugParam = 1;
 volatile int c = 0;
 
@@ -93,11 +95,47 @@ retry:
   printThroughputStats(endTime, startTime, *completed);
 }
 
+// static inline unsigned char enqcmd(volatile void *portal, void *desc)
+// {
+// 	unsigned char retry;
+// 	asm volatile("sfence\t\n"
+// 			".byte 0xf2, 0x0f, 0x38, 0xf8, 0x02\t\n"
+// 			"setz %0\t\n"
+// 			: "=r"(retry): "a" (portal), "d" (desc));
+// 	return retry;
+// }
+
 
 typedef struct _strmSubCompCrcSoftChainCbArgs{
   struct task *tsk;
   struct acctest_context *ctx;
+  int *bufIdx;
 } strmSubCompCrcSoftChainCbArgs;
+
+void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
+  strmSubCompCrcSoftChainCbArgs *cbArgs = (strmSubCompCrcSoftChainCbArgs *)arg;
+  struct task *tsk = cbArgs->tsk;
+  struct hw_desc *hw = tsk->desc;
+  struct acctest_context *ctx = cbArgs->ctx;
+  int *bufIdx = cbArgs->bufIdx;
+  (*bufIdx)++;
+  PRINT_DBG("Fwoding %d\n", *bufIdx);
+
+  // while( enqcmd(ctx->wq_reg, hw) ){PRINT_DBG("Retry\n");};
+}
+
+
+CpaStatus prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances, Cpa16U numSessions){
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  for(int i=0; i<numInstances; i++){
+    dcInstHandles[i] = dcInstHandles[i];
+    prepareDcInst(&dcInstHandles[i]);
+    sessionHandles[i] = sessionHandles[i];
+    prepareDcSession(dcInstHandles[i], &sessionHandles[i], dcSwChainedCompCrcStreamingFwd);
+  }
+  return status;
+}
 
 
 int main(){
@@ -158,7 +196,7 @@ int main(){
 	if (rc < 0)
 		return -ENOMEM;
 
-  prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
+  prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
   CpaDcInstanceCapabilities cap = {0};
   cpaDcQueryCapabilities(dcInstHandles[0], &cap);
 
@@ -179,18 +217,25 @@ int main(){
     dcInstHandle,
     &complete
   );
+
+  int bufIdx = 0;
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
   strmSubCompCrcSoftChainCbArgs cbArgs[numOperations];// = malloc(sizeof(strmSubCompCrcSoftChainCbArgs) * numOperations);
   struct task_node *task_node = dsa->multi_task_node;
   for(int i=0; i<numOperations; i++){
     cbArgs[i].tsk = task_node->tsk;
     cbArgs[i].ctx = dsa;
+    cbArgs[i].bufIdx = &bufIdx;
     task_node = task_node->next;
   }
 
+  int lastBufIdxSubmitted = -1;
+  /* if the callback does not increment the bufIdx,
+    we should not submit another compression request for a bufIdx we
+    already submitted  */
   task_node = dsa->multi_task_node;
-  int bufIdx = 0;
   while(bufIdx < numOperations){
+  if(bufIdx > lastBufIdxSubmitted){
 retry_comp_crc:
     status = cpaDcCompressData2(
       dcInstHandle,
@@ -203,13 +248,15 @@ retry_comp_crc:
     if(status == CPA_STATUS_RETRY){
       goto retry_comp_crc;
     }
+    lastBufIdxSubmitted = bufIdx;
+    PRINT_DBG("Submitted %d\n", bufIdx);
+  }
 
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
-    PRINT_DBG("Submitted %d\n", bufIdx);
+    _mm_sfence();
 
-    bufIdx++;
+
     task_node = task_node->next;
-    // if(task_node->tsk == )
   }
 
 
