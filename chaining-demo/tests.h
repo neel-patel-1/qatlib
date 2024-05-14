@@ -32,6 +32,13 @@
 #include "sw_chain_comp_crc_funcs.h"
 #include "smt-thread-exps.h"
 
+
+void chainingDeflateAndCrcComparisonSingleCore(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){
+
+  multiStreamSwCompressCrc64Func(numOperations,bufferSize,1, dcInstHandles[0]);
+  cpaDcDsaCrcPerf(numOperations, bufferSize,1,dcInstHandles,sessionHandles);
+}
+
 void chainingDeflateAndCrcComparisonUnboundedPhys(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numConfigs = 3;
   int numOperations = 1000;
@@ -51,6 +58,8 @@ void chainingDeflateAndCrcComparisonUnboundedPhys(int numInstances, CpaInstanceH
   }
 
 }
+
+
 
 /*This is the new baseline comparison -- we sweep different number of polling cores and allow CPU to get 1 phys CPU*/
 void chainingDeflateAndCrcComparison(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){

@@ -58,9 +58,10 @@ int main(){
   }
 
   int numOperations = 1000;
+  int bufferSize = 4096;
 
   // chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
-  threadCoschedulingTest(numInstances, dcInstHandles, sessionHandles );
+  chainingDeflateAndCrcComparisonSingleCore(numOperations,bufferSize, dcInstHandles, sessionHandles );
 
 
 
