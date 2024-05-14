@@ -32,7 +32,7 @@
 #include "sw_chain_comp_crc_funcs.h"
 #include "smt-thread-exps.h"
 
-void chainingDeflateAndCrcComparison(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
+void chainingDeflateAndCrcComparisonUnboundedPhys(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numConfigs = 3;
   int numOperations = 1000;
   int bufferSizes[] = {4096, 65536, 1*1024*1024};
@@ -48,6 +48,43 @@ void chainingDeflateAndCrcComparison(int numInstances, CpaInstanceHandle *dcInst
     multiStreamSwCompressCrc64Func(numOperations, bufferSizes[i], numFlows, dcInstHandle);
     cpaDcDsaCrcPerf(numOperations, bufferSizes[i], numFlows, dcInstHandles, sessionHandles);
     multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
+  }
+
+}
+
+/*This is the new baseline comparison -- we sweep different number of polling cores and allow CPU to get 1 phys CPU*/
+void chainingDeflateAndCrcComparison(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
+  int numConfigs = 3;
+  int numOperations = 1000;
+  int bufferSizes[] = {4096, 65536, 1*1024*1024};
+  int numFlows = 10;
+
+  if(numFlows > numInstances){
+    numFlows = numInstances;
+  }
+
+
+  CpaInstanceHandle *dcInstHandle = dcInstHandles[0];
+  for(int i=0; i<numConfigs; i++){
+    multiStreamSwCompressCrc64Func(numOperations, bufferSizes[i], numFlows, dcInstHandle);
+
+
+    cpaDcDsaCrcPerfSharedSubmitPollCrcPollDcPerf( /*Sw with varying number of thread oversubscription */
+      numOperations,
+      bufferSizes[i],
+      numFlows,
+      dcInstHandles,
+      sessionHandles);
+
+
+    multiStreamCompressCrc64PerformanceTestSharedSMTThreads( /*HW with varying number of thread oversubscription */
+      4,
+      numOperations,
+      4096,
+      dcInstHandles,
+      sessionHandles,
+      numInstances
+    );
   }
 
 }

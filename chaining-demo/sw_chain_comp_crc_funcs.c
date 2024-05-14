@@ -160,6 +160,8 @@ void create_crc_polling_thread(struct acctest_context *dsa, int id, two_stage_pa
   createThreadJoinable(tid,crc_polling, crcArgs);
 }
 
+
+
 void create_dc_polling_thread(int flowId,
   pthread_t *tid, CpaInstanceHandle dcInstHandle)
 {
@@ -169,6 +171,7 @@ void create_dc_polling_thread(int flowId,
   dcCrcArgs->id = flowId;
   createThread(tid, dc_crc64_polling, dcCrcArgs);
 }
+
 
 CpaStatus submit_all_comp_crc_requests(
   int numOperations,
@@ -337,6 +340,8 @@ void *compCrcStreamThreadFn(void *args){
     threadArgs->pStats, threadArgs->barrier);
 }
 
+
+
 CpaStatus cpaDcDsaCrcPerf(
   Cpa32U numOperations,
   Cpa32U bufferSize ,
@@ -399,3 +404,68 @@ CpaStatus cpaDcDsaCrcPerf(
   printf("------------\nSw AxChain Offload Performance Test\n");
   printTwoPhaseMultiThreadStatsSummary(streamStats, numFlows, numOperations, bufferSize, CPA_FALSE);
 }
+
+
+
+// CpaStatus cpaDcDsaCrcPerfSharedSubmitPollCrcPollDcPerf(
+//   Cpa32U numOperations,
+//   Cpa32U bufferSize ,
+//   int numFlows,
+//   CpaInstanceHandle *dcInstHandles,
+//   CpaDcSessionHandle* sessionHandles
+// ){
+
+//   /* one time shared DSA setup */
+//   /* sudo ..//setup_dsa.sh -d dsa0 -w1 -ms -e4 */
+//   struct acctest_context *dsa = NULL;
+//   int tflags = TEST_FLAGS_BOF;
+//   int rc;
+//   int wq_type = ACCFG_WQ_SHARED;
+//   int dev_id = 0;
+//   int wq_id = 0;
+//   int opcode = 16;
+//   struct task *tsk;
+
+//   CpaDcInstanceCapabilities cap = {0};
+
+//   /* Arrays of packetstat array pointers for access to per-stream stats */
+//   two_stage_packet_stats **streamStats[numFlows];
+
+//   /* setup the shared dsa */
+//   dsa = acctest_init(tflags);
+//   dsa->dev_type = ACCFG_DEVICE_DSA;
+
+//   if (!dsa)
+// 		return -ENOMEM;
+
+//   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+// 	if (rc < 0)
+// 		return -ENOMEM;
+
+//   cpaDcQueryCapabilities(dcInstHandles[0], &cap);
+//   pthread_barrier_t barrier;
+//   pthread_t streamTds[numFlows];
+//   pthread_barrier_init(&barrier, NULL, numFlows);
+//   for(int flowId=0; flowId<numFlows; flowId++){
+//     /* prepare per flow dc inst/sess*/
+//     prepareDcInst(&dcInstHandles[flowId]);
+//     prepareDcSession(dcInstHandles[flowId], &sessionHandles[flowId], dcDsaCrcCallback);
+
+//     compCrcStreamThreadArgs *args;
+//     OS_MALLOC(&args, sizeof(compCrcStreamThreadArgs));
+//     populateCrcStreamThreadArgs(args, numOperations, bufferSize,
+//       dsa, tflags, dcInstHandles[flowId], sessionHandles[flowId], cap,
+//       flowId, &(streamStats[flowId]), &barrier);
+
+//     /* start the comp streams */
+//     createThreadJoinable(&streamTds[flowId], compCrcStreamSharedSubmitPollCrcPollDcThreadFn, args);
+
+//   }
+//   for(int flowId=0; flowId<numFlows; flowId++){
+//     pthread_join(streamTds[flowId], NULL);
+//   }
+
+
+//   printf("------------\nSw AxChain Offload Performance Test\n");
+//   printTwoPhaseMultiThreadStatsSummary(streamStats, numFlows, numOperations, bufferSize, CPA_FALSE);
+// }

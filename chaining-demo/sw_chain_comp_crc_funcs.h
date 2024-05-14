@@ -63,6 +63,7 @@ typedef struct _compCrcStreamThreadArgs{
   int flowId;
   two_stage_packet_stats ***pStats;
   pthread_barrier_t *barrier;
+  int coreId;
 } compCrcStreamThreadArgs;
 
 typedef struct _two_stage_packet_stats two_stage_packet_stats;

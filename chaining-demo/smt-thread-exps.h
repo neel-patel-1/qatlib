@@ -32,6 +32,7 @@
 
 #include "sw_chain_comp_crc_funcs.h"
 
+/* Hw duplicates for Sharing SMT threads */
 void multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
   Cpa32U numFlows,
   Cpa32U numOperations,
@@ -77,5 +78,36 @@ void multiStreamCompressCrc64PerformanceTestSharedMultiSwPerHwTd(
   Cpa16U numInstances,
   int numTdsPerHwTd
 );
+
+/* Sw chain duplicates for sharing SMT threads*/
+
+void create_dc_polling_thread_pinned(int flowId,
+  pthread_t *tid, CpaInstanceHandle dcInstHandle, Cpa32U coreId);
+
+
+void create_crc_polling_thread_pinned(struct acctest_context *dsa, int id, two_stage_packet_stats **stats, pthread_t *tid, Cpa32U coreId);
+
+CpaStatus compCrcStreamSharedPhysSubmitPollDcPollCrc(Cpa32U numOperations,
+  Cpa32U bufferSize,
+  struct acctest_context *ogDsa, int tflags,
+  CpaInstanceHandle dcInstHandle,
+  CpaDcSessionHandle sessionHandle,
+  CpaDcInstanceCapabilities cap,
+  int flowId,
+  two_stage_packet_stats ***pStats,
+  pthread_barrier_t *barrier,
+  Cpa32U coreId);
+
+void *compCrcStreamSharedSubmitPollCrcPollDcThreadFn(void *args);
+
+/*hardcoded start logical to pass core ID to the ThreadFn, inside the stream ThreadFn, we ___*/
+CpaStatus cpaDcDsaCrcPerfSharedSubmitPollCrcPollDcPerf(
+  Cpa32U numOperations,
+  Cpa32U bufferSize ,
+  int numFlows,
+  CpaInstanceHandle *dcInstHandles,
+  CpaDcSessionHandle* sessionHandles
+);
+
 
 #endif
