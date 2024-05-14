@@ -72,6 +72,7 @@ CpaStatus createThreadPinnedNotJoinable(pthread_t *thread, void *func, void *arg
 
 void dcLatencyCallback(void *pCallbackTag, CpaStatus status);
 void dcPerfCallback(void *pCallbackTag, CpaStatus status);
+void dcCallback2(void *pCallbackTag, CpaStatus status);
 
 void *dc_crc64_polling(void *args);
 

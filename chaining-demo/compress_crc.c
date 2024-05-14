@@ -71,11 +71,14 @@ int main(){
     CpaBufferList **dstBufferLists = NULL;
 
   /* Streaming submission from a single thread single inst hw*/
-  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
+
+  prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
       cpaDcQueryCapabilities(dcInstHandle, &cap);
 
   sessionHandle = sessionHandles[0];
   dcInstHandle = dcInstHandles[0];
+
+  int completed= 0;
 
   multiBufferTestAllocations(&cb_args,
       &stats,
@@ -89,17 +92,28 @@ int main(){
       &dstBufferLists,
       dcInstHandle,
       &complete);
-
-  for(int i=0; i< numOperations; i++){
+  while(completed < numOperations){
+retry:
+    icp_sal_DcPollInstance(dcInstHandle, 0);
     status = cpaDcCompressData2(
       dcInstHandle,
       sessionHandle,
-      srcBufferLists[i],     /* source buffer list */
-      dstBufferLists[i],     /* destination buffer list */
-      opData[i],            /* Operational data */
-      dcResults[i],         /* results structure */
-      (void *)cb_args);
+      srcBufferLists[completed],     /* source buffer list */
+      dstBufferLists[completed],     /* destination buffer list */
+      opData[completed],            /* Operational data */
+      dcResults[completed],         /* results structure */
+      (void *)&completed);
+    if(status == CPA_STATUS_RETRY){
+      goto retry;
+    }
+    PRINT_DBG("Submitted %d\n", completed);
   }
+
+  // for(int i=0; i<numOperations; i++){
+  //   if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
+  //     PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+  //   }
+  // }
 
 exit:
 

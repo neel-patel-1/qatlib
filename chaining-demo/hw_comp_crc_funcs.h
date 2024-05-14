@@ -29,6 +29,10 @@ void createCompressCrc64Submitter(
 CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
   Cpa16U numInstances, Cpa16U numSessions);
 
+
+CpaStatus prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances, Cpa16U numSessions);
+
 void createCompressCrc64Poller(CpaInstanceHandle dcInstHandle, Cpa16U id, pthread_t *threadId);
 
 CpaStatus submitAndStamp(CpaInstanceHandle dcInstHandle, CpaDcSessionHandle sessionHandle, CpaBufferList *pBufferListSrc,

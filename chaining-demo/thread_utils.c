@@ -189,3 +189,8 @@ void dcPerfCallback(void *pCallbackTag, CpaStatus status){
 
   }
 }
+
+void dcCallback2(void *pCallbackTag, CpaStatus status){
+  int *completed = (int *)pCallbackTag;
+  *completed += 1;
+}
