@@ -1,7 +1,8 @@
 #!/bin/bash
 
 make -j
-sudo ./compress_crc  | tee single-log.txt
+echo "running configurations..."
+sudo ./compress_crc  > single-log.txt
 echo "Configuration,BufferSize,Throughput(Offloads/sec)"
 grep -A4 -e Stream single-log.txt |  awk '/Stream/{printf("%s,", $1);} /BufferSize/{printf("%s,",$2);} /OffloadsPerSec/{printf("%s\n", $2);}'
 
