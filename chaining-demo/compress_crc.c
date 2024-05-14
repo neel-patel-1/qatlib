@@ -58,11 +58,48 @@ int main(){
   }
 
   int numOperations = 1000;
+  int bufferSize = 4096;
 
-  // chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
-  threadCoschedulingTest(numInstances, dcInstHandles, sessionHandles );
+  CpaDcInstanceCapabilities cap = {0};
+    CpaDcOpData **opData = NULL;
+    CpaDcRqResults **dcResults = NULL;
+    CpaCrcData *crcData = NULL;
+    struct COMPLETION_STRUCT complete;
+    callback_args **cb_args = NULL;
+    packet_stats **stats = NULL;
+    CpaBufferList **srcBufferLists = NULL;
+    CpaBufferList **dstBufferLists = NULL;
 
+  /* Streaming submission from a single thread single inst hw*/
+  prepareMultipleCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
+      cpaDcQueryCapabilities(dcInstHandle, &cap);
 
+  sessionHandle = sessionHandles[0];
+  dcInstHandle = dcInstHandles[0];
+
+  multiBufferTestAllocations(&cb_args,
+      &stats,
+      &opData,
+      &dcResults,
+      &crcData,
+      numOperations,
+      bufferSize,
+      cap,
+      &srcBufferLists,
+      &dstBufferLists,
+      dcInstHandle,
+      &complete);
+
+  for(int i=0; i< numOperations; i++){
+    status = cpaDcCompressData2(
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists[i],     /* source buffer list */
+      dstBufferLists[i],     /* destination buffer list */
+      opData[i],            /* Operational data */
+      dcResults[i],         /* results structure */
+      (void *)cb_args);
+  }
 
 exit:
 
