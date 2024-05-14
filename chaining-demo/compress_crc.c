@@ -119,7 +119,7 @@ void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
   struct acctest_context *ctx = cbArgs->ctx;
   int *bufIdx = cbArgs->bufIdx;
   (*bufIdx)++;
-  PRINT_DBG("Fwoding %d\n", *bufIdx);
+  // PRINT_DBG("Fwoding %d\n", *bufIdx);
 
   while( enqcmd(ctx->wq_reg, hw) ){PRINT_DBG("Retry\n");};
 }
@@ -235,6 +235,8 @@ int main(){
     already submitted  */
   task_node = dsa->multi_task_node;
   struct completion_record *comp = task_node->tsk->comp;
+
+  uint64_t startTime = sampleCoderdtsc();
   while(task_node){
     comp = task_node->tsk->comp;
   if(bufIdx > lastBufIdxSubmitted && bufIdx < numOperations){
@@ -251,7 +253,7 @@ retry_comp_crc:
       goto retry_comp_crc;
     }
     lastBufIdxSubmitted = bufIdx;
-    PRINT_DBG("Submitted %d\n", bufIdx);
+    // PRINT_DBG("Submitted %d\n", bufIdx);
   }
 
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
@@ -264,15 +266,15 @@ retry_comp_crc:
     }
   }
 
+  uint64_t endTime = sampleCoderdtsc();
+  printThroughputStats(endTime, startTime, numOperations);
 
-
+  rc = verifyCrcTaskNodes(dsa->multi_task_node,srcBufferLists,bufferSize);
+  if (rc != CPA_STATUS_SUCCESS){
+    PRINT_ERR("Buffer not Checksum'd correctly\n");
+  }
   // streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
 
-  // for(int i=0; i<numOperations; i++){
-  //   if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
-  //     PRINT_ERR("Buffer not compressed/decompressed correctly\n");
-  //   }
-  // }
 
 exit:
 
