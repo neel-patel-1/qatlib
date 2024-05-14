@@ -183,7 +183,10 @@ retry_comp_crc:
   }
 
   uint64_t endTime = sampleCoderdtsc();
-  printThroughputStats(endTime, startTime, numOperations);
+
+  printf("---\nSwAxChainCompAndCrcStream");
+  printThroughputStats(endTime, startTime, numOperations, bufferSize);
+  printf("---\n");
 
   rc = verifyCrcTaskNodes(dsa->multi_task_node,srcBufferLists,bufferSize);
   if (rc != CPA_STATUS_SUCCESS){
@@ -250,46 +253,24 @@ retry:
   }
   c = *completed;
   uint64_t endTime = sampleCoderdtsc();
-  printf("Submitted %d\n", *completed);
-  printThroughputStats(endTime, startTime, *completed);
+  // printf("Submitted %d\n", *completed);
+  printf("---\nHwAxChainCompAndCrcStream");
+  printThroughputStats(endTime, startTime, numOperations, bufferSize);
+  printf("---\n");
 }
 
-
-
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-
-  int numOperations = 1000;
-  int bufferSize = 4096;
-
+int singleSwCompCrc(int bufferSize, int numOperations, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
   CpaDcRqResults **dcResults = NULL;
   CpaCrcData *crcData = NULL;
   callback_args **cb_args = NULL;
   packet_stats **stats = NULL;
-  dcInstHandle = dcInstHandles[0];
+  CpaInstanceHandle dcInstHandle = dcInstHandles[0];
   CpaDcInstanceCapabilities cap = {0};
   CpaDcOpData **opData = NULL;
   struct COMPLETION_STRUCT complete;
-  status = CPA_STATUS_SUCCESS;
+  CpaStatus status = CPA_STATUS_SUCCESS;
   COMPLETION_INIT(&complete);
   if (CPA_STATUS_SUCCESS != cpaDcQueryCapabilities(dcInstHandle, &cap)){
     PRINT_ERR("Error in querying capabilities\n");
@@ -338,11 +319,41 @@ int main(){
 
   }
   uint64_t endTime = sampleCoderdtsc();
-  printThroughputStats(endTime, startTime, numOperations);
+  printf("---\nSwCompAndCrcStream");
+  printThroughputStats(endTime, startTime, numOperations, bufferSize);
+  printf("---\n");
+}
 
-  // streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
-  // streamingSwChainCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
 
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
+
+
+  int numOperations = 1000;
+  int bufferSizes[] = {4096, 65536, 1048576};
+
+  for(int i=0; i<3; i++){
+  singleSwCompCrc(bufferSizes[i], numOperations, dcInstHandles, sessionHandles);
+  streamingHwCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
+  streamingSwChainCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
+  }
 
 
 exit:

@@ -37,11 +37,13 @@ void statsThreadPopulate(packet_stats **packetStatsPtrsArray, Cpa32U numOperatio
 
 }
 
-void printThroughputStats(uint64_t endTime, uint64_t startTime, int numOperations){
+void printThroughputStats(uint64_t endTime, uint64_t startTime, int numOperations, int bufferSize){
   uint64_t exeCycles = endTime - startTime;
   uint64_t exeTimeUs = exeCycles/2080;
   double offloadsPerSec = numOperations / (double)exeTimeUs;
   offloadsPerSec = offloadsPerSec * 1000000;
+  printf("Num Operations: %d\n", numOperations);
+  printf("BufferSize: %d\n", bufferSize);
   printf("Execution Time(us): %lu\n", exeTimeUs);
   printf("OffloadsPerSec: %f\n", offloadsPerSec);
 

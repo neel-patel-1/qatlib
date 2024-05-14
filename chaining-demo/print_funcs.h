@@ -37,7 +37,7 @@ typedef struct _threadStats {
 
 void printStats(packet_stats **stats, Cpa32U numOperations, Cpa32U bufferSize);
 void printMultiThreadStats(packet_stats ***arrayOfPacketStatsArrayPointers, Cpa32U numFlows, Cpa32U numOperations, Cpa32U bufferSize);
-void printThroughputStats(uint64_t endTime, uint64_t startTime, int numOperations);
+void printThroughputStats(uint64_t endTime, uint64_t startTime, int numOperations, int bufferSize);
 
 void populate2PhaseThreadStats(two_stage_packet_stats ** stats2Phase, threadStats2P **pThrStats, Cpa32U numOperations, Cpa32U bufferSize, Cpa32U flowId);
 void printTwoPhaseSingleThreadStatsSummary(threadStats2P *stats);
