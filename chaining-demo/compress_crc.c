@@ -61,24 +61,24 @@ int main(){
   int bufferSize = 4096;
 
   CpaDcInstanceCapabilities cap = {0};
-    CpaDcOpData **opData = NULL;
-    CpaDcRqResults **dcResults = NULL;
-    CpaCrcData *crcData = NULL;
-    struct COMPLETION_STRUCT complete;
-    callback_args **cb_args = NULL;
-    packet_stats **stats = NULL;
-    CpaBufferList **srcBufferLists = NULL;
-    CpaBufferList **dstBufferLists = NULL;
+  CpaDcOpData **opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  struct COMPLETION_STRUCT complete;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
 
   /* Streaming submission from a single thread single inst hw*/
-
   prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
       cpaDcQueryCapabilities(dcInstHandle, &cap);
 
   sessionHandle = sessionHandles[0];
   dcInstHandle = dcInstHandles[0];
 
-  int completed= 0;
+  int *completed = malloc(sizeof(int));
+  *completed = 0;
 
   multiBufferTestAllocations(&cb_args,
       &stats,
@@ -92,22 +92,26 @@ int main(){
       &dstBufferLists,
       dcInstHandle,
       &complete);
-  while(completed < numOperations){
+
+  uint64_t startTime = sampleCoderdtsc();
+  while(*completed < numOperations){
 retry:
     status = cpaDcCompressData2(
       dcInstHandle,
       sessionHandle,
-      srcBufferLists[completed],     /* source buffer list */
-      dstBufferLists[completed],     /* destination buffer list */
-      opData[completed],            /* Operational data */
-      dcResults[completed],         /* results structure */
-      (void *)&completed);
+      srcBufferLists[*completed],     /* source buffer list */
+      dstBufferLists[*completed],     /* destination buffer list */
+      opData[*completed],            /* Operational data */
+      dcResults[*completed],         /* results structure */
+      (void *)completed);
     if(status == CPA_STATUS_RETRY){
       goto retry;
     }
-    PRINT_DBG("Submitted %d\n", completed);
+    PRINT_DBG("Submitted %d\n", *completed);
     icp_sal_DcPollInstance(dcInstHandle, 0);
   }
+  uint64_t endTime = sampleCoderdtsc();
+  printThroughputStats(endTime, startTime, *completed);
 
   // for(int i=0; i<numOperations; i++){
   //   if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
