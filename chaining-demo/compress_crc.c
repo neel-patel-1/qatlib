@@ -237,7 +237,7 @@ int main(){
   struct completion_record *comp = task_node->tsk->comp;
   while(task_node){
     comp = task_node->tsk->comp;
-  if(bufIdx > lastBufIdxSubmitted){
+  if(bufIdx > lastBufIdxSubmitted && bufIdx < numOperations){
 retry_comp_crc:
     status = cpaDcCompressData2(
       dcInstHandle,
