@@ -72,8 +72,11 @@ int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcI
       dcInstHandle,
       &complete);
 
+  int lastBufIdxSubmitted = -1;
+
   uint64_t startTime = sampleCoderdtsc();
   while(*completed < numOperations){
+    if(*completed > lastBufIdxSubmitted){
 retry:
     status = cpaDcCompressData2(
       dcInstHandle,
@@ -86,7 +89,9 @@ retry:
     if(status == CPA_STATUS_RETRY){
       goto retry;
     }
+    _mm_sfence();
     printf("Submitted %d\n", *completed);
+    }
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
   c = *completed;
@@ -94,16 +99,6 @@ retry:
   printf("Submitted %d\n", *completed);
   printThroughputStats(endTime, startTime, *completed);
 }
-
-// static inline unsigned char enqcmd(volatile void *portal, void *desc)
-// {
-// 	unsigned char retry;
-// 	asm volatile("sfence\t\n"
-// 			".byte 0xf2, 0x0f, 0x38, 0xf8, 0x02\t\n"
-// 			"setz %0\t\n"
-// 			: "=r"(retry): "a" (portal), "d" (desc));
-// 	return retry;
-// }
 
 
 typedef struct _strmSubCompCrcSoftChainCbArgs{
@@ -158,6 +153,7 @@ int main(){
 
   int numOperations = 1000;
   int bufferSize = 4096;
+  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
 
   /* Sw streaming func */
   struct acctest_context *dsa = NULL;
