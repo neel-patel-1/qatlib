@@ -275,12 +275,71 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
+
   int numOperations = 1000;
   int bufferSize = 4096;
-  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
-  streamingSwChainCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
+
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  dcInstHandle = dcInstHandles[0];
+  CpaDcInstanceCapabilities cap = {0};
+  CpaDcOpData **opData = NULL;
+  struct COMPLETION_STRUCT complete;
+  status = CPA_STATUS_SUCCESS;
+  COMPLETION_INIT(&complete);
+  if (CPA_STATUS_SUCCESS != cpaDcQueryCapabilities(dcInstHandle, &cap)){
+    PRINT_ERR("Error in querying capabilities\n");
+    return CPA_STATUS_FAIL;
+  }
+  multiBufferTestAllocations(
+    &cb_args,
+    &stats,
+    &opData,
+    &dcResults,
+    &crcData,
+    numOperations,
+    bufferSize,
+    cap,
+    &srcBufferLists,
+    &dstBufferLists,
+    dcInstHandle,
+    &complete);
+
+  for(int i=0; i<numOperations; i++){
+    z_stream strm;
+    int ret;
+    memset(&strm, 0, sizeof(z_stream));
+    ret = deflateInit(&strm, Z_DEFAULT_COMPRESSION);
+
+    Cpa8U *src = srcBufferLists[i]->pBuffers[0].pData;
+    Cpa32U srcLen = srcBufferLists[i]->pBuffers->dataLenInBytes;
+    Cpa8U *dst = dstBufferLists[i]->pBuffers[0].pData;
+    Cpa32U dstLen = dstBufferLists[i]->pBuffers->dataLenInBytes;
+
+    strm.avail_in = srcLen;
+    strm.next_in = (Bytef *)src;
+    strm.avail_out = dstLen;
+    strm.next_out = (Bytef *)dst;
+    ret = deflate(&strm, Z_FINISH);
+    if(ret != Z_STREAM_END)
+    {
+      fprintf(stderr, "Error in deflate, ret = %d\n", ret);
+      return CPA_STATUS_FAIL;
+    }
+    dcResults[i]->produced = strm.total_out;
+    Cpa64U crc64 = crc64_be(0, Z_NULL, 0);
+    crc64 = crc64_be(crc64, dst, strm.total_out);
+    crcData->integrityCrc64b.oCrc = crc64;
+
+  }
 
   // streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
+  // streamingSwChainCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles, numInstances);
+
 
 
 exit:
