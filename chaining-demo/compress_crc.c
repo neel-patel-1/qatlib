@@ -57,7 +57,7 @@ int main(){
     return CPA_STATUS_FAIL;
   }
 
-  int numOperations = 1000;
+  int numOperations = 10000;
   int bufferSize = 4096;
 
   // chainingDeflateAndCrcComparison(numInstances, dcInstHandles, sessionHandles );
