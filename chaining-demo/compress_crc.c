@@ -383,6 +383,11 @@ retry:
   printf("---\nHwAxChainCompAndCrcStream\n");
   printThroughputStats(endTime, startTime, numOperations, bufferSize);
   printf("---\n");
+  for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
+  }
 }
 
 
