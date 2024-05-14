@@ -94,7 +94,10 @@ retry:
 }
 
 
-
+typedef struct _strmSubCompCrcSoftChainCbArgs{
+  struct task *tsk;
+  struct acctest_context *ctx;
+} strmSubCompCrcSoftChainCbArgs;
 
 
 int main(){
@@ -177,7 +180,15 @@ int main(){
     &complete
   );
   create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
+  strmSubCompCrcSoftChainCbArgs cbArgs[numOperations];// = malloc(sizeof(strmSubCompCrcSoftChainCbArgs) * numOperations);
+  struct task_node *task_node = dsa->multi_task_node;
+  for(int i=0; i<numOperations; i++){
+    cbArgs[i].tsk = task_node->tsk;
+    cbArgs[i].ctx = dsa;
+    task_node = task_node->next;
+  }
 
+  task_node = dsa->multi_task_node;
   int bufIdx = 0;
   while(bufIdx < numOperations){
 retry_comp_crc:
@@ -188,12 +199,17 @@ retry_comp_crc:
       dstBufferLists[bufIdx],     /* destination buffer list */
       opData[bufIdx],            /* Operational data */
       dcResults[bufIdx],         /* results structure */
-      (void *)cb_args); /* data sent as is to the callback function*/
+      (void *)&(cbArgs[bufIdx])); /* data sent as is to the callback function*/
     if(status == CPA_STATUS_RETRY){
       goto retry_comp_crc;
     }
 
+    status = icp_sal_DcPollInstance(dcInstHandle, 0);
+    PRINT_DBG("Submitted %d\n", bufIdx);
+
     bufIdx++;
+    task_node = task_node->next;
+    // if(task_node->tsk == )
   }
 
 
