@@ -260,6 +260,73 @@ retry:
   printf("---\n");
 }
 
+
+int streamingHwCompCrcSyncLatency(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, Cpa32U numInstances){
+  CpaStatus status;
+  CpaDcInstanceCapabilities cap = {0};
+  CpaDcOpData **opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  struct COMPLETION_STRUCT complete;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+
+  /* Streaming submission from a single thread single inst hw*/
+  prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
+
+  CpaDcSessionHandle sessionHandle = sessionHandles[0];
+  CpaInstanceHandle dcInstHandle = dcInstHandles[0];
+    cpaDcQueryCapabilities(dcInstHandle, &cap);
+
+  int *completed = malloc(sizeof(int));
+  *completed = 0;
+
+  multiBufferTestAllocations(&cb_args,
+      &stats,
+      &opData,
+      &dcResults,
+      &crcData,
+      numOperations,
+      bufferSize,
+      cap,
+      &srcBufferLists,
+      &dstBufferLists,
+      dcInstHandle,
+      &complete);
+
+  int lastBufIdxSubmitted = -1;
+
+  uint64_t startTime = sampleCoderdtsc();
+  while(*completed < numOperations){
+    if(*completed > lastBufIdxSubmitted){
+retry:
+    status = cpaDcCompressData2(
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists[*completed],     /* source buffer list */
+      dstBufferLists[*completed],     /* destination buffer list */
+      opData[*completed],            /* Operational data */
+      dcResults[*completed],         /* results structure */
+      (void *)completed);
+    if(status == CPA_STATUS_RETRY){
+      goto retry;
+    }
+    _mm_sfence();
+    // printf("Completed %d\n", *completed);
+    lastBufIdxSubmitted = *completed;
+    }
+    while(CPA_STATUS_SUCCESS != icp_sal_DcPollInstance(dcInstHandle, 0)){}
+  }
+  c = *completed;
+  uint64_t endTime = sampleCoderdtsc();
+  // printf("Submitted %d\n", *completed);
+  printf("---\nHwAxChainCompAndCrcStreamSync");
+  printSyncLatencyStats(endTime, startTime, numOperations, bufferSize);
+  printf("---\n");
+}
+
 int singleSwCompCrc(int bufferSize, int numOperations, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
@@ -361,7 +428,8 @@ int main(){
   int bufferSizes[] = {4096, 65536, 1024*1024};
 
   for(int i=0; i<3; i++){
-  singleSwCompCrc(bufferSizes[i], numOperations, dcInstHandles, sessionHandles);
+    streamingHwCompCrcSyncLatency(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
+  // singleSwCompCrc(bufferSizes[i], numOperations, dcInstHandles, sessionHandles);
   // streamingSwChainCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
   // streamingHwCompCrc(numOperations, bufferSizes[i], dcInstHandles, sessionHandles, numInstances);
   }

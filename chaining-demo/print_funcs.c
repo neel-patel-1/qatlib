@@ -49,6 +49,17 @@ void printThroughputStats(uint64_t endTime, uint64_t startTime, int numOperation
 
 }
 
+void printSyncLatencyStats(uint64_t endTime, uint64_t startTime, int numOperations, int bufferSize){
+  uint64_t exeCycles = endTime - startTime;
+  uint64_t exeTimeUs = exeCycles/2080;
+  double offloadsPerSec = exeTimeUs / (double)numOperations;
+  printf("Num Operations: %d\n", numOperations);
+  printf("BufferSize: %d\n", bufferSize);
+  printf("Execution Time(us): %lu\n", exeTimeUs);
+  printf("AveLatency: %f\n", offloadsPerSec);
+
+}
+
 void logLatencies(packet_stats **packetStatsPtrsArray, Cpa32U numOperations,char *configName){
   char filename[256];
   sprintf(filename, "%s_latencies.txt", configName);

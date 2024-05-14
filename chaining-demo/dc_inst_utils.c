@@ -96,7 +96,7 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle){
       allocateIntermediateBuffers(dcInstHandle, &bufferInterArray, &numInterBuffLists, &buffMetaSize);
   }
   if(cap.integrityCrcs64b){
-    // PRINT_DBG("Integrity CRC is enabled\n");
+    PRINT_DBG("Integrity CRC is enabled\n");
   }
   if (CPA_STATUS_SUCCESS == status)
   {
@@ -109,7 +109,7 @@ CpaStatus prepareDcInst(CpaInstanceHandle *pDcInstHandle){
   if (CPA_STATUS_SUCCESS == status)
   {
       /* Start DataCompression component */
-    //   PRINT_DBG("cpaDcStartInstance\n");
+      PRINT_DBG("cpaDcStartInstance\n");
       status = cpaDcStartInstance(
           dcInstHandle, numInterBuffLists, bufferInterArray);
   }
