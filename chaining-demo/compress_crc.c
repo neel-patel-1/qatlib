@@ -121,7 +121,7 @@ void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
   (*bufIdx)++;
   PRINT_DBG("Fwoding %d\n", *bufIdx);
 
-  // while( enqcmd(ctx->wq_reg, hw) ){PRINT_DBG("Retry\n");};
+  while( enqcmd(ctx->wq_reg, hw) ){PRINT_DBG("Retry\n");};
 }
 
 
