@@ -39,28 +39,9 @@
 int gDebugParam = 1;
 
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  Cpa16U numInstances = 0;
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+int hwCompCrcValidatedStream(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){
 
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
-  allocateDcInstances(dcInstHandles, &numInstances);
-  if (0 == numInstances)
-  {
-    fprintf(stderr, "No instances found\n");
-    return CPA_STATUS_FAIL;
-  }
-
-
-  int numOperations = 100;
-  int bufferSizes[] = {4096, 65536, 1024*1024};
-  int bufferSize = 4096;
+  CpaStatus status = CPA_STATUS_FAIL;
   CpaDcInstanceCapabilities cap = {0};
   CpaDcOpData **opData = NULL;
   CpaDcRqResults **dcResults = NULL;
@@ -70,10 +51,20 @@ int main(){
   packet_stats **stats = NULL;
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
+  Cpa16U numInstances = 0;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
 
   prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
 
- sessionHandle = sessionHandles[0];
+  sessionHandle = sessionHandles[0];
   dcInstHandle = dcInstHandles[0];
     cpaDcQueryCapabilities(dcInstHandle, &cap);
 
@@ -137,6 +128,24 @@ retry:
       PRINT_ERR("Buffer not Checksum'd correctly\n");
     }
   }
+}
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+
+
+  int bufferSizes[] = {4096, 65536, 1024*1024};
+  int bufferSize = 4096;
+  int numOperations = 1000;
+  hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
   // streamingSwChainCompCrc(
   //   100,
   //   4096,
