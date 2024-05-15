@@ -117,35 +117,95 @@ CpaStatus validateCompress(
   Cpa32U bufferSize)
 {
   CpaStatus status = CPA_STATUS_SUCCESS;
+  CpaBufferList *pBufferListDst = NULL;
+  status = generateBufferList(&pBufferListDst, bufferSize, 0, 1, prepareZeroSampleBuffer);
   /* Check the Buffer matches*/
-  z_stream *stream;
-  stream = malloc(sizeof(z_stream));
-  stream->zalloc = Z_NULL;
-  stream->zfree = Z_NULL;
-  stream->opaque = Z_NULL;
-  status = inflateInit(stream);
-  if (status != Z_OK)
+  /*
+    * We now check the results
+    */
+  if (CPA_STATUS_SUCCESS == status)
   {
-      PRINT_ERR("Error in zlib_inflateInit2, ret = %d\n", status);
-      return CPA_STATUS_FAIL;
+    if (dcResults->status != CPA_DC_OK)
+    {
+        PRINT_ERR("Results status not as expected (status = %d)\n",
+                  dcResults->status);
+        status = CPA_STATUS_FAIL;
+    }
   }
 
-  Bytef *tmpBuf = NULL;
-  OS_MALLOC(&tmpBuf, bufferSize);
-
+  /* Check the Buffer matches*/
+  struct z_stream_s *stream = NULL;
+  OS_MALLOC(&stream, sizeof(struct z_stream_s));
+  int ret = 0;
+  ret = inflateInit2(stream, -MAX_WBITS);
+  if (ret != Z_OK)
+  {
+      PRINT_ERR("Error in zlib_inflateInit2, ret = %d\n", ret);
+      return CPA_STATUS_FAIL;
+  }
   stream->next_in = (Bytef *)dstBufferList->pBuffers[0].pData;
   stream->avail_in = dcResults->produced;
-  stream->next_out = (Bytef *)tmpBuf;
+  stream->next_out = (Bytef *)pBufferListDst->pBuffers[0].pData;
   stream->avail_out = bufferSize;
-  int ret = inflate(stream, Z_FULL_FLUSH);
+  ret = inflate(stream, Z_FULL_FLUSH);
 
-  inflateEnd(stream);
-
-  ret = memcmp(srcBufferList->pBuffers[0].pData, tmpBuf, bufferSize);
+  ret = memcmp(srcBufferList->pBuffers[0].pData, pBufferListDst->pBuffers[0].pData, bufferSize);
   if(ret != 0){
     PRINT_ERR("Buffer data does not match\n");
     status = CPA_STATUS_FAIL;
   }
+
+
+  return status;
+}
+
+CpaStatus validateCompressDcInstHandleForDstBufferListCreate(
+  CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize,
+  CpaInstanceHandle dcInstHandle)
+{
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  CpaBufferList *pBufferListDst = NULL;
+  status = createDstBufferList(&pBufferListDst,bufferSize,  dcInstHandle, CPA_DC_HT_FULL_DYNAMIC);
+  /* Check the Buffer matches*/
+  /*
+    * We now check the results
+    */
+  if (CPA_STATUS_SUCCESS == status)
+  {
+    if (dcResults->status != CPA_DC_OK)
+    {
+        PRINT_ERR("Results status not as expected (status = %d)\n",
+                  dcResults->status);
+        status = CPA_STATUS_FAIL;
+    }
+  }
+
+  /* Check the Buffer matches*/
+  struct z_stream_s *stream = NULL;
+  OS_MALLOC(&stream, sizeof(struct z_stream_s));
+  int ret = 0;
+  ret = inflateInit2(stream, -MAX_WBITS);
+  if (ret != Z_OK)
+  {
+      PRINT_ERR("Error in zlib_inflateInit2, ret = %d\n", ret);
+      return CPA_STATUS_FAIL;
+  }
+  stream->next_in = (Bytef *)dstBufferList->pBuffers[0].pData;
+  stream->avail_in = dcResults->produced;
+  stream->next_out = (Bytef *)pBufferListDst->pBuffers[0].pData;
+  stream->avail_out = bufferSize;
+  ret = inflate(stream, Z_FULL_FLUSH);
+
+  ret = memcmp(srcBufferList->pBuffers[0].pData, pBufferListDst->pBuffers[0].pData, bufferSize);
+  if(ret != 0){
+    PRINT_ERR("Buffer data does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+
+
   return status;
 }
 
