@@ -58,90 +58,92 @@ int main(){
   }
 
 
-//   int numOperations = 100;
-//   int bufferSizes[] = {4096, 65536, 1024*1024};
-//   int bufferSize = 4096;
-//   CpaDcInstanceCapabilities cap = {0};
-//   CpaDcOpData **opData = NULL;
-//   CpaDcRqResults **dcResults = NULL;
-//   CpaCrcData *crcData = NULL;
-//   struct COMPLETION_STRUCT complete;
-//   callback_args **cb_args = NULL;
-//   packet_stats **stats = NULL;
-//   CpaBufferList **srcBufferLists = NULL;
-//   CpaBufferList **dstBufferLists = NULL;
+  int numOperations = 100;
+  int bufferSizes[] = {4096, 65536, 1024*1024};
+  int bufferSize = 4096;
+  CpaDcInstanceCapabilities cap = {0};
+  CpaDcOpData **opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  struct COMPLETION_STRUCT complete;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
 
-//   prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
+  prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
 
-//  sessionHandle = sessionHandles[0];
-//   dcInstHandle = dcInstHandles[0];
-//     cpaDcQueryCapabilities(dcInstHandle, &cap);
+ sessionHandle = sessionHandles[0];
+  dcInstHandle = dcInstHandles[0];
+    cpaDcQueryCapabilities(dcInstHandle, &cap);
 
-//   int *completed = malloc(sizeof(int));
-//   *completed = 0;
+  int *completed = malloc(sizeof(int));
+  *completed = 0;
 
-//   multiBufferTestAllocations(&cb_args,
-//       &stats,
-//       &opData,
-//       &dcResults,
-//       &crcData,
-//       numOperations,
-//       bufferSize,
-//       cap,
-//       &srcBufferLists,
-//       &dstBufferLists,
-//       dcInstHandle,
-//       &complete);
+  multiBufferTestAllocations(&cb_args,
+      &stats,
+      &opData,
+      &dcResults,
+      &crcData,
+      numOperations,
+      bufferSize,
+      cap,
+      &srcBufferLists,
+      &dstBufferLists,
+      dcInstHandle,
+      &complete);
 
-//     int lastBufIdxSubmitted = -1;
+    int lastBufIdxSubmitted = -1;
 
-//   uint64_t startTime = sampleCoderdtsc();
-//   while(*completed < numOperations){
-//     if(*completed > lastBufIdxSubmitted){
-// retry:
-//     status = cpaDcCompressData2(
-//       dcInstHandle,
-//       sessionHandle,
-//       srcBufferLists[*completed],     /* source buffer list */
-//       dstBufferLists[*completed],     /* destination buffer list */
-//       opData[*completed],            /* Operational data */
-//       dcResults[*completed],         /* results structure */
-//       (void *)completed);
-//     if(status == CPA_STATUS_RETRY){
-//       goto retry;
-//     }
-//     _mm_sfence();
-//     printf("Completed %d\n", *completed);
-//     lastBufIdxSubmitted = *completed;
-//     }
-//     status = icp_sal_DcPollInstance(dcInstHandle, 0);
-//   }
-//   uint64_t endTime = sampleCoderdtsc();
-//   // printf("Submitted %d\n", *completed);
-//   printf("---\nHwAxChainCompAndCrcStream\n");
-//   printThroughputStats(endTime, startTime, numOperations, bufferSize);
-//   printf("---\n");
-//   for(int i=0; i<numOperations; i++){
-//     if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
-//       PRINT_ERR("Buffer not compressed/decompressed correctly\n");
-//     }
-//   }
+  uint64_t startTime = sampleCoderdtsc();
+  while(*completed < numOperations){
+    if(*completed > lastBufIdxSubmitted){
+retry:
+    status = cpaDcCompressData2(
+      dcInstHandle,
+      sessionHandle,
+      srcBufferLists[*completed],     /* source buffer list */
+      dstBufferLists[*completed],     /* destination buffer list */
+      opData[*completed],            /* Operational data */
+      dcResults[*completed],         /* results structure */
+      (void *)completed);
+    if(status == CPA_STATUS_RETRY){
+      goto retry;
+    }
+    _mm_sfence();
+    printf("Completed %d\n", *completed);
+    lastBufIdxSubmitted = *completed;
+    }
+    status = icp_sal_DcPollInstance(dcInstHandle, 0);
+  }
+  uint64_t endTime = sampleCoderdtsc();
+  // printf("Submitted %d\n", *completed);
+  printf("---\nHwAxChainCompAndCrcStream\n");
+  printThroughputStats(endTime, startTime, numOperations, bufferSize);
+  printf("---\n");
+  for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
+  }
 
-//   status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
-//   if(status != CPA_STATUS_SUCCESS){
-//     PRINT_ERR("Buffer not Checksum'd correctly\n");
-//   }
-//   status = validateCompress(srcBufferLists[0], dstBufferLists[0], dcResults[0], bufferSize);
-//   if(status != CPA_STATUS_SUCCESS){
-//     PRINT_ERR("Buffer not Checksum'd correctly\n");
-//   }
-  streamingSwChainCompCrc(
-    100,
-    4096,
-    dcInstHandles,
-    sessionHandles,
-    numInstances
-  );
+  status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
+  if(status != CPA_STATUS_SUCCESS){
+    PRINT_ERR("Buffer not Checksum'd correctly\n");
+  }
+  for(int i=0; i<numOperations; i++){
+    status = validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize);
+    if(status != CPA_STATUS_SUCCESS){
+      PRINT_ERR("Buffer not Checksum'd correctly\n");
+    }
+  }
+  // streamingSwChainCompCrc(
+  //   100,
+  //   4096,
+  //   dcInstHandles,
+  //   sessionHandles,
+  //   numInstances
+  // );
 
 exit:
 

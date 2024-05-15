@@ -475,6 +475,11 @@ retry_comp_crc:
     if(comp->status != 0){
       task_node = task_node->next;
     }
+
+    rc = validateCompress(srcBufferLists[0], dstBufferLists[0], dcResults[0], bufferSize);
+    if (rc != CPA_STATUS_SUCCESS){
+      PRINT_ERR("Buffer not Checksum'd correctly\n");
+    }
   }
 
   uint64_t endTime = sampleCoderdtsc();
