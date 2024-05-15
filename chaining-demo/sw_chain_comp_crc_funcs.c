@@ -289,6 +289,12 @@ CpaStatus compCrcStream(Cpa32U numOperations,
 
   /* verify all crcs */
   rc = verifyCrcTaskNodes(dsa->multi_task_node, srcBufferLists, bufferSize);
+  if(rc != CPA_STATUS_SUCCESS){
+    PRINT_ERR("Invalid CRC\n");
+  }
+  for(int i=0; i<numOperations; i++){
+    rc = validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize);
+  }
 
   /* print stats */
   threadStats2P *thrStats = NULL;
