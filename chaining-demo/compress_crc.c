@@ -415,8 +415,14 @@ retry:
     }
   }
 
-  validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
-
+  status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
+  if(status != CPA_STATUS_SUCCESS){
+    PRINT_ERR("Buffer not Checksum'd correctly\n");
+  }
+  status = validateCompress(srcBufferLists[0], dstBufferLists[0], dcResults[0], bufferSize);
+  if(status != CPA_STATUS_SUCCESS){
+    PRINT_ERR("Buffer not Checksum'd correctly\n");
+  }
 exit:
 
   icp_sal_userStop();
