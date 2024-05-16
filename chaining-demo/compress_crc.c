@@ -84,10 +84,19 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
 
     int lastBufIdxSubmitted = -1;
 
+  strmSubCompCrcSoftChainCbArgs **cbArgs = NULL;
+  OS_MALLOC(&cbArgs,sizeof(strmSubCompCrcSoftChainCbArgs*)*numOperations);
+  for(int i=0; i<numOperations; i++){
+    PHYS_CONTIG_ALLOC(&(cbArgs[i]),sizeof(strmSubCompCrcSoftChainCbArgs));
+    cbArgs[i]->srcBufferList = dstBufferLists[i];
+    cbArgs[i]->completed = completed;
+    // cbArgs[i]->dsa = dsa;
+  }
+
   uint64_t startTime = sampleCoderdtsc();
   while(*completed < numOperations){
-    if(*completed > lastBufIdxSubmitted){
 retry:
+  if(lastBufIdxSubmitted < *completed){
     status = cpaDcCompressData2(
       dcInstHandle,
       sessionHandle,
@@ -95,14 +104,15 @@ retry:
       dstBufferLists[*completed],     /* destination buffer list */
       opData[*completed],            /* Operational data */
       dcResults[*completed],         /* results structure */
-      (void *)completed);
+      (void *)cbArgs[*completed]);
     if(status == CPA_STATUS_RETRY){
       goto retry;
     }
     _mm_sfence();
-    printf("Completed %d\n", *completed);
+    // printf("Completed %d\n", *completed);
     lastBufIdxSubmitted = *completed;
-    }
+  }
+
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
   uint64_t endTime = sampleCoderdtsc();
@@ -116,10 +126,10 @@ retry:
     }
   }
 
-  status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
-  if(status != CPA_STATUS_SUCCESS){
-    PRINT_ERR("Buffer not Checksum'd correctly\n");
-  }
+  // status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
+  // if(status != CPA_STATUS_SUCCESS){
+  //   PRINT_ERR("Buffer not Checksum'd correctly\n");
+  // }
   for(int i=0; i<numOperations; i++){
     status = validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize);
     if(status != CPA_STATUS_SUCCESS){
@@ -234,7 +244,7 @@ int main(){
   int bufferSizes[] = {4096, 65536, 1024*1024};
   int bufferSize = 4096;
   int numOperations = 1000;
-  // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
   streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
 
 

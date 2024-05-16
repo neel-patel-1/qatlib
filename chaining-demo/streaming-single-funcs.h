@@ -336,18 +336,54 @@ typedef struct _strmSubCompCrcSoftChainCbArgs{
   struct task *tsk;
   struct acctest_context *ctx;
   int *bufIdx;
+  CpaBufferList *srcBufferList;
+  int *completed;
 } strmSubCompCrcSoftChainCbArgs;
 
 void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
-  strmSubCompCrcSoftChainCbArgs *cbArgs = (strmSubCompCrcSoftChainCbArgs *)arg;
-  struct task *tsk = cbArgs->tsk;
-  struct hw_desc *hw = tsk->desc;
-  struct acctest_context *ctx = cbArgs->ctx;
-  int *bufIdx = cbArgs->bufIdx;
-  (*bufIdx)++;
-  // PRINT_DBG("Fwoding %d\n", *bufIdx);
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+  int numOperations = 1;
+  struct task_node *task_node = NULL;
+  Cpa32U bListIdx = 0;
 
-  while( enqcmd(ctx->wq_reg, hw) ){PRINT_DBG("Retry\n");};
+  strmSubCompCrcSoftChainCbArgs *cbArgs = (strmSubCompCrcSoftChainCbArgs *) arg;
+  CpaBufferList *srcBufferList = cbArgs->srcBufferList;
+  int *completed = cbArgs->completed;
+
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  acctest_alloc_multiple_tasks(dsa, numOperations);
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    CpaFlatBuffer *fltBuf = &(srcBufferList->pBuffers[0]);
+    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, fltBuf->dataLenInBytes);
+    bListIdx++;
+    task_node = task_node->next;
+  }
+  task_node = dsa->multi_task_node;
+
+	if (rc < 0)
+		return -ENOMEM;
+
+  struct hw_desc * hw= task_node->tsk->desc;
+  while( enqcmd(dsa->wq_reg, hw) ){PRINT_DBG("Retry\n");};
+  dsa_wait_crcgen(dsa, task_node->tsk);
+  (*completed)++;
+
+  // free(dsa->multi_task_node->tsk);
+  // free(dsa->multi_task_node);
+  // acctest_free(dsa);
 }
 
 
