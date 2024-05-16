@@ -60,7 +60,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
     return CPA_STATUS_FAIL;
   }
 
-  prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
+  prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
 
   sessionHandle = sessionHandles[0];
   dcInstHandle = dcInstHandles[0];
