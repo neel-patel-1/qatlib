@@ -356,29 +356,26 @@ void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
   CpaBufferList *srcBufferList = cbArgs->srcBufferList;
   int *completed = cbArgs->completed;
 
-  dsa = acctest_init(tflags);
-  dsa->dev_type = ACCFG_DEVICE_DSA;
+  // dsa = acctest_init(tflags);
+  // dsa->dev_type = ACCFG_DEVICE_DSA;
 
-  if (!dsa)
-		return -ENOMEM;
+  // if (!dsa)
+	// 	return -ENOMEM;
 
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  acctest_alloc_multiple_tasks(dsa, numOperations);
-  task_node = dsa->multi_task_node;
-  while(task_node){
-    CpaFlatBuffer *fltBuf = &(srcBufferList->pBuffers[0]);
-    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, fltBuf->dataLenInBytes);
-    bListIdx++;
-    task_node = task_node->next;
-  }
-  task_node = dsa->multi_task_node;
+  // rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  // acctest_alloc_multiple_tasks(dsa, numOperations);
+  // task_node = dsa->multi_task_node;
+  // while(task_node){
+  //   CpaFlatBuffer *fltBuf = &(srcBufferList->pBuffers[0]);
+  //   prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, fltBuf->dataLenInBytes);
+  //   bListIdx++;
+  //   task_node = task_node->next;
+  // }
+  // task_node = dsa->multi_task_node;
 
-	if (rc < 0)
-		return -ENOMEM;
-
-  struct hw_desc * hw= task_node->tsk->desc;
-  while( enqcmd(dsa->wq_reg, hw) ){PRINT_DBG("Retry\n");};
-  dsa_wait_crcgen(dsa, task_node->tsk);
+  // struct hw_desc * hw= task_node->tsk->desc;
+  // while( enqcmd(dsa->wq_reg, hw) ){PRINT_DBG("Retry\n");};
+  // dsa_wait_crcgen(dsa, task_node->tsk);
   (*completed)++;
 
   // free(dsa->multi_task_node->tsk);
