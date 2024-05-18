@@ -108,7 +108,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   task_node = dsa->multi_task_node;
   while(task_node){
     CpaFlatBuffer *fltBuf = &(srcBufferLists[bListIdx]->pBuffers[0]);
-    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, fltBuf->dataLenInBytes);
+    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, bufferSize); /* need to update the task with the compressed buffer len from inside the cb*/
     bListIdx++;
     task_node = task_node->next;
   }
@@ -128,6 +128,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
     cbArgs[i]->completed = completed;
     cbArgs[i]->tsk = task_node->tsk;
     cbArgs[i]->ctx = dsa;
+    cbArgs[i]->dcResults = dcResults[i];
     task_node = task_node->next;
   }
 
@@ -164,16 +165,10 @@ retry:
     }
   }
 
-  // status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
-  // if(status != CPA_STATUS_SUCCESS){
-  //   PRINT_ERR("Buffer not Checksum'd correctly\n");
-  // }
-  for(int i=0; i<numOperations; i++){
-    status = validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize);
-    if(status != CPA_STATUS_SUCCESS){
-      PRINT_ERR("Buffer not Checksum'd correctly\n");
-    }
+  if(CPA_STATUS_FAIL == verifyCrcTaskNodes(dsa->multi_task_node,srcBufferLists,bufferSize)){
+    PRINT_ERR("CRC not as expected\n");
   }
+
 }
 
 int hwCompCrcValidatedStream(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){

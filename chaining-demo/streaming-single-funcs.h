@@ -338,6 +338,7 @@ typedef struct _strmSubCompCrcSoftChainCbArgs{
   int *bufIdx;
   CpaBufferList *srcBufferList;
   int *completed;
+  CpaDcRqResults *dcResults;
 } strmSubCompCrcSoftChainCbArgs;
 
 void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
@@ -350,8 +351,9 @@ void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
   struct hw_desc * hw= NULL;
   struct task *tsk = cbArgs->tsk;
   struct acctest_context *ctx = cbArgs->ctx;
+  CpaDcRqResults *dcResults = cbArgs->dcResults;
 
-
+  tsk->desc->xfer_size = dcResults->consumed;
 
 
   hw= tsk->desc;

@@ -283,4 +283,5 @@ CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
     waitTaskNode = waitTaskNode->next;
     bufIdx++;
   }
+  return CPA_STATUS_SUCCESS;
 }
