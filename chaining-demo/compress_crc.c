@@ -53,6 +53,29 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   CpaInstanceHandle dcInstHandle = NULL;
   CpaDcSessionHandle sessionHandle = NULL;
 
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+
+  struct task_node *task_node = NULL;
+
+  Cpa32U bListIdx = 0;
+
+
+
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  acctest_alloc_multiple_tasks(dsa, numOperations);
+
   allocateDcInstances(dcInstHandles, &numInstances);
   if (0 == numInstances)
   {
@@ -82,7 +105,16 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
       dcInstHandle,
       &complete);
 
-    int lastBufIdxSubmitted = -1;
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    CpaFlatBuffer *fltBuf = &(srcBufferLists[bListIdx]->pBuffers[0]);
+    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, fltBuf->dataLenInBytes);
+    bListIdx++;
+    task_node = task_node->next;
+  }
+  task_node = dsa->multi_task_node;
+
+  int lastBufIdxSubmitted = -1;
 
   strmSubCompCrcSoftChainCbArgs **cbArgs = NULL;
   OS_MALLOC(&cbArgs,sizeof(strmSubCompCrcSoftChainCbArgs*)*numOperations);
@@ -90,7 +122,8 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
     PHYS_CONTIG_ALLOC(&(cbArgs[i]),sizeof(strmSubCompCrcSoftChainCbArgs));
     cbArgs[i]->srcBufferList = dstBufferLists[i];
     cbArgs[i]->completed = completed;
-    // cbArgs[i]->dsa = dsa;
+    cbArgs[i]->tsk = task_node->tsk;
+    cbArgs[i]->ctx = dsa;
   }
 
   uint64_t startTime = sampleCoderdtsc();
@@ -117,11 +150,11 @@ retry:
   }
   uint64_t endTime = sampleCoderdtsc();
   // printf("Submitted %d\n", *completed);
-  printf("---\nHwAxChainCompAndCrcStream\n");
+  printf("---\nSwAxChainCompAndCrcStream\n");
   printThroughputStats(endTime, startTime, numOperations, bufferSize);
   printf("---\n");
   for(int i=0; i<numOperations; i++){
-    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
+    if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i],  dcResults[i], bufferSize)){
       PRINT_ERR("Buffer not compressed/decompressed correctly\n");
     }
   }
@@ -217,10 +250,6 @@ retry:
     }
   }
 
-  status = validateCompressAndCrc64(srcBufferLists[0], dstBufferLists[0], bufferSize,  dcResults[0], dcInstHandle, &crcData[0]);
-  if(status != CPA_STATUS_SUCCESS){
-    PRINT_ERR("Buffer not Checksum'd correctly\n");
-  }
   for(int i=0; i<numOperations; i++){
     status = validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize);
     if(status != CPA_STATUS_SUCCESS){
@@ -244,7 +273,7 @@ int main(){
   int bufferSizes[] = {4096, 65536, 1024*1024};
   int bufferSize = 4096;
   int numOperations = 1000;
-  hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
   streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
 
 
