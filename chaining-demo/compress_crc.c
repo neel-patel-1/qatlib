@@ -62,6 +62,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   int opcode = 16;
 
   struct task_node *task_node = NULL;
+  struct task *tsk = NULL;
 
   Cpa32U bListIdx = 0;
 
@@ -165,9 +166,19 @@ retry:
     }
   }
 
-  if(CPA_STATUS_FAIL == verifyCrcTaskNodes(dsa->multi_task_node,srcBufferLists,bufferSize)){
-    PRINT_ERR("CRC not as expected\n");
+  task_node = dsa->multi_task_node;
+  bListIdx=0;
+  while(task_node){
+    CpaFlatBuffer *fltBuf = &(dstBufferLists[bListIdx]->pBuffers[0]);
+    tsk = task_node->tsk;
+    Cpa32U dstSize = dcResults[bListIdx]->produced;
+    if ( CPA_STATUS_SUCCESS != validateCrc32DSA(tsk, fltBuf, dstSize) ){
+      PRINT_ERR("CRC not as expected \n");
+    }
+    task_node = task_node->next;
+    bListIdx++;
   }
+
 
 }
 
