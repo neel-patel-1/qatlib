@@ -119,11 +119,16 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   strmSubCompCrcSoftChainCbArgs **cbArgs = NULL;
   OS_MALLOC(&cbArgs,sizeof(strmSubCompCrcSoftChainCbArgs*)*numOperations);
   for(int i=0; i<numOperations; i++){
+    if(task_node == NULL){
+      PRINT_ERR("Insufficient task nodes\n");
+      return CPA_STATUS_FAIL;
+    }
     PHYS_CONTIG_ALLOC(&(cbArgs[i]),sizeof(strmSubCompCrcSoftChainCbArgs));
     cbArgs[i]->srcBufferList = dstBufferLists[i];
     cbArgs[i]->completed = completed;
     cbArgs[i]->tsk = task_node->tsk;
     cbArgs[i]->ctx = dsa;
+    task_node = task_node->next;
   }
 
   uint64_t startTime = sampleCoderdtsc();
