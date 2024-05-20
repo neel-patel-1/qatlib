@@ -171,10 +171,9 @@ retry:
     Cpa8U *fltBuf = (dstBufferLists[bListIdx]->pBuffers[0].pData);
     tsk = task_node->tsk;
     Cpa32U dstSize = dcResults[bListIdx]->produced;
-    PRINT_DBG("Produced: %d\n", dstSize);
     if ( CPA_STATUS_SUCCESS != validateCrc32DSA(tsk, fltBuf, dstSize) ){
       PRINT_ERR("CRC not as expected \n");
-      // return CPA_STATUS_FAIL;
+      return CPA_STATUS_FAIL;
     }
     task_node = task_node->next;
     bListIdx++;

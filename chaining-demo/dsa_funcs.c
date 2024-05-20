@@ -370,10 +370,10 @@ static unsigned int reverse(unsigned int num)
 
 CpaStatus validateCrc32DSA(struct task *tsk, Cpa8U *buf, Cpa64U bufLen){
   int crc32 = dsa_calculate_crc32(buf, bufLen, tsk->crc_seed, tsk->dflags);
-  PRINT_DBG("Expected: 0x%x Output: 0x%x\n", crc32, tsk->comp->crc_val);
   int rc = CPA_STATUS_SUCCESS;
   if(tsk->comp->crc_val != crc32){
     PRINT_ERR("CRC32 Mismatch\n");
+    PRINT_ERR("Expected: 0x%x Output: 0x%x\n", crc32, tsk->comp->crc_val);
     rc = CPA_STATUS_FAIL;
   }
   return rc;
