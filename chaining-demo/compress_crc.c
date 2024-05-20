@@ -108,8 +108,8 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
 
   task_node = dsa->multi_task_node;
   while(task_node){
-    CpaFlatBuffer *fltBuf = &(srcBufferLists[bListIdx]->pBuffers[0]);
-    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, bufferSize); /* need to update the task with the compressed buffer len from inside the cb*/
+    CpaFlatBuffer *fltBuf = &(dstBufferLists[bListIdx]->pBuffers[0]);
+    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, -1); /* need to update the task with the compressed buffer len from inside the cb*/
     bListIdx++;
     task_node = task_node->next;
   }
@@ -149,7 +149,6 @@ retry:
       goto retry;
     }
     _mm_sfence();
-    // printf("Completed %d\n", *completed);
     lastBufIdxSubmitted = *completed;
   }
 
@@ -169,11 +168,13 @@ retry:
   task_node = dsa->multi_task_node;
   bListIdx=0;
   while(task_node){
-    CpaFlatBuffer *fltBuf = &(dstBufferLists[bListIdx]->pBuffers[0]);
+    Cpa8U *fltBuf = (dstBufferLists[bListIdx]->pBuffers[0].pData);
     tsk = task_node->tsk;
     Cpa32U dstSize = dcResults[bListIdx]->produced;
+    PRINT_DBG("Produced: %d\n", dstSize);
     if ( CPA_STATUS_SUCCESS != validateCrc32DSA(tsk, fltBuf, dstSize) ){
       PRINT_ERR("CRC not as expected \n");
+      // return CPA_STATUS_FAIL;
     }
     task_node = task_node->next;
     bListIdx++;

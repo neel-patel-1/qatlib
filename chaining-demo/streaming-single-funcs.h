@@ -353,7 +353,8 @@ void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
   struct acctest_context *ctx = cbArgs->ctx;
   CpaDcRqResults *dcResults = cbArgs->dcResults;
 
-  tsk->desc->xfer_size = dcResults->consumed;
+  tsk->desc->xfer_size = dcResults->produced;
+  // PRINT_DBG("PRODUCED: %d\n",dcResults->produced);
 
 
   hw= tsk->desc;
