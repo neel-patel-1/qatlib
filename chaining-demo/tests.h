@@ -31,34 +31,25 @@
 
 #include "sw_chain_comp_crc_funcs.h"
 #include "smt-thread-exps.h"
+#include "streaming-single-funcs.h"
 
-void chainingDeflateAndCrcComparison(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
-  int numConfigs = 3;
+void chainingDeflateAndCrcComparison( CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
   int numOperations = 1000;
-  int bufferSizes[] = {4096, 65536, 1*1024*1024};
-  int numFlows = 10;
 
-  if(numFlows > numInstances){
-    numFlows = numInstances;
+  int bufferSizes[] = {4096, 16384, 65536};
+
+  for(int i=0; i<3; i++){
+  int bufferSize = bufferSizes[i];
+
+  streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
+
+  singleSwCompCrcLatency(bufferSize, numOperations, dcInstHandles, sessionHandles);
+  swChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
+  streamingHwCompCrcSyncLatency(numOperations, bufferSize, dcInstHandles, sessionHandles, 1);
   }
 
-
-  CpaInstanceHandle *dcInstHandle = dcInstHandles[0];
-  for(int i=0; i<numConfigs; i++){
-    multiStreamSwCompressCrc64Func(numOperations, bufferSizes[i], numFlows, dcInstHandle);
-    cpaDcDsaCrcPerf(numOperations, bufferSizes[i], numFlows, dcInstHandles, sessionHandles);
-    multiStreamCompressCrc64PerformanceTest(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
-  }
-
-}
-
-void chainingDeflateAndCrcComparisonSinglePhys(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
-  int numConfigs = 3;
-  int numOperations = 1000;
-  int bufferSizes[] = {4096, 65536, 1*1024*1024};
-  int numFlows = 10;
-  int i=0;
-  multiStreamCompressCrc64PerformanceTestMultiPoller(numFlows,numOperations, bufferSizes[i],dcInstHandles,sessionHandles,numInstances);
 }
 
 void threadCoschedulingTest(int numInstances, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
