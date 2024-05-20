@@ -134,25 +134,42 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   }
 
   uint64_t startTime = sampleCoderdtsc();
-  while(*completed < numOperations){
-retry:
-  if(lastBufIdxSubmitted < *completed){
-    status = cpaDcCompressData2(
-      dcInstHandle,
-      sessionHandle,
-      srcBufferLists[*completed],     /* source buffer list */
-      dstBufferLists[*completed],     /* destination buffer list */
-      opData[*completed],            /* Operational data */
-      dcResults[*completed],         /* results structure */
-      (void *)cbArgs[*completed]);
-    if(status == CPA_STATUS_RETRY){
-      goto retry;
-    }
-    _mm_sfence();
-    lastBufIdxSubmitted = *completed;
-  }
+  task_node = dsa->multi_task_node; /* start with the first task node and update it every time a response is found*/
+  struct completion_record *comp = task_node->tsk->comp;
+  int bufIdx = 0; /* need to track the buffer idx to submit CPA requests for */
+  int e2eCompleted = 0;
+  /* We don't want to resubmit the same request every time the completion record is found unwritten
+  we need a way to only submit a request for each bufIdx once
 
-    status = icp_sal_DcPollInstance(dcInstHandle, 0);
+  check the comp -> yes -> update task node we check on next iteration
+  poll the icp -> forward to dsa ->
+  don't need to check anything unless we start overflowing the dsa, in which case we can buffer requests in memory (lots of space), but DSA is the faster ax, so we don't hit this case
+   */
+
+  while(task_node){
+retry:
+    if(bufIdx <numOperations){
+      status = cpaDcCompressData2(
+        dcInstHandle,
+        sessionHandle,
+        srcBufferLists[bufIdx],     /* source buffer list */
+        dstBufferLists[bufIdx],     /* destination buffer list */
+        opData[bufIdx],            /* Operational data */
+        dcResults[bufIdx],         /* results structure */
+        (void *)cbArgs[bufIdx]);
+      if(status == CPA_STATUS_RETRY){
+        goto retry;
+      }
+      bufIdx++;
+    }
+    status = icp_sal_DcPollInstance(dcInstHandle, 0); /* on success, we forwarded to DSA */
+    if(comp != 0){ /* found a completed dsa op */
+      task_node = task_node->next;
+      PRINT_DBG("Comp found %d\n", e2eCompleted);
+      if(task_node != NULL)
+        comp = task_node->tsk->comp;
+      e2eCompleted++;
+    }
   }
   uint64_t endTime = sampleCoderdtsc();
   // printf("Submitted %d\n", *completed);
@@ -162,6 +179,7 @@ retry:
   for(int i=0; i<numOperations; i++){
     if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i],  dcResults[i], bufferSize)){
       PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+      return CPA_STATUS_FAIL;
     }
   }
 
