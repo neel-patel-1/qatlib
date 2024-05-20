@@ -381,7 +381,7 @@ void dcSwChainedCompCrcStreamingFwdNonBlocking(void *arg, CpaStatus status){
 
 
   hw= tsk->desc;
-  while( enqcmd(ctx->wq_reg, hw) ){PRINT_ERR("Unexpected failure in dsa submission... Am I the fastest accel in the chain? Am I preceded by slow QAT?\n");};
+  if( enqcmd(ctx->wq_reg, hw) ){PRINT_ERR("Unexpected failure in dsa submission... Am I the fastest accel in the chain? Am I preceded by slow QAT?\n"); exit(-1);};
   /* noticed that we block in the callback until there is space in the shared work queue -- do we hit any retries?  */
 
 }

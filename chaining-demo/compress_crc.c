@@ -158,14 +158,15 @@ retry:
         dcResults[bufIdx],         /* results structure */
         (void *)cbArgs[bufIdx]);
       if(status == CPA_STATUS_RETRY){
+        status = icp_sal_DcPollInstance(dcInstHandle, 0); /* try to free up some space */
         goto retry;
       }
       bufIdx++;
     }
-    status = icp_sal_DcPollInstance(dcInstHandle, 0); /* on success, we forwarded to DSA */
+    status = icp_sal_DcPollInstance(dcInstHandle, 0); /* on success, we forwarded to DSA -- how do we integrate a freedom poll operation to give some space back to compressData? */
     if(*comp != 0){ /* found a completed dsa op */
       task_node = task_node->next;
-      PRINT_DBG("Comp found %d\n", e2eCompleted);
+      // PRINT_DBG("Comp found %d\n", e2eCompleted);
       if(task_node != NULL)
         comp = (uint8_t *)task_node->tsk->comp;
       e2eCompleted++;
