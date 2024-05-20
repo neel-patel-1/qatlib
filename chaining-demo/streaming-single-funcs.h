@@ -510,6 +510,19 @@ retry_comp_crc:
 
 int streamingSwChainCompCrcSync(Cpa32U numOperations, Cpa32U bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, Cpa16U numInstances){
   /* Sw streaming func */
+  CpaStatus status = CPA_STATUS_FAIL;
+  CpaDcInstanceCapabilities cap = {0};
+  CpaDcOpData **opData = NULL;
+  CpaDcRqResults **dcResults = NULL;
+  CpaCrcData *crcData = NULL;
+  struct COMPLETION_STRUCT complete;
+  callback_args **cb_args = NULL;
+  packet_stats **stats = NULL;
+  CpaBufferList **srcBufferLists = NULL;
+  CpaBufferList **dstBufferLists = NULL;
+  CpaInstanceHandle dcInstHandle = NULL;
+  CpaDcSessionHandle sessionHandle = NULL;
+
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
   int rc;
@@ -518,28 +531,10 @@ int streamingSwChainCompCrcSync(Cpa32U numOperations, Cpa32U bufferSize, CpaInst
   int wq_id = 0;
   int opcode = 16;
 
-  CpaStatus status = CPA_STATUS_SUCCESS;
-  CpaBufferList **srcBufferLists = NULL;
-  CpaBufferList **dstBufferLists = NULL;
-  CpaDcRqResults **dcResults = NULL;
-  CpaCrcData *crcData = NULL;
-  callback_args **cb_args = NULL;
-  CpaDcOpData **opData = NULL;
-  packet_stats **dummyStats = NULL; /* to appeaase multiBufferTestAllocations*/
-  struct COMPLETION_STRUCT complete;
+  struct task_node *task_node = NULL;
+  struct task *tsk = NULL;
 
-  CpaInstanceHandle dcInstHandle = NULL;
-  CpaDcSessionHandle sessionHandle = NULL;
-
-
-  two_stage_packet_stats **stats2Phase = NULL;
-  dc_crc_polling_args *dcCrcArgs = NULL;
-  crc_polling_args *crcArgs = NULL;
-  dsa_fwder_args **args;
-
-  pthread_t crcTid, dcToCrcTid;
-  struct task_node *waitTaskNode;
-
+  Cpa32U bListIdx = 0;
 
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -548,19 +543,27 @@ int streamingSwChainCompCrcSync(Cpa32U numOperations, Cpa32U bufferSize, CpaInst
 		return -ENOMEM;
 
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-	if (rc < 0)
-		return -ENOMEM;
+  acctest_alloc_multiple_tasks(dsa, numOperations);
+
+  allocateDcInstances(dcInstHandles, &numInstances);
+  if (0 == numInstances)
+  {
+    fprintf(stderr, "No instances found\n");
+    return CPA_STATUS_FAIL;
+  }
 
   prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
-  CpaDcInstanceCapabilities cap = {0};
-  cpaDcQueryCapabilities(dcInstHandles[0], &cap);
 
   sessionHandle = sessionHandles[0];
   dcInstHandle = dcInstHandles[0];
+  cpaDcQueryCapabilities(dcInstHandle, &cap);
+
+  int *completed = malloc(sizeof(int));
+  *completed = 0;
 
   multiBufferTestAllocations(
     &cb_args,
-    &dummyStats,
+    &stats,
     &opData,
     &dcResults,
     &crcData,
@@ -573,66 +576,82 @@ int streamingSwChainCompCrcSync(Cpa32U numOperations, Cpa32U bufferSize, CpaInst
     &complete
   );
 
-  int bufIdx = 0;
-  create_tsk_nodes_for_stage2_offload(srcBufferLists, numOperations, dsa);
-  strmSubCompCrcSoftChainCbArgs cbArgs[numOperations];// = malloc(sizeof(strmSubCompCrcSoftChainCbArgs) * numOperations);
-  struct task_node *task_node = dsa->multi_task_node;
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    CpaFlatBuffer *fltBuf = &(dstBufferLists[bListIdx]->pBuffers[0]);
+    prepare_crc_task(task_node->tsk, dsa, fltBuf->pData, -1); /* need to update the task with the compressed buffer len from inside the cb*/
+    bListIdx++;
+    task_node = task_node->next;
+  }
+  task_node = dsa->multi_task_node;
+
+  int lastBufIdxSubmitted = -1;
+
+
+  strmSubCompCrcSoftChainCbArgs **cbArgs = NULL;
+  OS_MALLOC(&cbArgs,sizeof(strmSubCompCrcSoftChainCbArgs*)*numOperations);
   for(int i=0; i<numOperations; i++){
-    cbArgs[i].tsk = task_node->tsk;
-    cbArgs[i].ctx = dsa;
-    cbArgs[i].bufIdx = &bufIdx;
+    if(task_node == NULL){
+      PRINT_ERR("Insufficient task nodes\n");
+      return CPA_STATUS_FAIL;
+    }
+    PHYS_CONTIG_ALLOC(&(cbArgs[i]),sizeof(strmSubCompCrcSoftChainCbArgs));
+    cbArgs[i]->srcBufferList = dstBufferLists[i];
+    cbArgs[i]->completed = completed;
+    cbArgs[i]->tsk = task_node->tsk;
+    cbArgs[i]->ctx = dsa;
+    cbArgs[i]->dcResults = dcResults[i];
     task_node = task_node->next;
   }
 
-  int lastBufIdxSubmitted = -1;
-  /* if the callback does not increment the bufIdx,
-    we should not submit another compression request for a bufIdx we
-    already submitted  */
-  task_node = dsa->multi_task_node;
-  struct completion_record *comp = task_node->tsk->comp;
-
   uint64_t startTime = sampleCoderdtsc();
-  while(task_node){
-    comp = task_node->tsk->comp;
-  if(bufIdx > lastBufIdxSubmitted && bufIdx < numOperations){
-retry_comp_crc:
+  while(*completed < numOperations){
+retry:
+  if(lastBufIdxSubmitted < *completed){
     status = cpaDcCompressData2(
       dcInstHandle,
       sessionHandle,
-      srcBufferLists[bufIdx],     /* source buffer list */
-      dstBufferLists[bufIdx],     /* destination buffer list */
-      opData[bufIdx],            /* Operational data */
-      dcResults[bufIdx],         /* results structure */
-      (void *)&(cbArgs[bufIdx])); /* data sent as is to the callback function*/
+      srcBufferLists[*completed],     /* source buffer list */
+      dstBufferLists[*completed],     /* destination buffer list */
+      opData[*completed],            /* Operational data */
+      dcResults[*completed],         /* results structure */
+      (void *)cbArgs[*completed]);
     if(status == CPA_STATUS_RETRY){
-      goto retry_comp_crc;
+      goto retry;
     }
-    lastBufIdxSubmitted = bufIdx;
-    // PRINT_DBG("Submitted %d\n", bufIdx);
-  }
-
-    while( CPA_STATUS_SUCCESS != icp_sal_DcPollInstance(dcInstHandle, 0)){};
     _mm_sfence();
-
-    /* poll for crc completion and increment if completed */
-
-    while(comp->status != 0){ }
-      task_node = task_node->next;
-
+    lastBufIdxSubmitted = *completed;
   }
 
+    status = icp_sal_DcPollInstance(dcInstHandle, 0);
+  }
   uint64_t endTime = sampleCoderdtsc();
 
   printf("---\nSyncSwAxChainCompAndCrc\n");
   printSyncLatencyStats(endTime, startTime, numOperations, bufferSize);
   printf("---\n");
 
-  rc = verifyCrcTaskNodes(dsa->multi_task_node,srcBufferLists,bufferSize);
-  if (rc != CPA_STATUS_SUCCESS){
-    PRINT_ERR("Buffer not Checksum'd correctly\n");
+  for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i],  dcResults[i], bufferSize)){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+    }
   }
 
-  rc = validateCompress(srcBufferLists[0], dstBufferLists[0], dcResults[0], bufferSize);
+  task_node = dsa->multi_task_node;
+  bListIdx=0;
+  while(task_node){
+    Cpa8U *fltBuf = (dstBufferLists[bListIdx]->pBuffers[0].pData);
+    tsk = task_node->tsk;
+    Cpa32U dstSize = dcResults[bListIdx]->produced;
+    if ( CPA_STATUS_SUCCESS != validateCrc32DSA(tsk, fltBuf, dstSize) ){
+      PRINT_ERR("CRC not as expected \n");
+      return CPA_STATUS_FAIL;
+    }
+    task_node = task_node->next;
+    bListIdx++;
+  }
+
+
 }
 
 

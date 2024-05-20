@@ -374,10 +374,13 @@ int main(){
 
   int bufferSizes[] = {4096, 65536, 1024*1024};
   int bufferSize = 4096;
-  int numOperations = 1000;
+  int numOperations = 10000;
   // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
   // streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  // streamingHwCompCrcSyncLatency(numOperations, bufferSize, dcInstHandles, sessionHandles, 1);
+  // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingSwChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
 
 exit:
 
