@@ -364,6 +364,29 @@ void dcSwChainedCompCrcStreamingFwd(void *arg, CpaStatus status){
 
 }
 
+void dcSwChainedCompCrcStreamingFwdNonBlocking(void *arg, CpaStatus status){
+
+
+
+  strmSubCompCrcSoftChainCbArgs *cbArgs = (strmSubCompCrcSoftChainCbArgs *) arg;
+  CpaBufferList *srcBufferList = cbArgs->srcBufferList;
+  int *completed = cbArgs->completed;
+  struct hw_desc * hw= NULL;
+  struct task *tsk = cbArgs->tsk;
+  struct acctest_context *ctx = cbArgs->ctx;
+  CpaDcRqResults *dcResults = cbArgs->dcResults;
+
+  tsk->desc->xfer_size = dcResults->produced;
+  // PRINT_DBG("PRODUCED: %d\n",dcResults->produced);
+
+
+  hw= tsk->desc;
+  while( enqcmd(ctx->wq_reg, hw) ){PRINT_DBG("Retry\n");};
+  // dsa_wait_crcgen(ctx, tsk);
+  // (*completed)++;
+
+}
+
 
 CpaStatus prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
   Cpa16U numInstances, Cpa16U numSessions){
@@ -373,6 +396,18 @@ CpaStatus prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(CpaInstan
     prepareDcInst(&dcInstHandles[i]);
     sessionHandles[i] = sessionHandles[i];
     prepareDcSession(dcInstHandles[i], &sessionHandles[i], dcSwChainedCompCrcStreamingFwd);
+  }
+  return status;
+}
+
+CpaStatus prepareMultipleSwChainedNonBlockingCallbackCompressAndCrc64InstancesAndSessions(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles,
+  Cpa16U numInstances, Cpa16U numSessions){
+  CpaStatus status = CPA_STATUS_SUCCESS;
+  for(int i=0; i<numInstances; i++){
+    dcInstHandles[i] = dcInstHandles[i];
+    prepareDcInst(&dcInstHandles[i]);
+    sessionHandles[i] = sessionHandles[i];
+    prepareDcSession(dcInstHandles[i], &sessionHandles[i], dcSwChainedCompCrcStreamingFwdNonBlocking);
   }
   return status;
 }
@@ -508,7 +543,7 @@ retry_comp_crc:
   }
 }
 
-int streamingSwChainCompCrcSync(Cpa32U numOperations, Cpa32U bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, Cpa16U numInstances){
+int swChainCompCrcSync(Cpa32U numOperations, Cpa32U bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, Cpa16U numInstances){
   /* Sw streaming func */
   CpaStatus status = CPA_STATUS_FAIL;
   CpaDcInstanceCapabilities cap = {0};

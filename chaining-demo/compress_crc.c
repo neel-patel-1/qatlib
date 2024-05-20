@@ -84,7 +84,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
     return CPA_STATUS_FAIL;
   }
 
-  prepareMultipleSwChainedCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
+  prepareMultipleSwChainedNonBlockingCallbackCompressAndCrc64InstancesAndSessions(dcInstHandles, sessionHandles, numInstances, numInstances);
 
   sessionHandle = sessionHandles[0];
   dcInstHandle = dcInstHandles[0];
@@ -376,11 +376,10 @@ int main(){
   int bufferSize = 4096;
   int numOperations = 10000;
   // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  // streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
   // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
   // streamingHwCompCrcSyncLatency(numOperations, bufferSize, dcInstHandles, sessionHandles, 1);
-  // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  streamingSwChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
+  swChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
 
 exit:
 
