@@ -135,7 +135,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
 
   uint64_t startTime = sampleCoderdtsc();
   task_node = dsa->multi_task_node; /* start with the first task node and update it every time a response is found*/
-  struct completion_record *comp = task_node->tsk->comp;
+  const volatile uint8_t *comp = (uint8_t *)task_node->tsk->comp;
   int bufIdx = 0; /* need to track the buffer idx to submit CPA requests for */
   int e2eCompleted = 0;
   /* We don't want to resubmit the same request every time the completion record is found unwritten
@@ -163,11 +163,11 @@ retry:
       bufIdx++;
     }
     status = icp_sal_DcPollInstance(dcInstHandle, 0); /* on success, we forwarded to DSA */
-    if(comp != 0){ /* found a completed dsa op */
+    if(*comp != 0){ /* found a completed dsa op */
       task_node = task_node->next;
       PRINT_DBG("Comp found %d\n", e2eCompleted);
       if(task_node != NULL)
-        comp = task_node->tsk->comp;
+        comp = (uint8_t *)task_node->tsk->comp;
       e2eCompleted++;
     }
   }
