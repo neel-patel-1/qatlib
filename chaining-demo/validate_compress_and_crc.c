@@ -136,6 +136,7 @@ CpaStatus validateCompress(
   /* Check the Buffer matches*/
   struct z_stream_s *stream = NULL;
   OS_MALLOC(&stream, sizeof(struct z_stream_s));
+  memset(stream, 0, sizeof(struct z_stream_s));
   int ret = 0;
   ret = inflateInit2(stream, -MAX_WBITS);
   if (ret != Z_OK)
