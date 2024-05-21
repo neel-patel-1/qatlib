@@ -44,7 +44,11 @@ CpaStatus validateCompressAndCrc64Sw(
   Cpa32U bufferSize,
   CpaCrcData *crcData);
 
-// CpaStatus validateCrc32DSA(waitTask,buf, bufferSize);
+CpaStatus validateIntegrityCrc64(CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize,
+  CpaCrcData *crcData);
 
 CpaStatus verifyCrcTaskNodes(struct task_node *waitTaskNode,
   CpaBufferList **srcBufferLists, Cpa32U bufferSize

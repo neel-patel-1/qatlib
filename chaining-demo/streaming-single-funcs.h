@@ -106,7 +106,14 @@ retry:
   for(int i=0; i<numOperations; i++){
     if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
       PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+      return CPA_STATUS_FAIL;
     }
+    if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize)){
+      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+      return CPA_STATUS_FAIL;
+    }
+
+    if(validateIntegrityCrc64(srcBufferLists[i],dstBufferLists[i],dcResults[i],bufferSize,&(crcData[i])));
   }
 }
 

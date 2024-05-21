@@ -110,6 +110,35 @@ CpaStatus validateCompressAndCrc64(
 
 }
 
+CpaStatus validateIntegrityCrc64(CpaBufferList *srcBufferList,
+  CpaBufferList *dstBufferList,
+  CpaDcRqResults *dcResults,
+  Cpa32U bufferSize,
+  CpaCrcData *crcData)
+{
+  CpaStatus status  = CPA_STATUS_SUCCESS;
+  uint64_t crc64 = crc64_be(0L, Z_NULL, 0);
+  crc64 = crc64_be(crc64, srcBufferList->pBuffers[0].pData, bufferSize);
+
+  uint64_t crc64_orig = crcData->integrityCrc64b.iCrc;
+  int ret = memcmp(&crc64, &crc64_orig, sizeof(uint64_t));
+  if(ret != 0){
+    PRINT_ERR("Src CRC64 does not match\n");
+    status = CPA_STATUS_FAIL;
+  }
+
+  crc64 = crc64_be(0L, Z_NULL, 0);
+  crc64 = crc64_be(crc64, dstBufferList->pBuffers[0].pData, dcResults->produced);
+  crc64_orig = crcData->integrityCrc64b.oCrc;
+  ret = memcmp(&crc64, &crc64_orig, sizeof(uint64_t));
+  if(ret != 0){
+    PRINT_ERR("Dst CRC64 does not match\n");
+    CpaStatus status = CPA_STATUS_FAIL;
+  }
+  return status;
+}
+
+
 CpaStatus validateCompress(
   CpaBufferList *srcBufferList,
   CpaBufferList *dstBufferList,
