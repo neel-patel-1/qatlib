@@ -61,7 +61,7 @@ int main(){
   // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
   streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
   // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
+  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles);
 
   // singleSwCompCrcLatency(bufferSize, numOperations, dcInstHandles, sessionHandles);
   // swChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);

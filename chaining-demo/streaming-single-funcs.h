@@ -38,7 +38,7 @@
 #include <xmmintrin.h>
 
 
-int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles, Cpa32U numInstances){
+int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles){
   CpaStatus status;
   CpaDcInstanceCapabilities cap = {0};
   CpaDcOpData **opData = NULL;
@@ -49,6 +49,9 @@ int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcI
   packet_stats **stats = NULL;
   CpaBufferList **srcBufferLists = NULL;
   CpaBufferList **dstBufferLists = NULL;
+
+  Cpa16U numInstances;
+  allocateDcInstances(dcInstHandles, &numInstances);
 
   /* Streaming submission from a single thread single inst hw*/
   prepareMultipleCompressAndCrc64InstancesAndSessionsForStreamingSubmitAndPoll(dcInstHandles, sessionHandles, numInstances, numInstances);
