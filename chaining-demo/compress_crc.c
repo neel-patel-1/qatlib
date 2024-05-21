@@ -52,17 +52,20 @@ int main(){
   int numOperations = 1000;
 
   int bufferSizes[] = {4096, 65536, 1024*1024};
+  int numOperationss[] = {10000, 10000, 1000};
 
-  for(int i=0; i<3; i++){
+  for(int i=0; i<1; i++){
   int bufferSize = bufferSizes[i];
+  int numOperations = numOperationss[i];
 
   // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  // streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
 
   // singleSwCompCrcLatency(bufferSize, numOperations, dcInstHandles, sessionHandles);
   // swChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
-  streamingHwCompCrcSyncLatency(numOperations, bufferSize, dcInstHandles, sessionHandles, 1);
+  // streamingHwCompCrcSyncLatency(numOperations, bufferSize, dcInstHandles, sessionHandles, 1);
   }
 exit:
 

@@ -88,10 +88,9 @@ retry:
       dcResults[*completed],         /* results structure */
       (void *)completed);
     if(status == CPA_STATUS_RETRY){
-      status = icp_sal_DcPollInstance(dcInstHandle, 0);
+      // status = icp_sal_DcPollInstance(dcInstHandle, 0);
       goto retry;
     }
-    _mm_sfence();
     lastBufIdxSubmitted = *completed;
     }
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
@@ -986,22 +985,20 @@ int hwCompCrcValidatedStream(int numOperations, int bufferSize, CpaInstanceHandl
     int lastBufIdxSubmitted = -1;
 
   uint64_t startTime = sampleCoderdtsc();
-  while(*completed < numOperations){
-    if(*completed > lastBufIdxSubmitted){
+  int nextBufIdx = 0;
+  while(nextBufIdx < numOperations){
+    if(nextBufIdx > lastBufIdxSubmitted){
+      nextBufIdx = *completed;
 retry:
-    status = cpaDcCompressData2(
-      dcInstHandle,
-      sessionHandle,
-      srcBufferLists[*completed],     /* source buffer list */
-      dstBufferLists[*completed],     /* destination buffer list */
-      opData[*completed],            /* Operational data */
-      dcResults[*completed],         /* results structure */
-      (void *)completed);
-    if(status == CPA_STATUS_RETRY){
-      status = icp_sal_DcPollInstance(dcInstHandle, 0);
-      goto retry;
-    }
-    lastBufIdxSubmitted = *completed;
+      status = cpaDcCompressData2(
+        dcInstHandle,
+        sessionHandle,
+        srcBufferLists[nextBufIdx],     /* source buffer list */
+        dstBufferLists[nextBufIdx],     /* destination buffer list */
+        opData[nextBufIdx],            /* Operational data */
+        dcResults[nextBufIdx],         /* results structure */
+        (void *)completed);
+      lastBufIdxSubmitted = nextBufIdx;
     }
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
