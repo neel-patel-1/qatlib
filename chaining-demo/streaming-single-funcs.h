@@ -105,7 +105,7 @@ retry:
   printf("---\n");
   for(int i=0; i<numOperations; i++){
     if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){
-      PRINT_ERR("Buffer not compressed/decompressed correctly\n");
+      PRINT_ERR("Buffer not compressed/decompressed + iCRC'd correctly\n");
       return CPA_STATUS_FAIL;
     }
     if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i], dcResults[i], bufferSize)){
@@ -113,7 +113,10 @@ retry:
       return CPA_STATUS_FAIL;
     }
 
-    if(validateIntegrityCrc64(srcBufferLists[i],dstBufferLists[i],dcResults[i],bufferSize,&(crcData[i])));
+    if(CPA_STATUS_SUCCESS != validateIntegrityCrc64(srcBufferLists[i],dstBufferLists[i],dcResults[i],bufferSize,&(crcData[i]))){
+      PRINT_ERR("Buffer not compressed/decompressed + iCRC'd correctly\n");
+      return CPA_STATUS_FAIL;
+    }
   }
 }
 
@@ -386,7 +389,7 @@ void dcSwChainedCompCrcStreamingFwdNonBlocking(void *arg, CpaStatus status){
 
 
   hw= tsk->desc;
-  if( enqcmd(ctx->wq_reg, hw) ){PRINT_ERR("Unexpected failure in dsa submission... Am I the fastest accel in the chain? Am I preceded by slow QAT?\n"); exit(-1);};
+  // if( enqcmd(ctx->wq_reg, hw) ){PRINT_ERR("Unexpected failure in dsa submission... Am I the fastest accel in the chain? Am I preceded by slow QAT?\n"); exit(-1);};
   /* noticed that we block in the callback until there is space in the shared work queue -- do we hit any retries?  */
 
 }
@@ -802,8 +805,8 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
    */
 
   while(task_node){
-retry:
     if(bufIdx <numOperations){
+retry:
       status = cpaDcCompressData2(
         dcInstHandle,
         sessionHandle,
@@ -833,6 +836,11 @@ retry:
   printThroughputStats(endTime, startTime, numOperations, bufferSize);
   printf("---\n");
   for(int i=0; i<numOperations; i++){
+    if (CPA_STATUS_SUCCESS != validateCompressAndCrc64(srcBufferLists[i], dstBufferLists[i], bufferSize, dcResults[i], dcInstHandle, &(crcData[i]))){ /* should pass since iCRC's are enabled */
+      PRINT_ERR("Buffer not compressed/decompressed + iCRC'd correctly\n");
+      return CPA_STATUS_FAIL;
+    }
+
     if (CPA_STATUS_SUCCESS != validateCompress(srcBufferLists[i], dstBufferLists[i],  dcResults[i], bufferSize)){
       PRINT_ERR("Buffer not compressed/decompressed correctly\n");
       return CPA_STATUS_FAIL;

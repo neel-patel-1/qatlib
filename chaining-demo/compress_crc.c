@@ -58,7 +58,7 @@ int main(){
   int bufferSize = bufferSizes[i];
   int numOperations = numOperationss[i];
 
-  // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  // streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles); /* just don't submit and go to next task node regardless of comp */
   streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
   // hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
   streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles);
