@@ -389,7 +389,7 @@ void dcSwChainedCompCrcStreamingFwdNonBlocking(void *arg, CpaStatus status){
 
 
   hw= tsk->desc;
-  // if( enqcmd(ctx->wq_reg, hw) ){PRINT_ERR("Unexpected failure in dsa submission... Am I the fastest accel in the chain? Am I preceded by slow QAT?\n"); exit(-1);};
+  if( enqcmd(ctx->wq_reg, hw) ){PRINT_ERR("Unexpected failure in dsa submission... Am I the fastest accel in the chain? Am I preceded by slow QAT?\n"); exit(-1);};
   /* noticed that we block in the callback until there is space in the shared work queue -- do we hit any retries?  */
 
 }
@@ -804,7 +804,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   don't need to check anything unless we start overflowing the dsa, in which case we can buffer requests in memory (lots of space), but DSA is the faster ax, so we don't hit this case
    */
 
-  while(task_node){
+  while(0){
     if(bufIdx <numOperations){
 retry:
       status = cpaDcCompressData2(
