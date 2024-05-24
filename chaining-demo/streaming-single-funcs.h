@@ -81,22 +81,22 @@ int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcI
   uint64_t startTime = sampleCoderdtsc();
   int nextToSubmit = 0;
   while(*completed < numOperations){
-    // if(*completed > lastBufIdxSubmitted){
+    if(nextToSubmit < numOperations){
 retry:
       status = cpaDcCompressData2(
         dcInstHandle,
         sessionHandle,
-        srcBufferLists[*completed],     /* source buffer list */
-        dstBufferLists[*completed],     /* destination buffer list */
-        opData[*completed],            /* Operational data */
-        dcResults[*completed],         /* results structure */
+        srcBufferLists[nextToSubmit],     /* source buffer list */
+        dstBufferLists[nextToSubmit],     /* destination buffer list */
+        opData[nextToSubmit],            /* Operational data */
+        dcResults[nextToSubmit],         /* results structure */
         (void *)completed);
       if(status == CPA_STATUS_RETRY){
         status = icp_sal_DcPollInstance(dcInstHandle, 0);
         goto retry;
       }
-      // lastBufIdxSubmitted = *completed;
-    // }
+      nextToSubmit++;
+    }
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
   uint64_t endTime = sampleCoderdtsc();
