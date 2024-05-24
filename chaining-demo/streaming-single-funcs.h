@@ -79,23 +79,24 @@ int streamingHwCompCrc(int numOperations, int bufferSize, CpaInstanceHandle *dcI
   int lastBufIdxSubmitted = -1;
 
   uint64_t startTime = sampleCoderdtsc();
+  int nextToSubmit = 0;
   while(*completed < numOperations){
-    if(*completed > lastBufIdxSubmitted){
+    // if(*completed > lastBufIdxSubmitted){
 retry:
-    status = cpaDcCompressData2(
-      dcInstHandle,
-      sessionHandle,
-      srcBufferLists[*completed],     /* source buffer list */
-      dstBufferLists[*completed],     /* destination buffer list */
-      opData[*completed],            /* Operational data */
-      dcResults[*completed],         /* results structure */
-      (void *)completed);
-    if(status == CPA_STATUS_RETRY){
-      // status = icp_sal_DcPollInstance(dcInstHandle, 0);
-      goto retry;
-    }
-    lastBufIdxSubmitted = *completed;
-    }
+      status = cpaDcCompressData2(
+        dcInstHandle,
+        sessionHandle,
+        srcBufferLists[*completed],     /* source buffer list */
+        dstBufferLists[*completed],     /* destination buffer list */
+        opData[*completed],            /* Operational data */
+        dcResults[*completed],         /* results structure */
+        (void *)completed);
+      if(status == CPA_STATUS_RETRY){
+        status = icp_sal_DcPollInstance(dcInstHandle, 0);
+        goto retry;
+      }
+      // lastBufIdxSubmitted = *completed;
+    // }
     status = icp_sal_DcPollInstance(dcInstHandle, 0);
   }
   uint64_t endTime = sampleCoderdtsc();
@@ -804,7 +805,7 @@ int streamingSwChainCompCrcValidated(int numOperations, int bufferSize, CpaInsta
   don't need to check anything unless we start overflowing the dsa, in which case we can buffer requests in memory (lots of space), but DSA is the faster ax, so we don't hit this case
    */
 
-  while(0){
+  while(task_node){
     if(bufIdx <numOperations){
 retry:
       status = cpaDcCompressData2(
