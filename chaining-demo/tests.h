@@ -34,16 +34,16 @@
 #include "streaming-single-funcs.h"
 
 void chainingDeflateAndCrcComparison( CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle *sessionHandles ){
-  int numOperations = 1000;
-
-  int bufferSizes[] = {4096, 16384, 65536};
+  int bufferSizes[] = {4096, 65536, 1024*1024};
+  int numOperationss[] = {10000, 10000, 1000};
 
   for(int i=0; i<3; i++){
   int bufferSize = bufferSizes[i];
+  int numOperations = numOperationss[i];
 
-  streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingSWCompressAndCRC32Validated(numOperations, bufferSize, dcInstHandles, sessionHandles); /* just don't submit and go to next task node regardless of comp */
   streamingSwChainCompCrcValidated(numOperations, bufferSize, dcInstHandles, sessionHandles);
-  hwCompCrcValidatedStream(numOperations, bufferSize, dcInstHandles, sessionHandles);
+  streamingHwCompCrc(numOperations, bufferSize, dcInstHandles, sessionHandles);
 
   singleSwCompCrcLatency(bufferSize, numOperations, dcInstHandles, sessionHandles);
   swChainCompCrcSync(numOperations, bufferSize, dcInstHandles, sessionHandles,1);
