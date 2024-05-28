@@ -38,8 +38,16 @@ struct hw_desc *hw;
 /* doorbell */
 _Atomic bool pendingContext;
 
+/* Times */
+uint64_t prePrep;
+uint64_t postPrep;
+uint64_t postSubmit;
+uint64_t postYield;
+
 void worker_func(){
-  PRINT_DBG("Scheduling Pending context\n");
+
+  while(!pendingContext){}
+  PRINT_DBG("Response received, switching back to pending context \n");
 }
 
 void request_func(){
@@ -47,24 +55,23 @@ void request_func(){
     src_bufs[curbuf][i] = (char)i;
   }
 
-  uint64_t prePrep = sampleCoderdtsc();
+  prePrep = sampleCoderdtsc();
 
   prepare_memcpy_task(req_tsk_node->tsk, dsa, (src_bufs[0]), buf_size, dst_bufs[0]);
   hw = req_tsk_node->tsk->desc;
 
-  uint64_t postPrep = sampleCoderdtsc();
+  postPrep = sampleCoderdtsc();
 
   if( enqcmd(dsa->wq_reg, hw) ){PRINT_ERR("Failure in enq\n"); exit(-1);};
   comp = (uint8_t *)req_tsk_node->tsk->comp;
 
-  uint64_t postSubmit = sampleCoderdtsc();
+  postSubmit = sampleCoderdtsc();
 
   PRINT_DBG("Request Context Yielding\n");
-  setcontext(&contexts[1]);
+  swapcontext_very_fast(&contexts[0], &contexts[1]); /* save current context, swap to main context */
 
-  // swapcontext_very_fast()
 
-  uint64_t postYield = sampleCoderdtsc();
+  postYield = sampleCoderdtsc();
 
 
 
@@ -128,6 +135,8 @@ int main(){
 
   comp = (uint8_t *)sched_tsk_node->tsk->comp;
   while(*comp == 0){}
+  pendingContext = true;
+
   if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
     PRINT_ERR("Failed copy\n");
   }
