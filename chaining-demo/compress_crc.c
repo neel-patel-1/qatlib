@@ -52,6 +52,7 @@ int gDebugParam = 1;
 #define NUMCONTEXTS 10              /* how many contexts to make */
 #define STACKSIZE 4096
 #define NUM_DESCS 128 /* Size of the shared work queue */
+#define NUM_COMPS NUM_DESCS
 #define NUM_BUFS 128
 #define BUF_SIZE 4096
 
@@ -65,9 +66,14 @@ struct hw_desc *descs = NULL;
 struct hw_desc *cur_desc = NULL;
 int curdesc = 0;
 
+
 char *src_bufs[NUM_BUFS];
 char *dst_bufs[NUM_BUFS];
 int curbuf = 0;
+
+/* Don't want any false sharing between 32B completion records */
+struct completion_record **comps=NULL;
+int curcomp = 0;
 
 void
 mkcontext(ucontext_t *uc,  void *function)
@@ -116,7 +122,7 @@ void worker_fn(){
 }
 
 void request_fn(){
-  /* ROCKSDB SCAN */
+  /* application work */
   for(int i=0; i<BUF_SIZE; i++)
     src_bufs[curbuf][i] = (char)i;
 
@@ -126,10 +132,15 @@ void request_fn(){
   mDesc->src_addr = (uint64_t)(src_bufs[curbuf]);
   mDesc->dst_addr = (uint64_t)(dst_bufs[curbuf]);
   mDesc->xfer_size = BUF_SIZE;
+  mDesc->completion_addr = (uint64_t)(comps[curcomp]);
 
   while(enqcmd(dsa->wq_reg, mDesc)){ }
 
   /* Re-entry point */
+  for(int i=0; i<BUF_SIZE; i++)
+    if (src_bufs[curbuf][i] != dst_bufs[curbuf][i]){ PRINT_ERR("bad copy\n"); exit(-1); }
+
+  curdesc = (curdesc + 1) % NUM_DESCS;
   curbuf = (curbuf + 1) % NUM_BUFS;
 
 }
@@ -169,7 +180,23 @@ int main(){
     acctest_prep_desc_common(&(descs[i]), opcode, 0x0, 0x0, 0, dflags);
   }
 
+  /* Allocate the buffers we will use */
+  for(int i=0; i<NUM_BUFS; i++){
+    src_bufs[i] = malloc(BUF_SIZE);
+    dst_bufs[i] = malloc(BUF_SIZE);
+  }
+
+  /* Allocate the completion records */
+  comps = malloc(sizeof(struct completion_record *) * NUM_COMPS);
+  for(int i=0; i<NUM_COMPS; i++){
+    comps[i] = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
+    (*(uint64_t *)comps[i]) = 0;
+  }
+
+
   mkcontext(&contexts[1], request_fn);
+
+  cur_context = &(contexts[1]);
   setcontext(&contexts[1]);
 
 exit:
