@@ -248,6 +248,28 @@ compress_crc_CFLAGS = \
 
 compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la -lz /home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a
 
+noinst_PROGRAMS += preempt_timing
+
+preempt_timing_SOURCES = \
+	preempt-demo/preempt_timing.c \
+	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
+
+preempt_timing_CFLAGS = \
+	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
+	-I$(srcdir)/chaining-demo \
+	-I$(srcdir)/idxd/test \
+	-I$(srdir)/idxd \
+	-I$(srcdir)/accfg \
+	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
+	-I$(srcdir)/preempt-demo \
+	$(COMMON_SAMPLE_INCLUDES) \
+	$(COMMON_SAMPLE_CFLAGS) \
+	$(COMMON_FLAGS) \
+	#-fsanitize=thread,undefined -g3
+
+preempt_timing_LDADD = $(COMMON_SAMPLE_LDFLAGS) -laccel-config libcpa_sample_code_s.la -lz /home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a
+
+
 noinst_PROGRAMS += dc_stateless_multi_op_sample
 dc_stateless_multi_op_sample_SOURCES = \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c \
@@ -435,7 +457,7 @@ samples: $(lib_LTLIBRARIES) cpa_sample_code dc_dp_sample dc_stateless_sample \
 	cipher_sample gcm_sample hash_file_sample hash_sample ipsec_sample \
 	ssl_sample sym_dp_sample dh_sample prime_sample hkdf_sample \
 	ec_montedwds_sample eddsa_sample chaining_sample zuc_sample \
-	compress_crc
+	compress_crc preempt_timing
 
 samples-install: samples
 	@install -D -m 755 $(srcdir)/.libs/cpa_sample_code $(DESTDIR)$(bindir)/cpa_sample_code
@@ -443,6 +465,7 @@ samples-install: samples
 	@install -D -m 755 $(srcdir)/.libs/dc_stateless_sample $(DESTDIR)$(bindir)/dc_stateless_sample
 	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/chaining_sample
 	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/compress_crc
+	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/preempt_timing
 	@install -D -m 755 $(srcdir)/.libs/dc_stateless_multi_op_sample $(DESTDIR)$(bindir)/dc_stateless_multi_op_sample
 	@install -D -m 755 $(srcdir)/.libs/algchaining_sample $(DESTDIR)$(bindir)/algchaining_sample
 	@install -D -m 755 $(srcdir)/.libs/ccm_sample $(DESTDIR)$(bindir)/ccm_sample
