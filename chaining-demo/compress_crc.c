@@ -34,25 +34,36 @@
 
 #include <xmmintrin.h>
 
+#include <ucontext.h>
+
+
 
 int gDebugParam = 1;
+#define NUMCONTEXTS 10              /* how many contexts to make */
 
+ucontext_t *cur_context;            /* a pointer to the current_context */
+int curcontext = 0;
+ucontext_t contexts[NUMCONTEXTS];   /* store our context info */
+void
+scheduler()
+{
+    printf("scheduling out thread %d\n", curcontext);
 
+    curcontext = (curcontext + 1) % NUMCONTEXTS; /* round robin */
+    cur_context = &contexts[curcontext];
+
+    printf("scheduling in thread %d\n", curcontext);
+
+    setcontext(cur_context); /* go */
+}
 
 
 int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  chainingDeflateAndCrcComparison(dcInstHandles,sessionHandles);
+
 exit:
 
-  icp_sal_userStop();
-  qaeMemDestroy();
   return 0;
 }
