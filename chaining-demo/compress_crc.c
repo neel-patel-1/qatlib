@@ -52,6 +52,8 @@ int gDebugParam = 1;
 #define NUMCONTEXTS 10              /* how many contexts to make */
 #define STACKSIZE 4096
 #define NUM_DESCS 128 /* Size of the shared work queue */
+#define NUM_BUFS 128
+#define BUF_SIZE 4096
 
 extern int swapcontext_very_fast(ucontext_t *ouctx, ucontext_t *uctx);
 ucontext_t *cur_context;            /* a pointer to the current_context */
@@ -62,6 +64,10 @@ struct acctest_context *dsa = NULL;
 struct hw_desc *descs = NULL;
 struct hw_desc *cur_desc = NULL;
 int curdesc = 0;
+
+char *src_bufs[NUM_BUFS];
+char *dst_bufs[NUM_BUFS];
+int curbuf = 0;
 
 void
 mkcontext(ucontext_t *uc,  void *function)
@@ -110,12 +116,21 @@ void worker_fn(){
 }
 
 void request_fn(){
-  /* App work */
+  /* ROCKSDB SCAN */
+  for(int i=0; i<BUF_SIZE; i++)
+    src_bufs[curbuf][i] = (char)i;
+
 
   /* Prepare, Submit request and yield */
+  struct hw_desc *mDesc = &(descs[curdesc]);
+  mDesc->src_addr = (uint64_t)(src_bufs[curbuf]);
+  mDesc->dst_addr = (uint64_t)(dst_bufs[curbuf]);
+  mDesc->xfer_size = BUF_SIZE;
 
+  while(enqcmd(dsa->wq_reg, mDesc)){ }
 
   /* Re-entry point */
+  curbuf = (curbuf + 1) % NUM_BUFS;
 
 }
 
