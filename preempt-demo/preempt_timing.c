@@ -44,10 +44,14 @@ uint64_t postPrep;
 uint64_t postSubmit;
 uint64_t postYield;
 
+/* Barrier */
+pthread_barrier_t barrier;
+
 void worker_func(){
 
   while(!pendingContext){}
   PRINT_DBG("Response received, switching back to pending context \n");
+  swapcontext_very_fast(&contexts[1], &contexts[0]) ; /*We need to save the worker's scheduling context*/
 }
 
 void request_func(){
@@ -72,7 +76,7 @@ void request_func(){
 
 
   postYield = sampleCoderdtsc();
-
+  PRINT_DBG("Request Context Restored\n");
 
 
 }
@@ -109,6 +113,7 @@ mkcontext(ucontext_t *uc,  void *function)
 
 void *accelScheduler(void *arg){
   comp = (uint8_t *)sched_tsk_node->tsk->comp;
+  pthread_barrier_wait(&barrier);
   while(*comp == 0){}
   pendingContext = true;
 }
@@ -127,6 +132,8 @@ int main(){
   pthread_t td;
   int accelSchedCoreId = 1;
 
+  int totalThreads = 2;
+
   allocDsa(&dsa);
   allocTasks(dsa, &tsk_node, DSA_OPCODE_MEMMOVE, buf_size, tflags, numDescs);
 
@@ -139,17 +146,19 @@ int main(){
     dst_bufs[i] = malloc(BUF_SIZE);
   }
 
+  pthread_barrier_init(&barrier, NULL, totalThreads);
   /* Spin up the busy waiting preempt signal thread */
   createThreadPinned(&td,accelScheduler,NULL,accelSchedCoreId);
 
+
   mkcontext(&contexts[0], request_func);
   mkcontext(&contexts[1], worker_func );
+
+  /*wait until both the accel scheduler and work (this thread is ready)*/
+  pthread_barrier_wait(&barrier);
+
   /* Go to the first requests context */
   setcontext(&contexts[0]);
-
-  // comp = (uint8_t *)sched_tsk_node->tsk->comp;
-  // while(*comp == 0){}
-  // pendingContext = true;
 
   if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
     PRINT_ERR("Failed copy\n");
