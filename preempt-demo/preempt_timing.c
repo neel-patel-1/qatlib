@@ -27,23 +27,10 @@ char *src_bufs[NUM_BUFS];
 char *dst_bufs[NUM_BUFS];
 int curbuf = 0;
 
-void prepare_memcpy_task(
-    struct task *tsk,
-    struct acctest_context *dsa, Cpa8U *srcAddr, Cpa64U bufferSize,
-    Cpa8U *dstAddr
-    ){
-  tsk->xfer_size = bufferSize;
-  tsk->src1 = srcAddr;
-  tsk->dst1 = dstAddr;
-  tsk->opcode = DSA_OPCODE_MEMMOVE;
-  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
-  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
-				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+struct task_node *tsk_node;
 
-  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
-	tsk->comp->status = 0;
+const volatile uint8_t *next_comp;
 
-}
 
 void
 mkcontext(ucontext_t *uc,  void *function)
@@ -73,45 +60,6 @@ mkcontext(ucontext_t *uc,  void *function)
     PRINT_DBG("context is %p\n", uc);
 }
 
-void
-scheduler()
-{
-    PRINT_DBG("scheduling out thread %d\n", curcontext);
-
-    curcontext = (curcontext + 1) % NUMCONTEXTS; /* round robin */
-    cur_context = &contexts[curcontext];
-
-    PRINT_DBG("scheduling in thread %d\n", curcontext);
-
-    setcontext(cur_context); /* go */
-}
-
-void worker_fn(){
-  /* busy-while loop polls for responses and swaps the context */
-
-}
-
-void request_fn(){
-  /* application work */
-  for(int i=0; i<BUF_SIZE; i++)
-    src_bufs[curbuf][i] = (char)i;
-
-
-  /* Prepare, Submit request and yield */
-
-  __builtin_ia32_sfence();
-
-  /* Re-entry point */
-  for(int i=0; i<BUF_SIZE; i++)
-    if (src_bufs[curbuf][i] != dst_bufs[curbuf][i]){ PRINT_ERR("bad copy\n"); exit(-1); }
-
-  curbuf = (curbuf + 1) % NUM_BUFS;
-
-}
-
-void requestGen(){
-  /* Generate pre-processed Requests to feed to the worker */
-}
 
 
 int main(){
@@ -121,13 +69,12 @@ int main(){
   int tflags = TEST_FLAGS_BOF;
   int buf_size = BUF_SIZE;
   int numDescs = NUM_DESCS;
-  struct task_node *tsk_node;
+
   struct hw_desc *hw = NULL;
-   const volatile uint8_t *comp;
+  const volatile uint8_t *comp;
 
   allocDsa(&dsa);
   allocTasks(dsa, &tsk_node, DSA_OPCODE_MEMMOVE, buf_size, tflags, numDescs);
-
 
 
   /* Allocate the buffers we will use */
@@ -142,17 +89,14 @@ int main(){
   prepare_memcpy_task(tsk_node->tsk, dsa, (src_bufs[0]), buf_size, dst_bufs[0]);
   hw = tsk_node->tsk->desc;
   comp = (uint8_t *)tsk_node->tsk->comp;
+  next_comp = comp;
   if( enqcmd(dsa->wq_reg, hw) ){PRINT_ERR("Failure in enq\n"); exit(-1);};
-  while(*comp == 0){
-
-  }
+  while(*next_comp == 0){}
   if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
     PRINT_ERR("Failed copy\n");
   }
 
   /* Allocate the completion records */
-
-
 
   // mkcontext(&contexts[1], request_fn);
 

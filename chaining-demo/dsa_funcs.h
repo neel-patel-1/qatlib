@@ -48,6 +48,12 @@ void prepare_crc_task(
     struct acctest_context *dsa, Cpa8U *srcAddr, Cpa64U bufferSize
     );
 
+void prepare_memcpy_task(
+    struct task *tsk,
+    struct acctest_context *dsa, Cpa8U *srcAddr, Cpa64U bufferSize,
+    Cpa8U *dstAddr
+    );
+
 /* tsks are in a linked list, we are waiting on multiple tasks in sequence, is traversing the linked list to get the next task to wait on the bottlneck?*/
 /* Array of Buffer Lists contain all the data for which dsa ops will be performed, but dsa is the second step in the offload sequence and must use the dst as src */
 /* Task nodes are allocated on dsa and prepped for buffer lists*/

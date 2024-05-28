@@ -455,6 +455,24 @@ void prepare_crc_task(
 
 }
 
+void prepare_memcpy_task(
+    struct task *tsk,
+    struct acctest_context *dsa, Cpa8U *srcAddr, Cpa64U bufferSize,
+    Cpa8U *dstAddr
+    ){
+  tsk->xfer_size = bufferSize;
+  tsk->src1 = srcAddr;
+  tsk->dst1 = dstAddr;
+  tsk->opcode = DSA_OPCODE_MEMMOVE;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+
+}
+
 struct task *alloc_crc_task(struct acctest_context *dsa, Cpa8U *srcAddr){
   struct task *tsk;
 
