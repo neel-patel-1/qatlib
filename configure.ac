@@ -49,6 +49,10 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 
+# Add support for assembler
+AM_PROG_AS
+
+
 # Checks for library functions.
 AC_FUNC_FORK
 AC_FUNC_MALLOC
