@@ -479,6 +479,50 @@ void single_crc_submit_task(struct acctest_context *dsa, struct task *tsk){
   acctest_desc_submit(dsa, tsk->desc);
 }
 
+CpaStatus allocTasks(struct acctest_context *dsa,
+  struct task_node **p_tsk_node, int opcode,
+  int buf_size, int tflags, int numTasks){
+  struct task_node *tsk_node;
+  int rc = acctest_alloc_multiple_tasks(dsa, numTasks);
+  if(rc != ACCTEST_STATUS_OK){
+    return rc;
+  }
+  tsk_node = dsa->multi_task_node;
+  while (tsk_node) {
+    tsk_node->tsk->xfer_size = buf_size;
+
+    rc = init_task(tsk_node->tsk, tflags, opcode, buf_size);
+    if (rc != ACCTEST_STATUS_OK)
+      return rc;
+
+    tsk_node = tsk_node->next;
+  }
+  tsk_node = dsa->multi_task_node;
+  *p_tsk_node = tsk_node;
+}
+
+CpaStatus allocDsa(struct acctest_context **pDsa){
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+  *pDsa = dsa;
+}
+
 CpaStatus compareDSACRCsWithSW(){
     /* single submit */
   struct acctest_context *dsa = NULL;
@@ -591,28 +635,6 @@ CpaStatus dsaCrcGenCompareWithSw(Cpa8U *buf, Cpa32U buf_size){
   }
   acctest_free(dsa);
   return rc;
-}
-
-CpaStatus allocDsa(struct acctest_context **pDsa){
-  struct acctest_context *dsa = NULL;
-  int tflags = TEST_FLAGS_BOF;
-  int rc;
-  int wq_type = ACCFG_WQ_SHARED;
-  int dev_id = 0;
-  int wq_id = 0;
-  int opcode = 16;
-
-  dsa = acctest_init(tflags);
-  dsa->dev_type = ACCFG_DEVICE_DSA;
-
-  if (!dsa)
-		return -ENOMEM;
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-	if (rc < 0)
-		return -ENOMEM;
-
-  *pDsa = dsa;
 }
 
 

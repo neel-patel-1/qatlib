@@ -33,6 +33,10 @@ CpaStatus compareDSACRCsWithSW();
 
 CpaStatus allocDsa(struct acctest_context **pDsa);
 
+CpaStatus allocTasks(struct acctest_context *dsa,
+  struct task_node **p_tsk_node, int opcode,
+  int buf_size, int tflags, int numTasks);
+
 
 void single_crc_submit_task(struct acctest_context *dsa, struct task *tsk);
 

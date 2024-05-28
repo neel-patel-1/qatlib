@@ -100,7 +100,17 @@ int main(){
 
   /* The requests all have access to the same accel */
   struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int buf_size = BUF_SIZE;
+  int numDescs = NUM_DESCS;
+  struct task_node *tsk_node;
+  struct hw_desc *hw = NULL;
+   const volatile uint8_t *comp;
+
   allocDsa(&dsa);
+  allocTasks(dsa, &tsk_node, DSA_OPCODE_MEMMOVE, buf_size, tflags, numDescs);
+
+
 
   /* Allocate the buffers we will use */
   for(int i=0; i<NUM_BUFS; i++){
@@ -108,14 +118,22 @@ int main(){
     dst_bufs[i] = malloc(BUF_SIZE);
   }
 
+  prepare_crc_task(tsk_node->tsk, dsa, (src_bufs[0]), buf_size);
+  hw = tsk_node->tsk->desc;
+  comp = (uint8_t *)tsk_node->tsk->comp;
+  if( enqcmd(dsa->wq_reg, hw) ){PRINT_ERR("Failure in enq\n"); exit(-1);};
+  while(*comp == 0){
+
+  }
+
   /* Allocate the completion records */
 
 
 
-  mkcontext(&contexts[1], request_fn);
+  // mkcontext(&contexts[1], request_fn);
 
-  cur_context = &(contexts[1]);
-  setcontext(&contexts[1]);
+  // cur_context = &(contexts[1]);
+  // setcontext(&contexts[1]);
 
 exit:
 
