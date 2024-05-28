@@ -9,7 +9,7 @@
 
 #include "dsa_funcs.h"
 
-int gDebugParam = 1;
+int gDebugParam = 0;
 
 #define NUMCONTEXTS 10              /* how many contexts to make */
 #define STACKSIZE 4096
@@ -42,15 +42,26 @@ _Atomic bool pendingContext;
 uint64_t prePrep;
 uint64_t postPrep;
 uint64_t postSubmit;
+uint64_t receiveTime;
+uint64_t workerEntry;
+uint64_t workerNotified;
 uint64_t postYield;
 
 /* Barrier */
 pthread_barrier_t barrier;
 
+/* accelSched pTid */
+pthread_t td;
+
+
 void worker_func(){
+
+  workerEntry = sampleCoderdtsc();
 
   while(!pendingContext){}
   PRINT_DBG("Response received, switching back to pending context \n");
+  workerNotified = sampleCoderdtsc();
+
   swapcontext_very_fast(&contexts[1], &contexts[0]) ; /*We need to save the worker's scheduling context*/
 }
 
@@ -71,14 +82,35 @@ void request_func(){
 
   postSubmit = sampleCoderdtsc();
 
+
   PRINT_DBG("Request Context Yielding\n");
   swapcontext_very_fast(&contexts[0], &contexts[1]); /* save current context, swap to main context */
-
 
   postYield = sampleCoderdtsc();
   PRINT_DBG("Request Context Restored\n");
 
+  swapcontext(&contexts[0], &contexts[2]);
 
+
+}
+
+void test_end_func(){
+  if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
+    PRINT_ERR("Failed copy\n");
+  }
+  PRINT("PrepDesc(Cycles): %ld\n", postPrep - prePrep);
+  PRINT("SubmitDescTime(Cycles): %ld\n", postSubmit - postPrep);
+  PRINT("ContextSwitchToWorkerTime(Cycles): %ld\n", workerEntry - postSubmit);
+  PRINT("DescProcessing(Cycles): %ld\n", receiveTime - postSubmit);
+  PRINT("WorkerWaitForPreemptSignal(Cycles): %ld\n", workerNotified - receiveTime);
+  PRINT("ContextSwitchToRequest(Cycles): %ld\n", postYield - workerNotified);
+
+  PRINT("\n");
+
+  PRINT("ActualOffloadTime(Cycles): %ld\n", receiveTime - postSubmit);
+  PRINT("PerceivedOffloadTime(Cycles): %ld\n", postYield - postSubmit);
+
+  pthread_join(td,NULL);
 }
 
 
@@ -115,6 +147,7 @@ void *accelScheduler(void *arg){
   comp = (uint8_t *)sched_tsk_node->tsk->comp;
   pthread_barrier_wait(&barrier);
   while(*comp == 0){}
+  receiveTime = sampleCoderdtsc();
   pendingContext = true;
 }
 
@@ -129,7 +162,6 @@ int main(){
   struct hw_desc *hw = NULL;
   struct task_node *tsk_node = NULL;
 
-  pthread_t td;
   int accelSchedCoreId = 1;
 
   int totalThreads = 2;
@@ -153,6 +185,7 @@ int main(){
 
   mkcontext(&contexts[0], request_func);
   mkcontext(&contexts[1], worker_func );
+  mkcontext(&contexts[2], test_end_func);
 
   /*wait until both the accel scheduler and work (this thread is ready)*/
   pthread_barrier_wait(&barrier);
@@ -160,11 +193,6 @@ int main(){
   /* Go to the first requests context */
   setcontext(&contexts[0]);
 
-  if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
-    PRINT_ERR("Failed copy\n");
-  }
-
-  pthread_join(td,NULL);
 
 
 exit:
