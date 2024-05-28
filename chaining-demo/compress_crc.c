@@ -60,6 +60,8 @@ ucontext_t contexts[NUMCONTEXTS];   /* store our context info */
 
 struct acctest_context *dsa = NULL;
 struct hw_desc *descs = NULL;
+struct hw_desc *cur_desc = NULL;
+int curdesc = 0;
 
 void
 mkcontext(ucontext_t *uc,  void *function)
@@ -110,7 +112,7 @@ void worker_fn(){
 void request_fn(){
   /* App work */
 
-  /* Submit request and yield */
+  /* Prepare, Submit request and yield */
 
 
   /* Re-entry point */
@@ -132,6 +134,8 @@ int main(){
   int dev_id = 0;
   int wq_id = 0;
   int opcode = 16;
+  uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
   if (!dsa)
@@ -141,8 +145,14 @@ int main(){
 	if (rc < 0)
 		return -ENOMEM;
 
+
   /* Allocate the request set we will use */
   descs = malloc(sizeof(struct hw_desc) * NUM_DESCS);
+
+  /* Pre-prepare them */
+  for(int i=0; i<NUM_DESCS; i++){
+    acctest_prep_desc_common(&(descs[i]), opcode, 0x0, 0x0, 0, dflags);
+  }
 
   mkcontext(&contexts[1], request_fn);
   setcontext(&contexts[1]);
