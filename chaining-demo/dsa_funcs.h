@@ -31,6 +31,8 @@ CpaStatus dsaCrcGenCompareWithSw(Cpa8U *buf, Cpa32U buf_size);
 
 CpaStatus compareDSACRCsWithSW();
 
+CpaStatus allocDsa(struct acctest_context **pDsa);
+
 
 void single_crc_submit_task(struct acctest_context *dsa, struct task *tsk);
 

@@ -252,6 +252,15 @@ noinst_PROGRAMS += preempt_timing
 
 preempt_timing_SOURCES = \
 	preempt-demo/preempt_timing.c \
+	preempt-demo/context_fast.S \
+	chaining-demo/buffer_prepare_funcs.c \
+	chaining-demo/dsa_funcs.c \
+	$(srcdir)/idxd/test/libaccfg.c \
+	$(srcdir)/idxd/test/core.c \
+	$(srcdir)/idxd/test/dsa.c \
+	$(srcdir)/idxd/util/log.c \
+	$(srcdir)/idxd/test/accel_test.c \
+	$(srcdir)/idxd/test/dsa_prep.c \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
 
 preempt_timing_CFLAGS = \

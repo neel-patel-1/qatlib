@@ -593,6 +593,28 @@ CpaStatus dsaCrcGenCompareWithSw(Cpa8U *buf, Cpa32U buf_size){
   return rc;
 }
 
+CpaStatus allocDsa(struct acctest_context **pDsa){
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int rc;
+  int wq_type = ACCFG_WQ_SHARED;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+
+  if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+  *pDsa = dsa;
+}
+
 
 CpaStatus functionalDSACrcGen(Cpa32U buf_size){
   /*setup device*/

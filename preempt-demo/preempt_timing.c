@@ -7,8 +7,7 @@
 #include <stdlib.h>
 #include <poll.h>
 
-#include "cpa_sample_utils.h"
-#include "dto.h"
+#include "dsa_funcs.h"
 
 int gDebugParam = 1;
 
@@ -27,10 +26,6 @@ ucontext_t contexts[NUMCONTEXTS];   /* store our context info */
 char *src_bufs[NUM_BUFS];
 char *dst_bufs[NUM_BUFS];
 int curbuf = 0;
-
-struct dto_wq wq;
-struct dsa_hw_desc thr_desc;
-static __thread struct dsa_completion_record thr_comp __attribute__((aligned(32)));
 
 void
 mkcontext(ucontext_t *uc,  void *function)
@@ -85,10 +80,8 @@ void request_fn(){
 
 
   /* Prepare, Submit request and yield */
-  thr_desc.dst_addr = (uint64_t) (dst_bufs[curbuf]);
 
   __builtin_ia32_sfence();
-  while(enqcmd(&(thr_desc) ,wq.wq_portal )){ }
 
   /* Re-entry point */
   for(int i=0; i<BUF_SIZE; i++)
@@ -106,8 +99,8 @@ void requestGen(){
 int main(){
 
   /* The requests all have access to the same accel */
-
-
+  struct acctest_context *dsa = NULL;
+  allocDsa(&dsa);
 
   /* Allocate the buffers we will use */
   for(int i=0; i<NUM_BUFS; i++){
