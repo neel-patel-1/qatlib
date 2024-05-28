@@ -253,8 +253,17 @@ noinst_PROGRAMS += preempt_timing
 preempt_timing_SOURCES = \
 	preempt-demo/preempt_timing.c \
 	preempt-demo/context_fast.S \
+	chaining-demo/dc_inst_utils.c \
+	chaining-demo/thread_utils.c \
+	chaining-demo/hw_comp_crc_funcs.c \
+	chaining-demo/sw_comp_crc_funcs.c \
 	chaining-demo/buffer_prepare_funcs.c \
+	chaining-demo/validate_compress_and_crc.c \
 	chaining-demo/dsa_funcs.c \
+	chaining-demo/print_funcs.c \
+	chaining-demo/sw_chain_comp_crc_funcs.c \
+	chaining-demo/smt-thread-exps.c \
+	chaining-demo/log.c \
 	$(srcdir)/idxd/test/libaccfg.c \
 	$(srcdir)/idxd/test/core.c \
 	$(srcdir)/idxd/test/dsa.c \

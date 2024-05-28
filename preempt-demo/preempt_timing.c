@@ -107,6 +107,13 @@ mkcontext(ucontext_t *uc,  void *function)
 }
 
 
+void *accelScheduler(void *arg){
+  comp = (uint8_t *)sched_tsk_node->tsk->comp;
+  while(*comp == 0){}
+  pendingContext = true;
+}
+
+
 
 int main(){
 
@@ -116,6 +123,9 @@ int main(){
 
   struct hw_desc *hw = NULL;
   struct task_node *tsk_node = NULL;
+
+  pthread_t td;
+  int accelSchedCoreId = 1;
 
   allocDsa(&dsa);
   allocTasks(dsa, &tsk_node, DSA_OPCODE_MEMMOVE, buf_size, tflags, numDescs);
@@ -129,20 +139,24 @@ int main(){
     dst_bufs[i] = malloc(BUF_SIZE);
   }
 
+  /* Spin up the busy waiting preempt signal thread */
+  createThreadPinned(&td,accelScheduler,NULL,accelSchedCoreId);
+
   mkcontext(&contexts[0], request_func);
   mkcontext(&contexts[1], worker_func );
+  /* Go to the first requests context */
   setcontext(&contexts[0]);
 
-  comp = (uint8_t *)sched_tsk_node->tsk->comp;
-  while(*comp == 0){}
-  pendingContext = true;
+  // comp = (uint8_t *)sched_tsk_node->tsk->comp;
+  // while(*comp == 0){}
+  // pendingContext = true;
 
   if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
     PRINT_ERR("Failed copy\n");
   }
 
-  // cur_context = &(contexts[1]);
-  // setcontext(&contexts[1]);
+  pthread_join(td,NULL);
+
 
 exit:
 
