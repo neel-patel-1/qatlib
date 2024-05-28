@@ -27,6 +27,24 @@ char *src_bufs[NUM_BUFS];
 char *dst_bufs[NUM_BUFS];
 int curbuf = 0;
 
+void prepare_memcpy_task(
+    struct task *tsk,
+    struct acctest_context *dsa, Cpa8U *srcAddr, Cpa64U bufferSize,
+    Cpa8U *dstAddr
+    ){
+  tsk->xfer_size = bufferSize;
+  tsk->src1 = srcAddr;
+  tsk->dst1 = dstAddr;
+  tsk->opcode = DSA_OPCODE_MEMMOVE;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
+				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
+
+  tsk->desc->completion_addr = (uint64_t)(tsk->comp);
+	tsk->comp->status = 0;
+
+}
+
 void
 mkcontext(ucontext_t *uc,  void *function)
 {
@@ -118,12 +136,18 @@ int main(){
     dst_bufs[i] = malloc(BUF_SIZE);
   }
 
-  prepare_crc_task(tsk_node->tsk, dsa, (src_bufs[0]), buf_size);
+  for(int i=0; i<buf_size; i++){
+    src_bufs[0][i] = (char)i;
+  }
+  prepare_memcpy_task(tsk_node->tsk, dsa, (src_bufs[0]), buf_size, dst_bufs[0]);
   hw = tsk_node->tsk->desc;
   comp = (uint8_t *)tsk_node->tsk->comp;
   if( enqcmd(dsa->wq_reg, hw) ){PRINT_ERR("Failure in enq\n"); exit(-1);};
   while(*comp == 0){
 
+  }
+  if(memcmp(src_bufs[0], dst_bufs[0], buf_size) != 0){
+    PRINT_ERR("Failed copy\n");
   }
 
   /* Allocate the completion records */
