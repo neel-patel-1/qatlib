@@ -74,6 +74,7 @@ struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int
 
 typedef struct mini_buf_test_args {
   uint32_t flags;
+  int dev_id;
   int desc_node;
   int cr_node;
   int src_buf_node;
@@ -90,7 +91,7 @@ void *submit_thread(void *arg){
 
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
-  int dev_id = 1;
+  int dev_id = t_args->dev_id;
   int wq_id = 0;
   int opcode = 16;
   int wq_type = ACCFG_WQ_SHARED;
@@ -229,11 +230,13 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
+  int dev_id = 0;
   int dsa_node = 0;
   int remote_node = 1;
   pthread_t tid;
 
   mbuf_targs targs;
+  targs.dev_id = 0;
 
   targs.flags = IDXD_OP_FLAG_CC;
   targs.desc_node = remote_node;
