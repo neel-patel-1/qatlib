@@ -238,15 +238,17 @@ int main(){
   mbuf_targs targs;
   targs.dev_id = 0;
 
+  /* all local */
   targs.flags = IDXD_OP_FLAG_CC;
-  targs.desc_node = remote_node;
-  targs.cr_node = remote_node;
-  targs.src_buf_node = remote_node;
-  targs.dst_buf_node = remote_node;
+  targs.desc_node = dsa_node;
+  targs.cr_node = dsa_node;
+  targs.src_buf_node = dsa_node;
+  targs.dst_buf_node = dsa_node;
   targs.flush_task = 0;
   createThreadPinned(&tid,submit_thread,&targs,10);
   pthread_join(tid,NULL);
 
+  /* all far */
   targs.flags =  IDXD_OP_FLAG_CC;
   targs.desc_node = dsa_node;
   targs.cr_node = dsa_node;
@@ -258,25 +260,6 @@ int main(){
 
 
 
-  // targs.flags =  IDXD_OP_FLAG_CC;
-  // targs.desc_node = dsa_node;
-  // targs.cr_node = dsa_node;
-  // targs.src_buf_node = remote_node;
-  // targs.dst_buf_node = remote_node;
-  // createThreadPinned(&tid,submit_thread,&targs,20);
-  // pthread_join(tid,NULL);
-
-  // targs.flags =  IDXD_OP_FLAG_CC;
-  // targs.desc_node = remote_node;
-  // targs.cr_node = remote_node;
-  // targs.src_buf_node = remote_node;
-  // targs.dst_buf_node = remote_node;
-  // createThreadPinned(&tid,submit_thread,&targs,20);
-  // pthread_join(tid,NULL);
-
-
-
-  // chainingDeflateAndCrcComparison(dcInstHandles,sessionHandles);
 exit:
 
   icp_sal_userStop();
