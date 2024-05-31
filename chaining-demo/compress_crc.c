@@ -53,6 +53,18 @@ void *submit_thread(void *arg){
 	if (rc < 0)
 		return -ENOMEM;
 
+  struct task_node *multi_task_node;
+
+  /* How fast can we complete 1024 256B offloads to different memory locations? */
+  /* All data is in the cache and src/dst buffers are either both close to DSA or both far away */
+  int xfer_size = 256;
+  uint8_t *src_buf = (uint8_t *)malloc(xfer_size);
+  uint8_t *dst_buf = (uint8_t *)malloc(xfer_size);
+  for(int i=0; i<xfer_size; i++){
+    __builtin_prefetch((const void*) src_buf + i);
+    __builtin_prefetch((const void*) dst_buf + i);
+  }
+
   acctest_free(dsa);
 }
 
