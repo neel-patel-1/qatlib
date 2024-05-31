@@ -53,17 +53,29 @@ void *submit_thread(void *arg){
 	if (rc < 0)
 		return -ENOMEM;
 
-  acctest_alloc_multiple_tasks(dsa, 1024);
+  struct task_node * task_node;
+  uint8_t **mini_bufs;
+  uint8_t **dst_mini_bufs;
+  int num_bufs = 1024;
+  int xfer_size = 256;
+
+  mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    mini_bufs[i] = (uint8_t *)malloc(xfer_size);
+    dst_mini_bufs[i] = (uint8_t *)malloc(xfer_size);
+    for(int j=0; j<xfer_size; j++){
+      __builtin_prefetch((const void*) mini_bufs[i] + j);
+      __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
+    }
+  }
+  acctest_alloc_multiple_tasks(dsa, num_bufs);
 
   /* How fast can we complete 1024 256B offloads to different memory locations? */
   /* All data is in the cache and src/dst buffers are either both close to DSA or both far away */
-  int xfer_size = 256;
-  uint8_t *src_buf = (uint8_t *)malloc(xfer_size);
-  uint8_t *dst_buf = (uint8_t *)malloc(xfer_size);
-  for(int i=0; i<xfer_size; i++){
-    __builtin_prefetch((const void*) src_buf + i);
-    __builtin_prefetch((const void*) dst_buf + i);
-  }
+
+
+
 
 
   acctest_free(dsa);
