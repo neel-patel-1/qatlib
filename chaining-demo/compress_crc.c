@@ -53,7 +53,7 @@ void *submit_thread(void *arg){
 	if (rc < 0)
 		return -ENOMEM;
 
-  struct task_node *multi_task_node;
+  acctest_alloc_multiple_tasks(dsa, 1024);
 
   /* How fast can we complete 1024 256B offloads to different memory locations? */
   /* All data is in the cache and src/dst buffers are either both close to DSA or both far away */
@@ -64,6 +64,7 @@ void *submit_thread(void *arg){
     __builtin_prefetch((const void*) src_buf + i);
     __builtin_prefetch((const void*) dst_buf + i);
   }
+
 
   acctest_free(dsa);
 }
