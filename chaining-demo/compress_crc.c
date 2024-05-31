@@ -118,7 +118,25 @@ void *submit_thread(void *arg){
       __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
     }
   }
-  acctest_alloc_multiple_tasks(dsa, num_bufs);
+
+
+  /* int on_node_alloc_multiple_tasks(dsa, num_bufs); */
+  struct task_node *tmp_tsk_node;
+  int cnt = 0;
+  while(cnt < num_bufs){
+    tmp_tsk_node = dsa->multi_task_node;
+    dsa->multi_task_node = (struct task_node *)malloc(sizeof(struct task_node));
+    if (!dsa->multi_task_node)
+			return -ENOMEM;
+
+    dsa->multi_task_node->tsk = on_node_task_alloc(dsa, desc_node, cr_node);
+    if (!dsa->multi_task_node->tsk)
+			return -ENOMEM;
+    dsa->multi_task_node->next = tmp_tsk_node;
+    cnt++;
+  }
+
+
   task_node = dsa->multi_task_node;
 
   int idx=0;
@@ -147,7 +165,7 @@ void *submit_thread(void *arg){
 
 
 
-  // acctest_free(dsa);
+  acctest_free(dsa);
 }
 
 
@@ -160,29 +178,39 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-
+  int dsa_node = 1;
+  int remote_node = 0;
   pthread_t tid;
 
   mbuf_targs targs;
   targs.flags =  IDXD_OP_FLAG_CC;
-  targs.desc_node = 0;
-  targs.cr_node = 0;
-  targs.src_buf_node = 0;
-  targs.dst_buf_node = 0;
-  createThreadPinned(&tid,submit_thread,&targs,10);
-  pthread_join(tid,NULL);
-
-  targs.desc_node = 0;
-  targs.cr_node = 0;
-  targs.src_buf_node = 1;
-  targs.dst_buf_node = 1;
+  targs.desc_node = dsa_node;
+  targs.cr_node = dsa_node;
+  targs.src_buf_node = dsa_node;
+  targs.dst_buf_node = dsa_node;
   createThreadPinned(&tid,submit_thread,&targs,20);
   pthread_join(tid,NULL);
 
-  targs.desc_node = 1;
-  targs.cr_node = 1;
-  targs.src_buf_node = 0;
-  targs.dst_buf_node = 0;
+  targs.desc_node = remote_node;
+  targs.cr_node = remote_node;
+  targs.src_buf_node = dsa_node;
+  targs.dst_buf_node = dsa_node;
+  createThreadPinned(&tid,submit_thread,&targs,20);
+  pthread_join(tid,NULL);
+
+  targs.flags =  IDXD_OP_FLAG_CC;
+  targs.desc_node = dsa_node;
+  targs.cr_node = dsa_node;
+  targs.src_buf_node = remote_node;
+  targs.dst_buf_node = remote_node;
+  createThreadPinned(&tid,submit_thread,&targs,20);
+  pthread_join(tid,NULL);
+
+  targs.flags =  IDXD_OP_FLAG_CC;
+  targs.desc_node = remote_node;
+  targs.cr_node = remote_node;
+  targs.src_buf_node = remote_node;
+  targs.dst_buf_node = remote_node;
   createThreadPinned(&tid,submit_thread,&targs,20);
   pthread_join(tid,NULL);
 
