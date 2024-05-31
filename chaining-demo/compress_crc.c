@@ -37,7 +37,24 @@
 
 int gDebugParam = 1;
 
+void *submit_thread(void *arg){
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int dev_id = 1;
+  int wq_id = 0;
+  int opcode = 16;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+  if (!dsa)
+		return -ENOMEM;
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
 
+  acctest_free(dsa);
+}
 
 
 int main(){
@@ -49,7 +66,16 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  chainingDeflateAndCrcComparison(dcInstHandles,sessionHandles);
+
+  pthread_t tid;
+
+  createThreadPinned(&tid,submit_thread,NULL,10);
+  pthread_join(tid,NULL);
+
+
+
+
+  // chainingDeflateAndCrcComparison(dcInstHandles,sessionHandles);
 exit:
 
   icp_sal_userStop();
