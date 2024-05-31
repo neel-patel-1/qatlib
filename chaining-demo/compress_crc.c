@@ -34,10 +34,59 @@
 
 #include <xmmintrin.h>
 
+#include <numa.h>
+#include <sys/user.h>
 
 int gDebugParam = 1;
 
+struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int cr_node){
+  struct task *tsk;
+
+  tsk = malloc(sizeof(struct task));
+  if (!tsk)
+		return NULL;
+	memset(tsk, 0, sizeof(struct task));
+
+  tsk->desc = numa_alloc_onnode(sizeof(struct hw_desc), desc_node);
+  if (!tsk->desc) {
+    free(tsk);
+    return NULL;
+  }
+  memset(tsk->desc, 0, sizeof(struct hw_desc));
+
+	/* page fault test, alloc 4k size */
+  /* https://stackoverflow.com/questions/8154162/numa-aware-cache-aligned-memory-allocation
+  Cache lines are typically 64 bytes. Since 4096 is a multiple of 64, anything that comes back from numa_alloc_*() will already be memaligned at the cache level
+  */
+	if (ctx->is_evl_test)
+		tsk->comp = numa_alloc_onnode(PAGE_SIZE, cr_node);
+	else
+		tsk->comp = numa_alloc_onnode(sizeof(struct completion_record), cr_node);
+	if (!tsk->comp) {
+		free(tsk->desc);
+		free_task(tsk);
+		return NULL;
+	}
+	memset(tsk->comp, 0, sizeof(struct completion_record));
+
+	return tsk;
+}
+
+typedef struct mini_buf_test_args {
+  uint32_t flags;
+  int desc_node;
+  int cr_node;
+  int src_buf_node;
+  int dst_buf_node;
+} mbuf_targs;
+
 void *submit_thread(void *arg){
+  mbuf_targs *t_args = (mbuf_targs *) arg;
+  int desc_node = t_args->desc_node;
+  int cr_node = t_args->cr_node;
+  int src_buf_node = t_args->src_buf_node;
+  int dst_buf_node = t_args->dst_buf_node;
+
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
   int dev_id = 1;
@@ -62,8 +111,8 @@ void *submit_thread(void *arg){
   mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
   dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
   for(int i=0; i<num_bufs; i++){
-    mini_bufs[i] = (uint8_t *)malloc(xfer_size);
-    dst_mini_bufs[i] = (uint8_t *)malloc(xfer_size);
+    mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, src_buf_node);
+    dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, dst_buf_node);
     for(int j=0; j<xfer_size; j++){
       __builtin_prefetch((const void*) mini_bufs[i] + j);
       __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
@@ -77,6 +126,7 @@ void *submit_thread(void *arg){
 
   while(task_node){
     prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
+    task_node->tsk->desc->flags |= t_args->flags;
     idx++;
     task_node = task_node->next;
   }
@@ -97,7 +147,7 @@ void *submit_thread(void *arg){
 
 
 
-  acctest_free(dsa);
+  // acctest_free(dsa);
 }
 
 
@@ -113,12 +163,30 @@ int main(){
 
   pthread_t tid;
 
-  createThreadPinned(&tid,submit_thread,NULL,10);
+  mbuf_targs targs;
+  targs.flags =  IDXD_OP_FLAG_CC;
+  targs.desc_node = 0;
+  targs.cr_node = 0;
+  targs.src_buf_node = 0;
+  targs.dst_buf_node = 0;
+  createThreadPinned(&tid,submit_thread,&targs,10);
+  pthread_join(tid,NULL);
+
+  targs.desc_node = 0;
+  targs.cr_node = 0;
+  targs.src_buf_node = 1;
+  targs.dst_buf_node = 1;
+  createThreadPinned(&tid,submit_thread,&targs,20);
+  pthread_join(tid,NULL);
+
+  targs.desc_node = 1;
+  targs.cr_node = 1;
+  targs.src_buf_node = 0;
+  targs.dst_buf_node = 0;
+  createThreadPinned(&tid,submit_thread,&targs,20);
   pthread_join(tid,NULL);
 
 
-  createThreadPinned(&tid,submit_thread,NULL,20);
-  pthread_join(tid,NULL);
 
   // chainingDeflateAndCrcComparison(dcInstHandles,sessionHandles);
 exit:
