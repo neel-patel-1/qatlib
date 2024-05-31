@@ -70,10 +70,29 @@ void *submit_thread(void *arg){
     }
   }
   acctest_alloc_multiple_tasks(dsa, num_bufs);
+  task_node = dsa->multi_task_node;
 
+  int idx=0;
   /* How fast can we complete 1024 256B offloads to different memory locations? */
-  /* All data is in the cache and src/dst buffers are either both close to DSA or both far away */
 
+  while(task_node){
+    prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
+    idx++;
+    task_node = task_node->next;
+  }
+
+  task_node = dsa->multi_task_node;
+  uint64_t start = sampleCoderdtsc();
+  /* All data is in the cache and src/dst buffers are either both close to DSA or both far away */
+  while(task_node){
+    acctest_desc_submit(dsa, task_node->tsk->desc);
+    while(task_node->tsk->comp->status == 0){
+      _mm_pause();
+    }
+    task_node = task_node->next;
+  }
+  uint64_t end = sampleCoderdtsc();
+  printf("Time taken for 1024 256B offloads: %lu\n", end-start);
 
 
 
@@ -98,7 +117,8 @@ int main(){
   pthread_join(tid,NULL);
 
 
-
+  createThreadPinned(&tid,submit_thread,NULL,20);
+  pthread_join(tid,NULL);
 
   // chainingDeflateAndCrcComparison(dcInstHandles,sessionHandles);
 exit:
