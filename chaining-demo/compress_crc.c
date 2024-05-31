@@ -165,7 +165,43 @@ void *submit_thread(void *arg){
 
 
 
-  acctest_free(dsa);
+  // acctest_free(dsa);
+  if(munmap(dsa->wq_reg, PAGE_SIZE)){
+    err("Failed to unmap wq_reg\n");
+  }
+  close(dsa->fd);
+  accfg_unref(dsa->ctx);
+  struct task_node *tsk_node = NULL, *tmp_node = NULL;
+
+  tsk_node = dsa->multi_task_node;
+  while (tsk_node) {
+    tmp_node = tsk_node->next;
+    struct task *tsk = tsk_node->tsk;
+    /* void free_task(struct task *tsk) */
+    numa_free(tsk_node->tsk->desc, sizeof(struct hw_desc));
+    numa_free(tsk_node->tsk->comp, sizeof(struct completion_record));
+    mprotect(tsk_node->tsk->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+    if (tsk->opcode != IAX_OPCODE_TRANSL_FETCH) {
+      numa_free(tsk->src1, tsk->xfer_size);
+    } else {
+      munmap(tsk->src1, tsk->xfer_size);
+      close(tsk->group);
+      close(tsk->container);
+    }
+    free(tsk->src2);
+    numa_free(tsk->dst1, xfer_size);
+    free(tsk->dst2);
+
+
+
+    tsk_node->tsk = NULL;
+    free(tsk_node);
+    tsk_node = tmp_node;
+  }
+  dsa->multi_task_node = NULL;
+
+  free(dsa);
+
 }
 
 
