@@ -39,6 +39,10 @@
 
 int gDebugParam = 1;
 
+uint8_t **mini_bufs;
+  uint8_t **dst_mini_bufs;
+
+
 struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int cr_node){
   struct task *tsk;
 
@@ -70,6 +74,32 @@ struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int
 	memset(tsk->comp, 0, sizeof(struct completion_record));
 
 	return tsk;
+}
+
+typedef struct _alloc_td_args{
+  int num_bufs;
+  int xfer_size;
+  int src_buf_node;
+  int dst_buf_node;
+} alloc_td_args;
+
+void * buf_alloc_td(void *arg){
+  alloc_td_args *args = (alloc_td_args *) arg;
+  int num_bufs = args->num_bufs;
+  int xfer_size = args->xfer_size;
+  int src_buf_node = args->src_buf_node;
+  int dst_buf_node = args->dst_buf_node;
+
+  mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, src_buf_node);
+    dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, dst_buf_node);
+    for(int j=0; j<xfer_size; j++){
+      __builtin_prefetch((const void*) mini_bufs[i] + j);
+      __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
+    }
+  }
 }
 
 typedef struct mini_buf_test_args {
@@ -105,8 +135,7 @@ void *submit_thread(void *arg){
 		return -ENOMEM;
 
   struct task_node * task_node;
-  uint8_t **mini_bufs;
-  uint8_t **dst_mini_bufs;
+
   int num_bufs = 1024;
   int xfer_size = 256;
 
