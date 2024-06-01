@@ -258,61 +258,63 @@ int main(){
   pthread_t submitThread, allocThread;
   pthread_barrier_t alloc_sync;
 
-  mbuf_targs targs;
-  targs.dev_id = 0;
-  targs.xfer_size = 256;
-  targs.num_bufs = 1024;
-  targs.alloc_sync = &alloc_sync;
+  for(int xfer_size=256; xfer_size <= 65536; xfer_size*=4){
+    PRINT("Xfer size: %d\n", xfer_size);
+    mbuf_targs targs;
+    targs.dev_id = 0;
+    targs.xfer_size = xfer_size;
+    targs.num_bufs = 1024;
+    targs.alloc_sync = &alloc_sync;
 
-  alloc_td_args args;
-  args.num_bufs = 1024;
-  args.xfer_size = 256;
-  args.alloc_sync = &alloc_sync;
+    alloc_td_args args;
+    args.num_bufs = 1024;
+    args.xfer_size = xfer_size;
+    args.alloc_sync = &alloc_sync;
 
 
-  /* DESCRIPTOR LOCATION TEST */
-  pthread_barrier_init(&alloc_sync, NULL, 2);
-  /* descriptors and completion records (offloader) is on local  */
-  targs.flags = IDXD_OP_FLAG_CC;
-  targs.desc_node = dsa_node;
-  targs.cr_node = dsa_node;
-  targs.flush_task = 0;
+    /* DESCRIPTOR LOCATION TEST */
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    /* descriptors and completion records (offloader) is on local  */
+    targs.flags = IDXD_OP_FLAG_CC;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_task = 0;
 
-  /* buffers on local */
-  args.src_buf_node = dsa_node;
-  args.dst_buf_node = dsa_node;
-  createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-  createThreadPinned(&submitThread,submit_thread,&targs,10);
-  pthread_join(submitThread,NULL);
+    /* buffers on local */
+    args.src_buf_node = dsa_node;
+    args.dst_buf_node = dsa_node;
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,10);
+    pthread_join(submitThread,NULL);
 
-  pthread_barrier_init(&alloc_sync, NULL, 2);
-  /* descriptors and completion records (offloader) is on far */
-  targs.flags =  IDXD_OP_FLAG_CC;
-  targs.desc_node = remote_node;
-  targs.cr_node = remote_node;
-  targs.flush_task = 0;
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    /* descriptors and completion records (offloader) is on far */
+    targs.flags =  IDXD_OP_FLAG_CC;
+    targs.desc_node = remote_node;
+    targs.cr_node = remote_node;
+    targs.flush_task = 0;
 
-  /* buffers on local */
-  args.src_buf_node = dsa_node;
-  args.dst_buf_node = dsa_node;
-  createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-  createThreadPinned(&submitThread,submit_thread,&targs,20);
-  pthread_join(submitThread,NULL);
+    /* buffers on local */
+    args.src_buf_node = dsa_node;
+    args.dst_buf_node = dsa_node;
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
 
-  pthread_barrier_init(&alloc_sync, NULL, 2);
-  /* descriptors and completion records (offloader) is on far  */
-  targs.flags = IDXD_OP_FLAG_CC;
-  targs.desc_node = remote_node;
-  targs.cr_node = remote_node;
-  targs.flush_task = 0;
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    /* descriptors and completion records (offloader) is on far  */
+    targs.flags = IDXD_OP_FLAG_CC;
+    targs.desc_node = remote_node;
+    targs.cr_node = remote_node;
+    targs.flush_task = 0;
 
-  /* buffers on far */
-  args.src_buf_node = remote_node;
-  args.dst_buf_node = remote_node;
-  createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-  createThreadPinned(&submitThread,submit_thread,&targs,20);
-  pthread_join(submitThread,NULL);
-
+    /* buffers on far */
+    args.src_buf_node = remote_node;
+    args.dst_buf_node = remote_node;
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
 
 
 exit:
