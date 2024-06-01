@@ -81,6 +81,7 @@ typedef struct _alloc_td_args{
   int xfer_size;
   int src_buf_node;
   int dst_buf_node;
+  pthread_barrier_t *alloc_sync;
 } alloc_td_args;
 
 void * buf_alloc_td(void *arg){
@@ -89,6 +90,7 @@ void * buf_alloc_td(void *arg){
   int xfer_size = args->xfer_size;
   int src_buf_node = args->src_buf_node;
   int dst_buf_node = args->dst_buf_node;
+  pthread_barrier_t *alloc_sync = args->alloc_sync;
 
   mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
   dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
@@ -100,6 +102,7 @@ void * buf_alloc_td(void *arg){
       __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
     }
   }
+  pthread_barrier_wait(alloc_sync); /* increment the semaphore once we have alloc'd */
 }
 
 typedef struct mini_buf_test_args {
@@ -110,6 +113,7 @@ typedef struct mini_buf_test_args {
   int src_buf_node;
   int dst_buf_node;
   int flush_task;
+  pthread_barrier_t *alloc_sync;
 } mbuf_targs;
 
 void *submit_thread(void *arg){
@@ -139,17 +143,6 @@ void *submit_thread(void *arg){
   int num_bufs = 1024;
   int xfer_size = 256;
 
-  mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
-  dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
-  for(int i=0; i<num_bufs; i++){
-    mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, src_buf_node);
-    dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, dst_buf_node);
-    for(int j=0; j<xfer_size; j++){
-      __builtin_prefetch((const void*) mini_bufs[i] + j);
-      __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
-    }
-  }
-
 
   /* int on_node_alloc_multiple_tasks(dsa, num_bufs); */
   struct task_node *tmp_tsk_node;
@@ -171,8 +164,10 @@ void *submit_thread(void *arg){
   task_node = dsa->multi_task_node;
 
   int idx=0;
-  /* How fast can we complete 1024 256B offloads to different memory locations? */
 
+  /* Wait for buffer alloc thread to create the buffers */
+  pthread_barrier_t *alloc_sync = t_args->alloc_sync;
+  pthread_barrier_wait(alloc_sync);
   while(task_node){
     prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
     task_node->tsk->desc->flags |= t_args->flags;
