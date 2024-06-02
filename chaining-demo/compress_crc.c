@@ -582,22 +582,39 @@ struct completion_record *comp;
 uint64_t *start;
 uint64_t *end;
 pthread_barrier_t *tdSync;
-// enum wait_style {
-//   UMWAIT,
-//   PAUSE,
-//   SPIN
-// };
-// wait_style *style;
+enum wait_style {
+  UMWAIT,
+  PAUSE,
+  SPIN
+};
+char *wait_style_str[] = {"UMWAIT", "PAUSE", "SPIN"};
+enum wait_style *style;
 
 void *wakeup_thread(void *arg){
-  *start = sampleCoderdtsc();
+  uint64_t startStamp;
+  pthread_barrier_wait(tdSync);
+  startStamp = sampleCoderdtsc();
   comp->status = 1;
 
+  *start = startStamp;
 }
 
 void *waiter_thread(void *arg){
-  wait_spin(comp);
-  *end = sampleCoderdtsc();
+  uint64_t endStamp;
+  pthread_barrier_wait(tdSync);
+  switch(*style){
+    case UMWAIT:
+      wait_umwait(comp);
+      break;
+    case PAUSE:
+      wait_pause(comp);
+      break;
+    case SPIN:
+      wait_spin(comp);
+      break;
+  }
+  endStamp = sampleCoderdtsc();
+  *end = endStamp;
 }
 
 int main(){
@@ -605,7 +622,7 @@ int main(){
 
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  int num_samples = 100;
+  int num_samples = 1000;
   uint64_t cycleCtrs[num_samples];
   uint64_t startTimes[num_samples];
   uint64_t endTimes[num_samples];
@@ -621,24 +638,26 @@ int main(){
   start = malloc(sizeof(uint64_t));
   end = malloc(sizeof(uint64_t));
   comp = malloc(sizeof(struct completion_record));
+  style = malloc(sizeof(enum wait_style));
+
   comp->status = 0;
 
 
-
-  for(int itr=0; itr<num_samples; itr++){
-    pthread_barrier_init(tdSync, NULL, 2);
-    createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
-    createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
-    pthread_join(wakeupThread, NULL);
-    pthread_join(waiterThread, NULL);
-    startTimes[itr] = *start;
-    endTimes[itr] = *end;
+  for(enum wait_style st=UMWAIT; st<=SPIN; st++){
+    *style = st;
+    for(int itr=0; itr<num_samples; itr++){
+      pthread_barrier_init(tdSync, NULL, 2);
+      createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
+      createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
+      pthread_join(wakeupThread, NULL);
+      pthread_join(waiterThread, NULL);
+      startTimes[itr] = *start;
+      endTimes[itr] = *end;
+    }
+    /* sudo perf stat -e instructions -e cycles ./compress_crc */
+    avg_samples_from_arrays(cycleCtrs, avg, endTimes, startTimes, num_samples);
+    printf("%s: %ld\n", wait_style_str[st], avg);
   }
-  /* sudo perf stat -e instructions -e cycles ./compress_crc */
-  avg_samples_from_arrays(cycleCtrs, avg, endTimes, startTimes, num_samples);
-
-
-  printf("Time taken for wakeup thread: %lu\n", avg);
 
 
 exit:
