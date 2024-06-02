@@ -328,14 +328,7 @@ typedef struct _dwq_vs_shared_args{
   int flags;
 } dwq_vs_shared_args;
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+int dwq_test(){
 
   dwq_vs_shared_args *t_args = (dwq_vs_shared_args *)malloc(sizeof(dwq_vs_shared_args));
   t_args->num_bufs = 128;
@@ -416,10 +409,118 @@ int main(){
     }
     task_node = task_node->next;
   }
-  printf("Time taken for 1024 256B offloads: %lu\n", end-start);
-
+  uint64_t cycles = end-start;
   acctest_free(dsa);
-	return rc;
+
+  return cycles;
+}
+
+
+int swq_test(){
+
+  dwq_vs_shared_args *t_args = (dwq_vs_shared_args *)malloc(sizeof(dwq_vs_shared_args));
+  t_args->num_bufs = 128;
+  t_args->xfer_size = 256;
+  t_args->flags = IDXD_OP_FLAG_CC;
+
+  struct acctest_context *dsa;
+	int rc = 0;
+	unsigned long buf_size = DSA_TEST_SIZE;
+	int opcode = DSA_OPCODE_MEMMOVE;
+	int bopcode = DSA_OPCODE_MEMMOVE;
+	int tflags = TEST_FLAGS_BOF;
+	int opt;
+	unsigned int bsize = 0;
+	char dev_type[MAX_DEV_LEN];
+	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	unsigned int num_desc = 1;
+	struct evl_desc_list *edl = NULL;
+	char *edl_str = NULL;
+
+  int wq_type = SHARED; /*  sudo ./setup_dsa.sh -d dsa0 -w1 -md -e1 */
+
+  dsa = acctest_init(tflags);
+	dsa->dev_type = ACCFG_DEVICE_DSA;
+
+	if (!dsa)
+		return -ENOMEM;
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
+
+  if (buf_size > dsa->max_xfer_size) {
+		err("invalid transfer size: %lu\n", buf_size);
+		return -EINVAL;
+	}
+
+  struct task_node * task_node;
+
+  int num_bufs = t_args->num_bufs;
+  int xfer_size = t_args->xfer_size;
+
+  acctest_alloc_multiple_tasks(dsa, num_bufs);
+
+  int idx=0;
+  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    for(int j=0; j<xfer_size; j++){
+      __builtin_prefetch((const void*) dsa_mini_bufs[i] + j);
+      __builtin_prefetch((const void*) dsa_dst_mini_bufs[i] + j);
+    }
+  }
+  while(task_node){
+    prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
+    task_node->tsk->desc->flags |= t_args->flags;
+  }
+
+  task_node = dsa->multi_task_node;
+  uint64_t start = sampleCoderdtsc();
+
+  while(task_node){
+    acctest_desc_submit(dsa, task_node->tsk->desc);
+    // while(task_node->tsk->comp->status == 0){
+    //   _mm_pause();
+    // }
+    task_node = task_node->next;
+  }
+  uint64_t end = sampleCoderdtsc();
+  while(task_node){
+    // acctest_desc_submit(dsa, task_node->tsk->desc);
+    while(task_node->tsk->comp->status == 0){
+      _mm_pause();
+    }
+    task_node = task_node->next;
+  }
+  uint64_t cycles = end-start;
+  acctest_free(dsa);
+
+  return cycles;
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  for(int i=0; i<10; i++){
+  uint64_t dedicated_cycles = dwq_test();
+  printf("Time taken for Dedicated 1024 256B offloads: %lu\n", dedicated_cycles);
+
+  uint64_t shared_cycles = swq_test();
+  printf("Time taken for Shared 1024 256B offloads: %lu\n", shared_cycles);
+
+  }
+
 exit:
 
   icp_sal_userStop();
