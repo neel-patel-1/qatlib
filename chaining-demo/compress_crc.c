@@ -134,10 +134,10 @@ void *submit_thread(void *arg){
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
   if (!dsa)
-		return -ENOMEM;
+		return (void *)NULL;
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
 	if (rc < 0)
-		return -ENOMEM;
+		return (void *)NULL;
 
   struct task_node * task_node;
 
@@ -152,11 +152,11 @@ void *submit_thread(void *arg){
     tmp_tsk_node = dsa->multi_task_node;
     dsa->multi_task_node = (struct task_node *)malloc(sizeof(struct task_node));
     if (!dsa->multi_task_node)
-			return -ENOMEM;
+			return (void *)NULL;
 
     dsa->multi_task_node->tsk = on_node_task_alloc(dsa, desc_node, cr_node);
     if (!dsa->multi_task_node->tsk)
-			return -ENOMEM;
+			return (void *)NULL;
     dsa->multi_task_node->next = tmp_tsk_node;
     cnt++;
   }
@@ -319,6 +319,9 @@ CpaStatus offloadComponentLocationTest(){
   }
 }
 
+#define DSA_TEST_SIZE 20000
+#pragma GCC diagnostic ignored "-Wformat"
+
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -329,7 +332,30 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  offloadComponentLocationTest();
+  struct acctest_context *dsa;
+	int rc = 0;
+	unsigned long buf_size = DSA_TEST_SIZE;
+	int wq_type = SHARED;
+	int opcode = DSA_OPCODE_MEMMOVE;
+	int bopcode = DSA_OPCODE_MEMMOVE;
+	int tflags = TEST_FLAGS_BOF;
+	int opt;
+	unsigned int bsize = 0;
+	char dev_type[MAX_DEV_LEN];
+	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	unsigned int num_desc = 1;
+	struct evl_desc_list *edl = NULL;
+	char *edl_str = NULL;
+
+  dsa = acctest_init(tflags);
+	dsa->dev_type = ACCFG_DEVICE_DSA;
+
+	if (!dsa)
+		return -ENOMEM;
+
+
 
 
 exit:
