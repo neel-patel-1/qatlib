@@ -40,7 +40,7 @@
 int gDebugParam = 1;
 
 uint8_t **mini_bufs;
-  uint8_t **dst_mini_bufs;
+uint8_t **dst_mini_bufs;
 
 
 struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int cr_node){
@@ -242,16 +242,7 @@ void *submit_thread(void *arg){
 
 }
 
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
+CpaStatus offloadComponentLocationTest(){
   int dev_id = 0;
   int dsa_node = 0;
   int remote_node = 1;
@@ -263,11 +254,11 @@ int main(){
     mbuf_targs targs;
     targs.dev_id = 0;
     targs.xfer_size = xfer_size;
-    targs.num_bufs = 1024;
+    targs.num_bufs = 1024 * 10;
     targs.alloc_sync = &alloc_sync;
 
     alloc_td_args args;
-    args.num_bufs = 1024;
+    args.num_bufs = 1024 * 10;
     args.xfer_size = xfer_size;
     args.alloc_sync = &alloc_sync;
 
@@ -283,7 +274,7 @@ int main(){
     /* buffers on local */
     args.src_buf_node = dsa_node;
     args.dst_buf_node = dsa_node;
-    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,10);
     createThreadPinned(&submitThread,submit_thread,&targs,10);
     pthread_join(submitThread,NULL);
 
@@ -297,7 +288,7 @@ int main(){
     /* buffers on local */
     args.src_buf_node = dsa_node;
     args.dst_buf_node = dsa_node;
-    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,10);
     createThreadPinned(&submitThread,submit_thread,&targs,20);
     pthread_join(submitThread,NULL);
 
@@ -314,7 +305,25 @@ int main(){
     createThreadPinned(&allocThread,buf_alloc_td,&args,20);
     createThreadPinned(&submitThread,submit_thread,&targs,20);
     pthread_join(submitThread,NULL);
+
+
+
+
+
   }
+}
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  // offloadComponentLocationTest();
 
 
 exit:
