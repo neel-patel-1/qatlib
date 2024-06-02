@@ -322,6 +322,13 @@ CpaStatus offloadComponentLocationTest(){
 #define DSA_TEST_SIZE 20000
 #pragma GCC diagnostic ignored "-Wformat"
 
+typedef struct _dwq_vs_shared_args{
+  int num_bufs;
+  int xfer_size;
+  int src_buf_node;
+  int dst_buf_node;
+  pthread_barrier_t *alloc_sync;
+} dwq_vs_shared_args;
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -331,6 +338,9 @@ int main(){
 
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+  dwq_vs_shared_args *t_args = (dwq_vs_shared_args *)malloc(sizeof(dwq_vs_shared_args));
+  t_args->num_bufs = 128;
 
   struct acctest_context *dsa;
 	int rc = 0;
@@ -348,7 +358,7 @@ int main(){
 	struct evl_desc_list *edl = NULL;
 	char *edl_str = NULL;
 
-  int wq_type = DEDICATED;
+  int wq_type = DEDICATED; /*  sudo ./setup_dsa.sh -d dsa0 -w1 -md -e1 */
 
   dsa = acctest_init(tflags);
 	dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -364,6 +374,12 @@ int main(){
 		err("invalid transfer size: %lu\n", buf_size);
 		return -EINVAL;
 	}
+
+  struct task_node * task_node;
+
+  int num_bufs = t_args->num_bufs;
+  int xfer_size = t_args->xfer_size;
+
 
   acctest_free(dsa);
 	return rc;
