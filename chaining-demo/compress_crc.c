@@ -517,6 +517,46 @@ int dedicated_vs_shared_test(int shared){
   }
 }
 
+static __always_inline void umonitor(const volatile void *addr)
+{
+	asm volatile(".byte 0xf3, 0x48, 0x0f, 0xae, 0xf0" : : "a"(addr));
+}
+
+static __always_inline int umwait(unsigned long timeout, unsigned int state)
+{
+	uint8_t r;
+	uint32_t timeout_low = (uint32_t)timeout;
+	uint32_t timeout_high = (uint32_t)(timeout >> 32);
+
+	asm volatile(".byte 0xf2, 0x48, 0x0f, 0xae, 0xf1\t\n"
+		"setc %0\t\n"
+		: "=r"(r)
+		: "c"(state), "a"(timeout_low), "d"(timeout_high));
+	return r;
+}
+
+struct completion_record *comp;
+uint64_t *start;
+uint64_t *end;
+pthread_barrier_t *tdSync;
+
+void *wakeup_thread(void *arg){
+  *start = sampleCoderdtsc();
+  comp->status = 0;
+
+}
+
+void *waiter_thread(void *arg){
+  int r = 1;
+  while(comp->status == 0){
+    umonitor((uint8_t *)comp);
+    if (comp->status != 0)
+				break;
+    r = umwait(0, 0);
+  }
+  *end = sampleCoderdtsc();
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
@@ -526,100 +566,23 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  dwq_vs_shared_args *t_args = (dwq_vs_shared_args *)malloc(sizeof(dwq_vs_shared_args));
-  t_args->num_bufs = 128;
-  t_args->xfer_size = 256;
-  t_args->flags = IDXD_OP_FLAG_CC;
+  /* Can we get wakeup time -- spin up an SMT thread with the same*/
+  pthread_t wakeupThread, waiterThread;
+  tdSync = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
+  pthread_barrier_init(tdSync, NULL, 2);
+  start = malloc(sizeof(uint64_t));
+  end = malloc(sizeof(uint64_t));
+  comp = malloc(sizeof(struct completion_record));
+  comp->status = 0;
 
-  struct acctest_context *dsa;
-	int rc = 0;
-	unsigned long buf_size = DSA_TEST_SIZE;
-	int opcode = DSA_OPCODE_MEMMOVE;
-	int bopcode = DSA_OPCODE_MEMMOVE;
-	int tflags = TEST_FLAGS_BOF;
-	int opt;
-	char dev_type[MAX_DEV_LEN];
-	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	unsigned int num_desc = 1;
-	struct evl_desc_list *edl = NULL;
-	char *edl_str = NULL;
+  createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
+  createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
 
-  int wq_type = DEDICATED; /*  sudo ./setup_dsa.sh -d dsa0 -w1 -md -e1 */
+  pthread_join(wakeupThread, NULL);
+  pthread_join(waiterThread, NULL);
 
-  dsa = acctest_init(tflags);
-	dsa->dev_type = ACCFG_DEVICE_DSA;
+  printf("Time taken for wakeup thread: %lu\n", *end-*start);
 
-	if (!dsa)
-		return -ENOMEM;
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-	if (rc < 0)
-		return -ENOMEM;
-
-  if (buf_size > dsa->max_xfer_size) {
-		err("invalid transfer size: %lu\n", buf_size);
-		return -EINVAL;
-	}
-
-  struct task_node * task_node;
-
-  int num_bufs = t_args->num_bufs;
-  int xfer_size = t_args->xfer_size;
-
-  unsigned int bsize = 1;
-  // acctest_alloc_multiple_tasks(dsa, num_bufs);
-  /* test_batch: 41*/
-  struct btask_node *btsk_node;
-  struct acctest_context *ctx = dsa;
-  ctx->is_batch = 1;
-
-  btsk_node = ctx->multi_btask_node;
-  rc = alloc_batch_task(ctx, bsize, num_bufs);
-  int dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
-  if ((tflags & TEST_FLAGS_BOF) && ctx->bof)
-    dflags |= IDXD_OP_FLAG_BOF;
-
-
-  int idx=0;
-  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
-  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
-  for(int i=0; i<num_bufs; i++){
-    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
-    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
-    for(int j=0; j<xfer_size; j++){
-      __builtin_prefetch((const void*) dsa_mini_bufs[i] + j);
-      __builtin_prefetch((const void*) dsa_dst_mini_bufs[i] + j);
-    }
-  }
-  while(task_node){
-    prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
-    task_node->tsk->desc->flags |= t_args->flags;
-  }
-
-  task_node = dsa->multi_task_node;
-  uint64_t start = sampleCoderdtsc();
-
-  while(task_node){
-    acctest_desc_submit(dsa, task_node->tsk->desc);
-    // while(task_node->tsk->comp->status == 0){
-    //   _mm_pause();
-    // }
-    task_node = task_node->next;
-  }
-  uint64_t end = sampleCoderdtsc();
-  while(task_node){
-    // acctest_desc_submit(dsa, task_node->tsk->desc);
-    while(task_node->tsk->comp->status == 0){
-      _mm_pause();
-    }
-    task_node = task_node->next;
-  }
-  uint64_t cycles = end-start;
-  acctest_free(dsa);
-
-  return cycles;
 
 exit:
 
