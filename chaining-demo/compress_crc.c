@@ -538,7 +538,6 @@ int main(){
 	int bopcode = DSA_OPCODE_MEMMOVE;
 	int tflags = TEST_FLAGS_BOF;
 	int opt;
-	unsigned int bsize = 0;
 	char dev_type[MAX_DEV_LEN];
 	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
 	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
@@ -547,7 +546,7 @@ int main(){
 	struct evl_desc_list *edl = NULL;
 	char *edl_str = NULL;
 
-  int wq_type = SHARED; /*  sudo ./setup_dsa.sh -d dsa0 -w1 -md -e1 */
+  int wq_type = DEDICATED; /*  sudo ./setup_dsa.sh -d dsa0 -w1 -md -e1 */
 
   dsa = acctest_init(tflags);
 	dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -569,9 +568,18 @@ int main(){
   int num_bufs = t_args->num_bufs;
   int xfer_size = t_args->xfer_size;
 
+  unsigned int bsize = 1;
   // acctest_alloc_multiple_tasks(dsa, num_bufs);
+  /* test_batch: 41*/
   struct btask_node *btsk_node;
   struct acctest_context *ctx = dsa;
+  ctx->is_batch = 1;
+
+  btsk_node = ctx->multi_btask_node;
+  rc = alloc_batch_task(ctx, bsize, num_bufs);
+  int dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  if ((tflags & TEST_FLAGS_BOF) && ctx->bof)
+    dflags |= IDXD_OP_FLAG_BOF;
 
 
   int idx=0;
