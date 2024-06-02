@@ -325,6 +325,7 @@ CpaStatus offloadComponentLocationTest(){
 typedef struct _dwq_vs_shared_args{
   int num_bufs;
   int xfer_size;
+  int flags;
 } dwq_vs_shared_args;
 
 int main(){
@@ -339,6 +340,7 @@ int main(){
   dwq_vs_shared_args *t_args = (dwq_vs_shared_args *)malloc(sizeof(dwq_vs_shared_args));
   t_args->num_bufs = 128;
   t_args->xfer_size = 256;
+  t_args->flags = IDXD_OP_FLAG_CC;
 
   struct acctest_context *dsa;
 	int rc = 0;
@@ -380,7 +382,21 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_bufs);
 
-
+  int idx=0;
+  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    for(int j=0; j<xfer_size; j++){
+      __builtin_prefetch((const void*) dsa_mini_bufs[i] + j);
+      __builtin_prefetch((const void*) dsa_dst_mini_bufs[i] + j);
+    }
+  }
+  while(task_node){
+    prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
+    task_node->tsk->desc->flags |= t_args->flags;
+  }
 
   acctest_free(dsa);
 	return rc;
