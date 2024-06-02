@@ -517,6 +517,24 @@ int dedicated_vs_shared_test(int shared){
   }
 }
 
+static inline void gen_diff_array(uint64_t *dst_array, uint64_t* array1,  uint64_t* array2, int size)
+{
+  for(int i=0; i<size; i++){ dst_array[i] = array2[i] - array1[i]; }
+}
+
+#define do_sum_array(accum,array,iter) accum = 0; \
+ for (int i=1; i<iter; i++){ accum+=array[i]; } \
+ accum /= iter
+#define do_avg(sum, itr) (sum/itr)
+
+#define avg_samples_from_arrays(yield_to_submit, avg, before_yield, before_submit, num_samples) \
+  gen_diff_array(yield_to_submit, before_submit, before_yield, num_samples); \
+  do_sum_array(avg, yield_to_submit, num_samples); \
+  do_avg(avg, num_samples);
+
+
+/* Waiting Styles Tests */
+
 static __always_inline void umonitor(const volatile void *addr)
 {
 	asm volatile(".byte 0xf3, 0x48, 0x0f, 0xae, 0xf0" : : "a"(addr));
@@ -564,10 +582,16 @@ struct completion_record *comp;
 uint64_t *start;
 uint64_t *end;
 pthread_barrier_t *tdSync;
+// enum wait_style {
+//   UMWAIT,
+//   PAUSE,
+//   SPIN
+// };
+// wait_style *style;
 
 void *wakeup_thread(void *arg){
   *start = sampleCoderdtsc();
-  comp->status = 0;
+  comp->status = 1;
 
 }
 
@@ -581,6 +605,11 @@ int main(){
 
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+  int num_samples = 100;
+  uint64_t cycleCtrs[num_samples];
+  uint64_t startTimes[num_samples];
+  uint64_t endTimes[num_samples];
+  uint64_t avg =0;
 
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
@@ -588,20 +617,28 @@ int main(){
   /* Can we get wakeup time -- spin up an SMT thread with the same*/
   pthread_t wakeupThread, waiterThread;
   tdSync = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
-  pthread_barrier_init(tdSync, NULL, 2);
+
   start = malloc(sizeof(uint64_t));
   end = malloc(sizeof(uint64_t));
   comp = malloc(sizeof(struct completion_record));
   comp->status = 0;
 
-  createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
-  createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
+
+
+  for(int itr=0; itr<num_samples; itr++){
+    pthread_barrier_init(tdSync, NULL, 2);
+    createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
+    createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
+    pthread_join(wakeupThread, NULL);
+    pthread_join(waiterThread, NULL);
+    startTimes[itr] = *start;
+    endTimes[itr] = *end;
+  }
   /* sudo perf stat -e instructions -e cycles ./compress_crc */
+  avg_samples_from_arrays(cycleCtrs, avg, endTimes, startTimes, num_samples);
 
-  pthread_join(wakeupThread, NULL);
-  pthread_join(waiterThread, NULL);
 
-  printf("Time taken for wakeup thread: %lu\n", *end-*start);
+  printf("Time taken for wakeup thread: %lu\n", avg);
 
 
 exit:
