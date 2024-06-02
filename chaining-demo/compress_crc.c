@@ -325,9 +325,6 @@ CpaStatus offloadComponentLocationTest(){
 typedef struct _dwq_vs_shared_args{
   int num_bufs;
   int xfer_size;
-  int src_buf_node;
-  int dst_buf_node;
-  pthread_barrier_t *alloc_sync;
 } dwq_vs_shared_args;
 
 int main(){
@@ -341,6 +338,7 @@ int main(){
 
   dwq_vs_shared_args *t_args = (dwq_vs_shared_args *)malloc(sizeof(dwq_vs_shared_args));
   t_args->num_bufs = 128;
+  t_args->xfer_size = 256;
 
   struct acctest_context *dsa;
 	int rc = 0;
@@ -379,6 +377,9 @@ int main(){
 
   int num_bufs = t_args->num_bufs;
   int xfer_size = t_args->xfer_size;
+
+  acctest_alloc_multiple_tasks(dsa, num_bufs);
+
 
 
   acctest_free(dsa);
