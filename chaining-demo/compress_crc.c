@@ -535,6 +535,31 @@ static __always_inline int umwait(unsigned long timeout, unsigned int state)
 	return r;
 }
 
+static __always_inline int wait_umwait(struct completion_record *comp)
+{
+	int r = 1;
+  while(comp->status == 0){
+    umonitor((uint8_t *)comp);
+    if (comp->status != 0)
+				break;
+    r = umwait(0, 0);
+  }
+}
+
+static __always_inline int wait_pause(struct completion_record *comp)
+{
+	int r = 1;
+  while(comp->status == 0){
+    _mm_pause();
+  }
+}
+
+static __always_inline int wait_spin(struct completion_record *comp)
+{
+	int r = 1;
+  while(comp->status == 0){  }
+}
+
 struct completion_record *comp;
 uint64_t *start;
 uint64_t *end;
@@ -547,13 +572,7 @@ void *wakeup_thread(void *arg){
 }
 
 void *waiter_thread(void *arg){
-  int r = 1;
-  while(comp->status == 0){
-    umonitor((uint8_t *)comp);
-    if (comp->status != 0)
-				break;
-    r = umwait(0, 0);
-  }
+  wait_spin(comp);
   *end = sampleCoderdtsc();
 }
 
@@ -577,6 +596,7 @@ int main(){
 
   createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
   createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
+  /* sudo perf stat -e instructions -e cycles ./compress_crc */
 
   pthread_join(wakeupThread, NULL);
   pthread_join(waiterThread, NULL);
