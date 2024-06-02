@@ -398,6 +398,26 @@ int main(){
     task_node->tsk->desc->flags |= t_args->flags;
   }
 
+  task_node = dsa->multi_task_node;
+  uint64_t start = sampleCoderdtsc();
+
+  while(task_node){
+    acctest_desc_submit(dsa, task_node->tsk->desc);
+    // while(task_node->tsk->comp->status == 0){
+    //   _mm_pause();
+    // }
+    task_node = task_node->next;
+  }
+  uint64_t end = sampleCoderdtsc();
+  while(task_node){
+    // acctest_desc_submit(dsa, task_node->tsk->desc);
+    while(task_node->tsk->comp->status == 0){
+      _mm_pause();
+    }
+    task_node = task_node->next;
+  }
+  printf("Time taken for 1024 256B offloads: %lu\n", end-start);
+
   acctest_free(dsa);
 	return rc;
 exit:
