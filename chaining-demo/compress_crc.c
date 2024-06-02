@@ -503,6 +503,20 @@ int swq_test(){
   return cycles;
 }
 
+int dedicated_vs_shared_test(int shared){
+  for(int i=0; i<10; i++){
+  if(shared == 0){
+    uint64_t dedicated_cycles = dwq_test();
+    printf("Time taken for Dedicated 1024 256B offloads: %lu\n", dedicated_cycles);
+  }
+
+  if(shared == 1){
+    uint64_t shared_cycles = swq_test();
+    printf("Time taken for Shared 1024 256B offloads: %lu\n", shared_cycles);
+  }
+  }
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
@@ -512,14 +526,7 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  for(int i=0; i<10; i++){
-  uint64_t dedicated_cycles = dwq_test();
-  printf("Time taken for Dedicated 1024 256B offloads: %lu\n", dedicated_cycles);
-
-  uint64_t shared_cycles = swq_test();
-  printf("Time taken for Shared 1024 256B offloads: %lu\n", shared_cycles);
-
-  }
+  dedicated_vs_shared_test(0);
 
 exit:
 
