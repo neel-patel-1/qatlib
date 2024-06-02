@@ -110,7 +110,8 @@ typedef struct mini_buf_test_args {
   int dev_id;
   int desc_node;
   int cr_node;
-  int flush_task;
+  int flush_desc;
+  int flush_bufs;
   int num_bufs;
   int xfer_size;
   pthread_barrier_t *alloc_sync;
@@ -120,6 +121,8 @@ void *submit_thread(void *arg){
   mbuf_targs *t_args = (mbuf_targs *) arg;
   int desc_node = t_args->desc_node;
   int cr_node = t_args->cr_node;
+  bool flush_bufs = t_args->flush_bufs;
+  bool flush_desc = t_args->flush_desc;
 
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
@@ -171,14 +174,17 @@ void *submit_thread(void *arg){
     task_node->tsk->desc->flags |= t_args->flags;
 
     /* Flush task and src/dst */
-    if(t_args->flush_task == 1){
+    if(flush_desc){
       _mm_clflush(task_node->tsk->desc);
       _mm_clflush(task_node->tsk->comp);
+    }
+    if(flush_bufs){
       for(int i=0; i<xfer_size; i++){
         _mm_clflush(mini_bufs[idx] + i);
         _mm_clflush(dst_mini_bufs[idx] + i);
       }
     }
+
 
     idx++;
     task_node = task_node->next;
@@ -256,6 +262,8 @@ CpaStatus offloadComponentLocationTest(){
     targs.xfer_size = xfer_size;
     targs.num_bufs = 1024 * 10;
     targs.alloc_sync = &alloc_sync;
+    targs.flush_bufs = false;
+    targs.flush_desc = false;
 
     alloc_td_args args;
     args.num_bufs = 1024 * 10;
@@ -269,7 +277,6 @@ CpaStatus offloadComponentLocationTest(){
     targs.flags = IDXD_OP_FLAG_CC;
     targs.desc_node = dsa_node;
     targs.cr_node = dsa_node;
-    targs.flush_task = 0;
 
     /* buffers on local */
     args.src_buf_node = dsa_node;
@@ -283,7 +290,7 @@ CpaStatus offloadComponentLocationTest(){
     targs.flags =  IDXD_OP_FLAG_CC;
     targs.desc_node = remote_node;
     targs.cr_node = remote_node;
-    targs.flush_task = 0;
+    targs.flush_desc = 0;
 
     /* buffers on local */
     args.src_buf_node = dsa_node;
@@ -297,7 +304,6 @@ CpaStatus offloadComponentLocationTest(){
     targs.flags = IDXD_OP_FLAG_CC;
     targs.desc_node = remote_node;
     targs.cr_node = remote_node;
-    targs.flush_task = 0;
 
     /* buffers on far */
     args.src_buf_node = remote_node;
@@ -323,7 +329,7 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  // offloadComponentLocationTest();
+  offloadComponentLocationTest();
 
 
 exit:
