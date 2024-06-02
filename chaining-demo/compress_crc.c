@@ -335,7 +335,6 @@ int main(){
   struct acctest_context *dsa;
 	int rc = 0;
 	unsigned long buf_size = DSA_TEST_SIZE;
-	int wq_type = SHARED;
 	int opcode = DSA_OPCODE_MEMMOVE;
 	int bopcode = DSA_OPCODE_MEMMOVE;
 	int tflags = TEST_FLAGS_BOF;
@@ -349,15 +348,25 @@ int main(){
 	struct evl_desc_list *edl = NULL;
 	char *edl_str = NULL;
 
+  int wq_type = DEDICATED;
+
   dsa = acctest_init(tflags);
 	dsa->dev_type = ACCFG_DEVICE_DSA;
 
 	if (!dsa)
 		return -ENOMEM;
 
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return -ENOMEM;
 
+  if (buf_size > dsa->max_xfer_size) {
+		err("invalid transfer size: %lu\n", buf_size);
+		return -EINVAL;
+	}
 
-
+  acctest_free(dsa);
+	return rc;
 exit:
 
   icp_sal_userStop();
