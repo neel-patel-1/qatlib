@@ -76,6 +76,7 @@ struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int
 	return tsk;
 }
 
+/* Offload Component Location . h*/
 typedef struct _alloc_td_args{
   int num_bufs;
   int xfer_size;
@@ -248,7 +249,7 @@ void *submit_thread(void *arg){
 
 }
 
-CpaStatus offloadComponentLocationTest(){
+CpaStatus offloadComponentLocationTest(){ // MAIN TEST Function
   int dev_id = 0;
   int dsa_node = 0;
   int remote_node = 1;
@@ -652,6 +653,8 @@ int compare_wait_styles(){
 
 }
 
+#define ACCESS_ONCE(x) (*(volatile typeof(x) *)&(x))
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
@@ -667,7 +670,56 @@ int main(){
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
   /* Local-LLC, Remote-Socket-LLC, Local-Mem, Remote-Mem*/
-  compare_wait_styles();
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int dev_id = 0;
+  int wq_id = 0;
+  int opcode = 16;
+  /* Use dedicated to increase impact of descriptor fetch -- no hide latency behind DMWr*/
+  int wq_type = ACCFG_WQ_DEDICATED;
+  int rc;
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+  if (!dsa)
+		return (void *)NULL;
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+	if (rc < 0)
+		return (void *)NULL;
+
+  struct task_node * task_node;
+
+  int num_bufs = 128;
+  int xfer_size = 4096;
+
+  acctest_alloc_multiple_tasks(dsa, num_bufs);
+  int idx=0;
+  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+
+  for(int i=0; i<num_bufs; i++){
+    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+  }
+
+  /* Touch all payload pages to ensure in memory, then flush all to DRAM */
+  for(int i=0; i<num_bufs; i++){
+    /* Flush all bufs to dram*/
+    for(int j=0; j<xfer_size; j++){
+      ACCESS_ONCE(*(dsa_mini_bufs[i] + j));
+      ACCESS_ONCE(*(dsa_dst_mini_bufs[i] + j));
+    }
+  }
+
+  for(int i=0; i<num_bufs; i++){
+    /* Flush all bufs to dram*/
+    for(int j=0; j<xfer_size; j++){
+      _mm_clflush((const void*) dsa_mini_bufs[i] + j);
+      _mm_clflush((const void*) dsa_dst_mini_bufs[i] + j);
+    }
+  }
+
+
+
 
 exit:
 
