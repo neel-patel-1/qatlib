@@ -319,6 +319,8 @@ CpaStatus offloadComponentLocationTest(){
   }
 }
 
+/* Thread Safety .h*/
+
 #define DSA_TEST_SIZE 20000
 #pragma GCC diagnostic ignored "-Wformat"
 
@@ -517,6 +519,7 @@ int dedicated_vs_shared_test(int shared){
   }
 }
 
+/* stats .h */
 static inline void gen_diff_array(uint64_t *dst_array, uint64_t* array1,  uint64_t* array2, int size)
 {
   for(int i=0; i<size; i++){ dst_array[i] = array2[i] - array1[i]; }
@@ -533,7 +536,7 @@ static inline void gen_diff_array(uint64_t *dst_array, uint64_t* array1,  uint64
   do_avg(avg, num_samples);
 
 
-/* Waiting Styles Tests */
+/* Waiting Styles .h */
 
 static __always_inline void umonitor(const volatile void *addr)
 {
@@ -617,6 +620,38 @@ void *waiter_thread(void *arg){
   *end = endStamp;
 }
 
+int compare_wait_styles(){
+  int num_samples = 1000;
+  uint64_t cycleCtrs[num_samples];
+  uint64_t startTimes[num_samples];
+  uint64_t endTimes[num_samples];
+  uint64_t avg =0;
+
+  pthread_t wakeupThread, waiterThread;
+  tdSync = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
+
+  start = malloc(sizeof(uint64_t));
+  end = malloc(sizeof(uint64_t));
+  comp = malloc(sizeof(struct completion_record));
+  style = malloc(sizeof(enum wait_style));
+  comp->status = 0;
+  for(enum wait_style st=UMWAIT; st<=SPIN; st++){
+    *style = st;
+    for(int itr=0; itr<num_samples; itr++){
+      pthread_barrier_init(tdSync, NULL, 2);
+      createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
+      createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
+      pthread_join(wakeupThread, NULL);
+      pthread_join(waiterThread, NULL);
+      startTimes[itr] = *start;
+      endTimes[itr] = *end;
+    }
+    avg_samples_from_arrays(cycleCtrs, avg, endTimes, startTimes, num_samples);
+    printf("%s: %ld\n", wait_style_str[st], avg);
+  }
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
 
@@ -631,34 +666,8 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  /* Can we get wakeup time -- spin up an SMT thread with the same*/
-  pthread_t wakeupThread, waiterThread;
-  tdSync = (pthread_barrier_t *)malloc(sizeof(pthread_barrier_t));
-
-  start = malloc(sizeof(uint64_t));
-  end = malloc(sizeof(uint64_t));
-  comp = malloc(sizeof(struct completion_record));
-  style = malloc(sizeof(enum wait_style));
-
-  comp->status = 0;
-
-
-  for(enum wait_style st=UMWAIT; st<=SPIN; st++){
-    *style = st;
-    for(int itr=0; itr<num_samples; itr++){
-      pthread_barrier_init(tdSync, NULL, 2);
-      createThreadPinned(&waiterThread, waiter_thread, NULL, 30);
-      createThreadPinned(&wakeupThread, wakeup_thread, NULL, 10);
-      pthread_join(wakeupThread, NULL);
-      pthread_join(waiterThread, NULL);
-      startTimes[itr] = *start;
-      endTimes[itr] = *end;
-    }
-    /* sudo perf stat -e instructions -e cycles ./compress_crc */
-    avg_samples_from_arrays(cycleCtrs, avg, endTimes, startTimes, num_samples);
-    printf("%s: %ld\n", wait_style_str[st], avg);
-  }
-
+  /* Local-LLC, Remote-Socket-LLC, Local-Mem, Remote-Mem*/
+  compare_wait_styles();
 
 exit:
 
