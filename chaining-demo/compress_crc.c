@@ -684,7 +684,7 @@ int main(){
 
 
   /* DRAM, LLC */
-  int dev_id = 0;
+  int dev_id = 2;
   int dsa_node = 1;
   int remote_node = 0;
 
@@ -693,11 +693,12 @@ int main(){
   int xfer_size=256;
 
   mbuf_targs targs;
-  targs.dev_id = 0;
+  targs.dev_id = dev_id;
   targs.xfer_size = xfer_size;
   targs.num_bufs = 128;
   targs.alloc_sync = &alloc_sync;
   targs.wq_type = ACCFG_WQ_DEDICATED;
+  targs.flags = IDXD_OP_FLAG_CC;
 
   alloc_td_args args;
   args.num_bufs = 128;
@@ -714,7 +715,6 @@ int main(){
     targs.idx = i;
     targs.start_times = start_times;
     targs.end_times = end_times;
-    targs.flags = IDXD_OP_FLAG_CC;
 
     pthread_barrier_init(&alloc_sync, NULL, 2);
     createThreadPinned(&allocThread,buf_alloc_td,&args,20);
@@ -722,7 +722,7 @@ int main(){
     pthread_join(submitThread,NULL);
   }
   avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("All-Local: %ld\n", avg);
+  PRINT("All-Cached: %ld\n", avg);
 
   for(int i=0; i<num_samples; i++){
     args.flush_bufs = true;
@@ -749,7 +749,6 @@ int main(){
     targs.idx = i;
     targs.start_times = start_times;
     targs.end_times = end_times;
-    targs.flags = IDXD_OP_FLAG_CC;
 
     pthread_barrier_init(&alloc_sync, NULL, 2);
     createThreadPinned(&allocThread,buf_alloc_td,&args,20);
@@ -767,7 +766,6 @@ int main(){
     targs.idx = i;
     targs.start_times = start_times;
     targs.end_times = end_times;
-    targs.flags = IDXD_OP_FLAG_CC;
 
     pthread_barrier_init(&alloc_sync, NULL, 2);
     createThreadPinned(&allocThread,buf_alloc_td,&args,20);
