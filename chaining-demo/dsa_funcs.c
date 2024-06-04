@@ -464,7 +464,7 @@ void prepare_memcpy_task(
   tsk->src1 = srcAddr;
   tsk->dst1 = dstAddr;
   tsk->opcode = DSA_OPCODE_MEMMOVE;
-  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  tsk->dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
   acctest_prep_desc_common(tsk->desc, tsk->opcode, (uint64_t)(tsk->dst1),
 				 (uint64_t)(tsk->src1), tsk->xfer_size, tsk->dflags);
 

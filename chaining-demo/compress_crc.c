@@ -115,6 +115,7 @@ typedef struct mini_buf_test_args {
   int flush_bufs;
   int num_bufs;
   int xfer_size;
+  int wq_type;
   pthread_barrier_t *alloc_sync;
 } mbuf_targs;
 
@@ -130,7 +131,7 @@ void *submit_thread(void *arg){
   int dev_id = t_args->dev_id;
   int wq_id = 0;
   int opcode = 16;
-  int wq_type = ACCFG_WQ_SHARED;
+  int wq_type = t_args->wq_type;
   int rc;
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -171,7 +172,7 @@ void *submit_thread(void *arg){
   pthread_barrier_t *alloc_sync = t_args->alloc_sync;
   pthread_barrier_wait(alloc_sync);
   while(task_node){
-    prepare_memcpy_task(task_node->tsk, dsa,mini_bufs[idx], xfer_size,dst_mini_bufs[idx]);
+    prepare_memcpy_task(task_node->tsk, dsa, mini_bufs[idx], xfer_size, dst_mini_bufs[idx]);
     task_node->tsk->desc->flags |= t_args->flags;
 
     /* Flush task and src/dst */
@@ -207,7 +208,14 @@ void *submit_thread(void *arg){
   uint64_t end = sampleCoderdtsc();
   printf("Time taken for 1024 256B offloads: %lu\n", end-start);
 
-
+  /* validate all tasks */
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    if(task_node->tsk->comp->status != DSA_COMP_SUCCESS){
+      err("Task failed: 0x%x\n", task_node->tsk->comp->status);
+    }
+    task_node = task_node->next;
+  }
 
 
   // acctest_free(dsa);
@@ -223,19 +231,17 @@ void *submit_thread(void *arg){
     tmp_node = tsk_node->next;
     struct task *tsk = tsk_node->tsk;
     /* void free_task(struct task *tsk) */
+
+
     numa_free(tsk_node->tsk->desc, sizeof(struct hw_desc));
     numa_free(tsk_node->tsk->comp, sizeof(struct completion_record));
-    mprotect(tsk_node->tsk->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
-    if (tsk->opcode != IAX_OPCODE_TRANSL_FETCH) {
-      numa_free(tsk->src1, tsk->xfer_size);
-    } else {
-      munmap(tsk->src1, tsk->xfer_size);
-      close(tsk->group);
-      close(tsk->container);
-    }
+    mprotect(tsk->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+    numa_free(tsk->src1, xfer_size);
     free(tsk->src2);
     numa_free(tsk->dst1, xfer_size);
     free(tsk->dst2);
+    free(tsk->input);
+    free(tsk->output);
 
 
 
@@ -278,6 +284,7 @@ CpaStatus offloadComponentLocationTest(){ // MAIN TEST Function
     targs.flags = IDXD_OP_FLAG_CC;
     targs.desc_node = dsa_node;
     targs.cr_node = dsa_node;
+    targs.wq_type = ACCFG_WQ_SHARED;
 
     /* buffers on local */
     args.src_buf_node = dsa_node;
@@ -669,113 +676,51 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  offloadComponentLocationTest();
-  return 0;
-
-  /* Local-LLC, Remote-Socket-LLC, Local-Mem, Remote-Mem*/
-  struct acctest_context *dsa = NULL;
-  int tflags = IDXD_OP_FLAG_BOF; /* Accessing everything and flushing to DRAM should avoid ever hitting BOF*/
+  /* DRAM, LLC */
   int dev_id = 0;
-  int wq_id = 0;
-  int opcode = 16;
-  /* Use dedicated to increase impact of descriptor fetch -- no hide latency behind DMWr*/
-  int wq_type = ACCFG_WQ_DEDICATED;
-  int rc;
-  dsa = acctest_init(tflags);
-  dsa->dev_type = ACCFG_DEVICE_DSA;
-  if (!dsa)
-		return (void *)NULL;
+  int dsa_node = 0;
+  int remote_node = 1;
 
+  pthread_t submitThread, allocThread;
+  pthread_barrier_t alloc_sync;
+  int xfer_size=256;
 
-  struct task_node * task_node;
+  mbuf_targs targs;
+  targs.dev_id = 0;
+  targs.xfer_size = xfer_size;
+  targs.num_bufs = 128;
+  targs.alloc_sync = &alloc_sync;
+  targs.wq_type = ACCFG_WQ_DEDICATED;
 
-  int num_bufs = 128;
-  int xfer_size = 4096;
-  int num_tests = 1000;
+  alloc_td_args args;
+  args.num_bufs = 128;
+  args.xfer_size = xfer_size;
+  args.alloc_sync = &alloc_sync;
+  args.src_buf_node = dsa_node;
+  args.dst_buf_node = dsa_node;
 
-  // for(int i=0; i<num_tests; i++){
-    rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-    if (rc < 0)
-      return (void *)NULL;
-    acctest_alloc_multiple_tasks(dsa, num_bufs);
-    int idx=0;
-    uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
-    uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  targs.flush_bufs = true;
+  targs.desc_node = dsa_node;
+  targs.cr_node = dsa_node;
+  targs.flush_desc = true;
 
-    for(int i=0; i<num_bufs; i++){
-      dsa_mini_bufs[i] = (uint8_t *)malloc(xfer_size);
-      dsa_dst_mini_bufs[i] = (uint8_t *)malloc(xfer_size);
-    }
+  pthread_barrier_init(&alloc_sync, NULL, 2);
+  createThreadPinned(&allocThread,buf_alloc_td,&args,10);
+  createThreadPinned(&submitThread,submit_thread,&targs,10);
+  pthread_join(submitThread,NULL);
 
-    /* Touch all payload pages to ensure in memory, then flush all to DRAM */
-    for(int i=0; i<num_bufs; i++){
-      /* Flush all bufs to dram*/
-      for(int j=0; j<xfer_size; j++){
-        ACCESS_ONCE(*(dsa_mini_bufs[i] + j));
-        ACCESS_ONCE(*(dsa_dst_mini_bufs[i] + j));
-      }
-    }
+  targs.flush_bufs = false;
+  targs.desc_node = dsa_node;
+  targs.cr_node = dsa_node;
+  targs.flush_desc = false;
 
-    for(int i=0; i<num_bufs; i++){
-      /* Flush all bufs to dram*/
-      for(int j=0; j<xfer_size; j++){
-        _mm_clflush((const void*) dsa_mini_bufs[i] + j);
-        _mm_clflush((const void*) dsa_dst_mini_bufs[i] + j);
-      }
-    }
+  pthread_barrier_init(&alloc_sync, NULL, 2);
+  createThreadPinned(&allocThread,buf_alloc_td,&args,10);
+  createThreadPinned(&submitThread,submit_thread,&targs,10);
+  pthread_join(submitThread,NULL);
 
-    task_node = dsa->multi_task_node;
-    while(task_node){
-      prepare_memcpy_task(task_node->tsk, dsa,dsa_mini_bufs[idx], xfer_size,dsa_dst_mini_bufs[idx]);
-      idx++;
-      task_node = task_node->next;
-    }
+  // offloadComponentLocationTest();
 
-    /* flush descriptors */
-    task_node = dsa->multi_task_node;
-    while(task_node){
-      _mm_clflush(task_node->tsk->desc);
-      _mm_clflush(task_node->tsk->comp);
-      task_node = task_node->next;
-    }
-
-    /* submit descriptors */
-    /* current unknowns -- where in memory each descriptor is located -- could be on the same page since we are using malloc */
-    /*
-      Where in memory each payload is located -- since they are greater than 4KB and prefetcher does not operate across page boundaries, we may be safe
-      Unsure of whether page faults will occur -- check if we get Page fault error without enabling BOF
-
-      We may be able to test _mm_pause() vs umwait() in a end-to-end test here
-    */
-    task_node = dsa->multi_task_node;
-    uint64_t start = sampleCoderdtsc();
-    while(task_node){
-      acctest_desc_submit(dsa, task_node->tsk->desc);
-      while(task_node->tsk->comp->status == 0){
-        _mm_pause();
-      }
-      task_node = task_node->next;
-    }
-    uint64_t end = sampleCoderdtsc();
-    printf("Time taken for 128 4KB offloads: %lu\n", end-start);
-
-    /* free mini buffs */
-    // for(int i=0; i<num_bufs; i++){
-    //   free(dsa_mini_bufs[i]);
-    //   free(dsa_dst_mini_bufs[i]);
-    // }
-    // free(dsa_mini_bufs);
-    // free(dsa_dst_mini_bufs);
-    acctest_free(dsa);
-  // }
-  /* validate success of all */
-  task_node = dsa->multi_task_node;
-  while(task_node){
-    // if(task_node->tsk->comp->status != DSA_COMP_SUCCESS){
-      err("Task failed: 0x%x\n", task_node->tsk->comp->status);
-    // }
-    task_node = task_node->next;
-  }
 
 
 
