@@ -982,7 +982,7 @@ int main(){
 
   /* Use a single descriptor -- prefetch it, submit it repeatedly */
 
-  int dev_id = 0;
+  int dev_id = 2;
   int wq_id = 0;
   pthread_t submitThread, allocThread;
 
