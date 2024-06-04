@@ -1027,36 +1027,45 @@ int main(){
     task_node = task_node->next;
   }
 
-  task_node = dsa->multi_task_node;
-  int retry = 0;
-  uint64_t start = sampleCoderdtsc();
-  while(task_node){
-    retry = enqcmd(dsa->wq_reg, task_node->tsk->desc);
-    if(retry){
-      err("Failed to enq\n");
-      exit(-1)
+  for(int idx=0; idx<num_samples; idx++){
+    task_node = dsa->multi_task_node;
+    int retry = 0;
+    uint64_t start = sampleCoderdtsc();
+    while(task_node){
+      retry = enqcmd(dsa->wq_reg, task_node->tsk->desc);
+      if(retry){
+        err("Failed to enq\n");
+        exit(-1);
+      }
+      task_node = task_node->next;
     }
-    task_node = task_node->next;
-  }
-  uint64_t end = sampleCoderdtsc();
-  uint64_t cycles = end-start;
+    uint64_t end = sampleCoderdtsc();
+    start_times[idx] = start;
+    end_times[idx] = end;
 
-  task_node = dsa->multi_task_node;
-  while(task_node){
-    while(task_node->tsk->comp->status == 0){
-      _mm_pause();
-    }
-    task_node = task_node->next;
-  }
+    uint64_t cycles = end-start;
+    cycleCtrs[idx] = cycles;
 
-  /* validate all tasks */
-  task_node = dsa->multi_task_node;
-  while(task_node){
-    if(task_node->tsk->comp->status != DSA_COMP_SUCCESS){
-      err("Task failed: 0x%x\n", task_node->tsk->comp->status);
+
+    task_node = dsa->multi_task_node;
+    while(task_node){
+      while(task_node->tsk->comp->status == 0){
+        _mm_pause();
+      }
+      task_node = task_node->next;
     }
-    task_node = task_node->next;
+
+    /* validate all tasks */
+    task_node = dsa->multi_task_node;
+    while(task_node){
+      if(task_node->tsk->comp->status != DSA_COMP_SUCCESS){
+        err("Task failed: 0x%x\n", task_node->tsk->comp->status);
+      }
+      task_node = task_node->next;
+    }
   }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("EnqCmdSubmit: %ld\n", avg);
 
   // acctest_free(dsa);
   if(munmap(dsa->wq_reg, PAGE_SIZE)){
