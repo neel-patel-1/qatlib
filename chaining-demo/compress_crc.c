@@ -966,13 +966,8 @@ int offloadComponentLocSync(){
   }
 }
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
+/* enqcmd_qpi.h */
+void *enqcmd_submission_latency(void *arg){
   int num_samples = 1000;
   uint64_t cycleCtrs[num_samples];
   uint64_t start_times[num_samples];
@@ -1112,6 +1107,16 @@ int main(){
   /* check if !retry, we don't want the impact of a failed enq */
 
   /* wait and check all offloads == 1*/
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  enqcmd_submission_latency(NULL);
 
 
 exit:
