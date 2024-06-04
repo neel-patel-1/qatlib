@@ -116,6 +116,9 @@ typedef struct mini_buf_test_args {
   int num_bufs;
   int xfer_size;
   int wq_type;
+  uint64_t *start_times;
+  uint64_t *end_times;
+  int idx;
   pthread_barrier_t *alloc_sync;
 } mbuf_targs;
 
@@ -206,7 +209,8 @@ void *submit_thread(void *arg){
     task_node = task_node->next;
   }
   uint64_t end = sampleCoderdtsc();
-  printf("Time taken for 1024 256B offloads: %lu\n", end-start);
+  t_args->start_times[t_args->idx] = start;
+  t_args->end_times[t_args->idx] = end;
 
   /* validate all tasks */
   task_node = dsa->multi_task_node;
@@ -667,14 +671,16 @@ int main(){
 
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  int num_samples = 1000;
+  int num_samples = 100;
   uint64_t cycleCtrs[num_samples];
-  uint64_t startTimes[num_samples];
-  uint64_t endTimes[num_samples];
+  uint64_t start_times[num_samples];
+  uint64_t end_times[num_samples];
+  uint64_t run_times[num_samples];
   uint64_t avg =0;
 
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
 
   /* DRAM, LLC */
   int dev_id = 0;
@@ -699,15 +705,22 @@ int main(){
   args.src_buf_node = dsa_node;
   args.dst_buf_node = dsa_node;
 
-  targs.flush_bufs = true;
-  targs.desc_node = dsa_node;
-  targs.cr_node = dsa_node;
-  targs.flush_desc = true;
+  for(int i=0; i<num_samples; i++){
+    targs.flush_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = true;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
 
-  pthread_barrier_init(&alloc_sync, NULL, 2);
-  createThreadPinned(&allocThread,buf_alloc_td,&args,10);
-  createThreadPinned(&submitThread,submit_thread,&targs,10);
-  pthread_join(submitThread,NULL);
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,10);
+    createThreadPinned(&submitThread,submit_thread,&targs,10);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("Time taken for 128 256B offloads: %ld\n", avg);
 
   targs.flush_bufs = false;
   targs.desc_node = dsa_node;
