@@ -82,6 +82,7 @@ typedef struct _alloc_td_args{
   int xfer_size;
   int src_buf_node;
   int dst_buf_node;
+  int flush_bufs;
   pthread_barrier_t *alloc_sync;
 } alloc_td_args;
 
@@ -92,6 +93,7 @@ void * buf_alloc_td(void *arg){
   int src_buf_node = args->src_buf_node;
   int dst_buf_node = args->dst_buf_node;
   pthread_barrier_t *alloc_sync = args->alloc_sync;
+  int flush_bufs = args->flush_bufs;
 
   mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
   dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
@@ -101,6 +103,12 @@ void * buf_alloc_td(void *arg){
     for(int j=0; j<xfer_size; j++){
       __builtin_prefetch((const void*) mini_bufs[i] + j);
       __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
+    }
+    if(flush_bufs){
+      for(int j=0; j<xfer_size; j++){
+        _mm_clflush(mini_bufs[i] + j);
+        _mm_clflush(dst_mini_bufs[i] + j);
+      }
     }
   }
   pthread_barrier_wait(alloc_sync); /* increment the semaphore once we have alloc'd */
@@ -112,7 +120,6 @@ typedef struct mini_buf_test_args {
   int desc_node;
   int cr_node;
   int flush_desc;
-  int flush_bufs;
   int num_bufs;
   int xfer_size;
   int wq_type;
@@ -126,7 +133,6 @@ void *submit_thread(void *arg){
   mbuf_targs *t_args = (mbuf_targs *) arg;
   int desc_node = t_args->desc_node;
   int cr_node = t_args->cr_node;
-  bool flush_bufs = t_args->flush_bufs;
   bool flush_desc = t_args->flush_desc;
 
   struct acctest_context *dsa = NULL;
@@ -183,12 +189,7 @@ void *submit_thread(void *arg){
       _mm_clflush(task_node->tsk->desc);
       _mm_clflush(task_node->tsk->comp);
     }
-    if(flush_bufs){
-      for(int i=0; i<xfer_size; i++){
-        _mm_clflush(mini_bufs[idx] + i);
-        _mm_clflush(dst_mini_bufs[idx] + i);
-      }
-    }
+
 
 
     idx++;
@@ -273,13 +274,13 @@ CpaStatus offloadComponentLocationTest(){ // MAIN TEST Function
     targs.xfer_size = xfer_size;
     targs.num_bufs = 1024 * 10;
     targs.alloc_sync = &alloc_sync;
-    targs.flush_bufs = false;
     targs.flush_desc = false;
 
     alloc_td_args args;
     args.num_bufs = 1024 * 10;
     args.xfer_size = xfer_size;
     args.alloc_sync = &alloc_sync;
+    args.flush_bufs = false;
 
 
     /* DESCRIPTOR LOCATION TEST */
@@ -671,7 +672,7 @@ int main(){
 
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-  int num_samples = 100;
+  int num_samples = 1000;
   uint64_t cycleCtrs[num_samples];
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
@@ -684,8 +685,8 @@ int main(){
 
   /* DRAM, LLC */
   int dev_id = 0;
-  int dsa_node = 0;
-  int remote_node = 1;
+  int dsa_node = 1;
+  int remote_node = 0;
 
   pthread_t submitThread, allocThread;
   pthread_barrier_t alloc_sync;
@@ -706,24 +707,7 @@ int main(){
   args.dst_buf_node = dsa_node;
 
   for(int i=0; i<num_samples; i++){
-    targs.flush_bufs = true;
-    targs.desc_node = dsa_node;
-    targs.cr_node = dsa_node;
-    targs.flush_desc = true;
-    targs.idx = i;
-    targs.start_times = start_times;
-    targs.end_times = end_times;
-
-    pthread_barrier_init(&alloc_sync, NULL, 2);
-    createThreadPinned(&allocThread,buf_alloc_td,&args,10);
-    createThreadPinned(&submitThread,submit_thread,&targs,10);
-    pthread_join(submitThread,NULL);
-  }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("DRAM: %ld\n", avg);
-
-  for(int i=0; i<num_samples; i++){
-    targs.flush_bufs = false;
+    args.flush_bufs = false;
     targs.desc_node = dsa_node;
     targs.cr_node = dsa_node;
     targs.flush_desc = false;
@@ -733,12 +717,65 @@ int main(){
     targs.flags = IDXD_OP_FLAG_CC;
 
     pthread_barrier_init(&alloc_sync, NULL, 2);
-    createThreadPinned(&allocThread,buf_alloc_td,&args,10);
-    createThreadPinned(&submitThread,submit_thread,&targs,10);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
     pthread_join(submitThread,NULL);
   }
   avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("LLC: %ld\n", avg);
+  PRINT("All-Local: %ld\n", avg);
+
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = false;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
+
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("Payload-DRAM: %ld\n", avg);
+
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = false;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = true;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
+    targs.flags = IDXD_OP_FLAG_CC;
+
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("Descriptor-DRAM: %ld\n", avg);
+
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = true;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
+    targs.flags = IDXD_OP_FLAG_CC;
+
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("All-DRAM: %ld\n", avg);
 
 
   // offloadComponentLocationTest();
