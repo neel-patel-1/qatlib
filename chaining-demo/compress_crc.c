@@ -860,14 +860,109 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
+  int num_samples = 1000;
+  uint64_t cycleCtrs[num_samples];
+  uint64_t start_times[num_samples];
+  uint64_t end_times[num_samples];
+  uint64_t run_times[num_samples];
+  uint64_t avg =0;
+
+  /* DRAM, LLC */
+  int dev_id = 2;
+  int dsa_node = 1;
+  int remote_node = 0;
+
+  pthread_t submitThread, allocThread;
+  pthread_barrier_t alloc_sync;
+  int xfer_size=1024;
+
+  mbuf_targs targs;
+  targs.dev_id = dev_id;
+  targs.xfer_size = xfer_size;
+  targs.num_bufs = 128;
+  targs.alloc_sync = &alloc_sync;
+  targs.wq_type = ACCFG_WQ_DEDICATED;
+  targs.flags = IDXD_OP_FLAG_CC;
+
+  alloc_td_args args;
+  args.num_bufs = 128;
+  args.xfer_size = xfer_size;
+  args.alloc_sync = &alloc_sync;
+  args.src_buf_node = dsa_node;
+  args.dst_buf_node = dsa_node;
 
 
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = true;
+    args.prefault_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = true;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
 
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("FlushBuf-FlushDesc: %ld\n", avg);
 
-  pageFaultImpact();
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = true;
+    args.prefault_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = false;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
 
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("FlushBuf: %ld\n", avg);
 
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = false;
+    args.prefault_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = true;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
 
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("FlushDesc: %ld\n", avg);
+
+  for(int i=0; i<num_samples; i++){
+    args.flush_bufs = false;
+    args.prefault_bufs = true;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = true;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
+
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+    createThreadPinned(&submitThread,submit_thread,&targs,20);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("FlushNone: %ld\n", avg);
 
 exit:
 
