@@ -1119,12 +1119,10 @@ void *movdir64b_submission_latency(void *arg){
   uint64_t avg =0;
 
   /* Use a single descriptor -- prefetch it, submit it repeatedly */
-
+  struct acctest_context *dsa = NULL;
   int dev_id = 2;
   int wq_id = 0;
-  pthread_t submitThread, allocThread;
 
-  struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
   int wq_type = ACCFG_WQ_SHARED;
   dsa = acctest_init(tflags);
@@ -1161,6 +1159,8 @@ void *movdir64b_submission_latency(void *arg){
   while(task_node){
     prepare_memcpy_task(task_node->tsk, dsa,dsa_mini_bufs[idx], xfer_size,dsa_dst_mini_bufs[idx]);
     task_node->tsk->desc->flags |= IDXD_OP_FLAG_CC;
+    /* prefetch all descriptors */
+    __builtin_prefetch((const void*) task_node->tsk->desc);
     idx++;
     task_node = task_node->next;
   }
@@ -1234,7 +1234,6 @@ void *movdir64b_submission_latency(void *arg){
     tsk_node = tmp_node;
   }
   dsa->multi_task_node = NULL;
-
   free(dsa);
 
   /* Later on: Pin to different cores and submit 128 descs to the device */
@@ -1256,8 +1255,12 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  movdir64b_submission_latency(NULL);
-  // enqcmd_submission_latency(NULL);
+  pthread_t submitThread;
+  for(int i=20; i<=39; i++){
+    createThreadPinned(&submitThread, movdir64b_submission_latency, NULL, i);
+    pthread_join(submitThread, NULL);
+    // movdir64b_submission_latency(NULL);
+  }
 
 
 exit:
