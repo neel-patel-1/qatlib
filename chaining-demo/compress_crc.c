@@ -852,11 +852,7 @@ int pageFaultImpact(){
 
 }
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-
+int offloadComponentLocSync(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
@@ -964,6 +960,14 @@ int main(){
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
     PRINT("FlushNone: %ld\n", avg);
   }
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+
+
 exit:
 
   icp_sal_userStop();
