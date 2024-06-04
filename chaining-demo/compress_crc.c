@@ -982,7 +982,7 @@ int main(){
 
   /* Use a single descriptor -- prefetch it, submit it repeatedly */
 
-  int dev_id = 2;
+  int dev_id = 0;
   int wq_id = 0;
   pthread_t submitThread, allocThread;
 
@@ -1028,16 +1028,27 @@ int main(){
   }
 
   task_node = dsa->multi_task_node;
+  int retry = 0;
   uint64_t start = sampleCoderdtsc();
   while(task_node){
-    acctest_desc_submit(dsa, task_node->tsk->desc);
-    while(task_node->tsk->comp->status == 0){
-      _mm_pause();
+    retry = enqcmd(dsa->wq_reg, task_node->tsk->desc);
+    if(retry){
+      err("Failed to enq\n");
+      exit(-1)
     }
     task_node = task_node->next;
   }
   uint64_t end = sampleCoderdtsc();
   uint64_t cycles = end-start;
+
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    while(task_node->tsk->comp->status == 0){
+      _mm_pause();
+    }
+    task_node = task_node->next;
+  }
+
   /* validate all tasks */
   task_node = dsa->multi_task_node;
   while(task_node){
