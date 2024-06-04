@@ -264,6 +264,7 @@ CpaStatus offloadComponentLocationTest(){
 
 
     /* DESCRIPTOR LOCATION TEST */
+    //1
     pthread_barrier_init(&alloc_sync, NULL, 2);
     /* descriptors and completion records (offloader) is on local  */
     targs.flags = IDXD_OP_FLAG_CC;
@@ -278,6 +279,9 @@ CpaStatus offloadComponentLocationTest(){
     createThreadPinned(&submitThread,submit_thread,&targs,10);
     pthread_join(submitThread,NULL);
 
+
+    //2
+
     pthread_barrier_init(&alloc_sync, NULL, 2);
     /* descriptors and completion records (offloader) is on far */
     targs.flags =  IDXD_OP_FLAG_CC;
@@ -291,6 +295,8 @@ CpaStatus offloadComponentLocationTest(){
     createThreadPinned(&allocThread,buf_alloc_td,&args,10);
     createThreadPinned(&submitThread,submit_thread,&targs,20);
     pthread_join(submitThread,NULL);
+
+    //3
 
     pthread_barrier_init(&alloc_sync, NULL, 2);
     /* descriptors and completion records (offloader) is on far  */
@@ -323,7 +329,7 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
-  // offloadComponentLocationTest();
+  offloadComponentLocationTest();
 
 
 exit:
