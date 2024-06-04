@@ -720,17 +720,26 @@ int main(){
     pthread_join(submitThread,NULL);
   }
   avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("Time taken for 128 256B offloads: %ld\n", avg);
+  PRINT("DRAM: %ld\n", avg);
 
-  targs.flush_bufs = false;
-  targs.desc_node = dsa_node;
-  targs.cr_node = dsa_node;
-  targs.flush_desc = false;
+  for(int i=0; i<num_samples; i++){
+    targs.flush_bufs = false;
+    targs.desc_node = dsa_node;
+    targs.cr_node = dsa_node;
+    targs.flush_desc = false;
+    targs.idx = i;
+    targs.start_times = start_times;
+    targs.end_times = end_times;
+    targs.flags = IDXD_OP_FLAG_CC;
 
-  pthread_barrier_init(&alloc_sync, NULL, 2);
-  createThreadPinned(&allocThread,buf_alloc_td,&args,10);
-  createThreadPinned(&submitThread,submit_thread,&targs,10);
-  pthread_join(submitThread,NULL);
+    pthread_barrier_init(&alloc_sync, NULL, 2);
+    createThreadPinned(&allocThread,buf_alloc_td,&args,10);
+    createThreadPinned(&submitThread,submit_thread,&targs,10);
+    pthread_join(submitThread,NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("LLC: %ld\n", avg);
+
 
   // offloadComponentLocationTest();
 
