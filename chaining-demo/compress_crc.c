@@ -83,6 +83,7 @@ typedef struct _alloc_td_args{
   int src_buf_node;
   int dst_buf_node;
   int flush_bufs;
+  int prefault_bufs;
   pthread_barrier_t *alloc_sync;
 } alloc_td_args;
 
@@ -94,6 +95,7 @@ void * buf_alloc_td(void *arg){
   int dst_buf_node = args->dst_buf_node;
   pthread_barrier_t *alloc_sync = args->alloc_sync;
   int flush_bufs = args->flush_bufs;
+  int prefault_bufs = args->prefault_bufs;
 
   mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
   dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
@@ -103,6 +105,12 @@ void * buf_alloc_td(void *arg){
     for(int j=0; j<xfer_size; j++){
       __builtin_prefetch((const void*) mini_bufs[i] + j);
       __builtin_prefetch((const void*) dst_mini_bufs[i] + j);
+    }
+    if(prefault_bufs){
+      for(int j=0; j<xfer_size; j++){
+        mini_bufs[i][j] = 0;
+        dst_mini_bufs[i][j] = 0;
+      }
     }
     if(flush_bufs){
       for(int j=0; j<xfer_size; j++){
