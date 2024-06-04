@@ -669,9 +669,12 @@ int main(){
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
 
+  offloadComponentLocationTest();
+  return 0;
+
   /* Local-LLC, Remote-Socket-LLC, Local-Mem, Remote-Mem*/
   struct acctest_context *dsa = NULL;
-  int tflags = TEST_FLAGS_BOF;
+  int tflags = IDXD_OP_FLAG_BOF; /* Accessing everything and flushing to DRAM should avoid ever hitting BOF*/
   int dev_id = 0;
   int wq_id = 0;
   int opcode = 16;
@@ -682,42 +685,97 @@ int main(){
   dsa->dev_type = ACCFG_DEVICE_DSA;
   if (!dsa)
 		return (void *)NULL;
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-	if (rc < 0)
-		return (void *)NULL;
+
 
   struct task_node * task_node;
 
   int num_bufs = 128;
   int xfer_size = 4096;
+  int num_tests = 1000;
 
-  acctest_alloc_multiple_tasks(dsa, num_bufs);
-  int idx=0;
-  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
-  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  // for(int i=0; i<num_tests; i++){
+    rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+    if (rc < 0)
+      return (void *)NULL;
+    acctest_alloc_multiple_tasks(dsa, num_bufs);
+    int idx=0;
+    uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+    uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
 
-  for(int i=0; i<num_bufs; i++){
-    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
-    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
-  }
-
-  /* Touch all payload pages to ensure in memory, then flush all to DRAM */
-  for(int i=0; i<num_bufs; i++){
-    /* Flush all bufs to dram*/
-    for(int j=0; j<xfer_size; j++){
-      ACCESS_ONCE(*(dsa_mini_bufs[i] + j));
-      ACCESS_ONCE(*(dsa_dst_mini_bufs[i] + j));
+    for(int i=0; i<num_bufs; i++){
+      dsa_mini_bufs[i] = (uint8_t *)malloc(xfer_size);
+      dsa_dst_mini_bufs[i] = (uint8_t *)malloc(xfer_size);
     }
-  }
 
-  for(int i=0; i<num_bufs; i++){
-    /* Flush all bufs to dram*/
-    for(int j=0; j<xfer_size; j++){
-      _mm_clflush((const void*) dsa_mini_bufs[i] + j);
-      _mm_clflush((const void*) dsa_dst_mini_bufs[i] + j);
+    /* Touch all payload pages to ensure in memory, then flush all to DRAM */
+    for(int i=0; i<num_bufs; i++){
+      /* Flush all bufs to dram*/
+      for(int j=0; j<xfer_size; j++){
+        ACCESS_ONCE(*(dsa_mini_bufs[i] + j));
+        ACCESS_ONCE(*(dsa_dst_mini_bufs[i] + j));
+      }
     }
-  }
 
+    for(int i=0; i<num_bufs; i++){
+      /* Flush all bufs to dram*/
+      for(int j=0; j<xfer_size; j++){
+        _mm_clflush((const void*) dsa_mini_bufs[i] + j);
+        _mm_clflush((const void*) dsa_dst_mini_bufs[i] + j);
+      }
+    }
+
+    task_node = dsa->multi_task_node;
+    while(task_node){
+      prepare_memcpy_task(task_node->tsk, dsa,dsa_mini_bufs[idx], xfer_size,dsa_dst_mini_bufs[idx]);
+      idx++;
+      task_node = task_node->next;
+    }
+
+    /* flush descriptors */
+    task_node = dsa->multi_task_node;
+    while(task_node){
+      _mm_clflush(task_node->tsk->desc);
+      _mm_clflush(task_node->tsk->comp);
+      task_node = task_node->next;
+    }
+
+    /* submit descriptors */
+    /* current unknowns -- where in memory each descriptor is located -- could be on the same page since we are using malloc */
+    /*
+      Where in memory each payload is located -- since they are greater than 4KB and prefetcher does not operate across page boundaries, we may be safe
+      Unsure of whether page faults will occur -- check if we get Page fault error without enabling BOF
+
+      We may be able to test _mm_pause() vs umwait() in a end-to-end test here
+    */
+    task_node = dsa->multi_task_node;
+    uint64_t start = sampleCoderdtsc();
+    while(task_node){
+      acctest_desc_submit(dsa, task_node->tsk->desc);
+      while(task_node->tsk->comp->status == 0){
+        _mm_pause();
+      }
+      task_node = task_node->next;
+    }
+    uint64_t end = sampleCoderdtsc();
+    printf("Time taken for 128 4KB offloads: %lu\n", end-start);
+
+    /* free mini buffs */
+    // for(int i=0; i<num_bufs; i++){
+    //   free(dsa_mini_bufs[i]);
+    //   free(dsa_dst_mini_bufs[i]);
+    // }
+    // free(dsa_mini_bufs);
+    // free(dsa_dst_mini_bufs);
+    acctest_free(dsa);
+  // }
+  /* validate success of all */
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    // if(task_node->tsk->comp->status != DSA_COMP_SUCCESS){
+      err("Task failed: 0x%x\n", task_node->tsk->comp->status);
+    // }
+    task_node = task_node->next;
+  }
 
 
 
