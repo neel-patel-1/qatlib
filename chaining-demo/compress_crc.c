@@ -874,96 +874,96 @@ int main(){
 
   pthread_t submitThread, allocThread;
   pthread_barrier_t alloc_sync;
-  int xfer_size=1024;
+  for( int xfer_size=256; xfer_size <= 1024; xfer_size*=2){
+    PRINT("Xfer_size: %d\n", xfer_size);
+    mbuf_targs targs;
+    targs.dev_id = dev_id;
+    targs.xfer_size = xfer_size;
+    targs.num_bufs = 128;
+    targs.alloc_sync = &alloc_sync;
+    targs.wq_type = ACCFG_WQ_DEDICATED;
+    targs.flags = IDXD_OP_FLAG_CC;
 
-  mbuf_targs targs;
-  targs.dev_id = dev_id;
-  targs.xfer_size = xfer_size;
-  targs.num_bufs = 128;
-  targs.alloc_sync = &alloc_sync;
-  targs.wq_type = ACCFG_WQ_DEDICATED;
-  targs.flags = IDXD_OP_FLAG_CC;
-
-  alloc_td_args args;
-  args.num_bufs = 128;
-  args.xfer_size = xfer_size;
-  args.alloc_sync = &alloc_sync;
-  args.src_buf_node = dsa_node;
-  args.dst_buf_node = dsa_node;
+    alloc_td_args args;
+    args.num_bufs = 128;
+    args.xfer_size = xfer_size;
+    args.alloc_sync = &alloc_sync;
+    args.src_buf_node = dsa_node;
+    args.dst_buf_node = dsa_node;
 
 
-  for(int i=0; i<num_samples; i++){
-    args.flush_bufs = true;
-    args.prefault_bufs = true;
-    targs.desc_node = dsa_node;
-    targs.cr_node = dsa_node;
-    targs.flush_desc = true;
-    targs.idx = i;
-    targs.start_times = start_times;
-    targs.end_times = end_times;
+    for(int i=0; i<num_samples; i++){
+      args.flush_bufs = true;
+      args.prefault_bufs = true;
+      targs.desc_node = dsa_node;
+      targs.cr_node = dsa_node;
+      targs.flush_desc = true;
+      targs.idx = i;
+      targs.start_times = start_times;
+      targs.end_times = end_times;
 
-    pthread_barrier_init(&alloc_sync, NULL, 2);
-    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-    createThreadPinned(&submitThread,submit_thread,&targs,20);
-    pthread_join(submitThread,NULL);
+      pthread_barrier_init(&alloc_sync, NULL, 2);
+      createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+      createThreadPinned(&submitThread,submit_thread,&targs,20);
+      pthread_join(submitThread,NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("FlushBuf-FlushDesc: %ld\n", avg);
+
+    for(int i=0; i<num_samples; i++){
+      args.flush_bufs = true;
+      args.prefault_bufs = true;
+      targs.desc_node = dsa_node;
+      targs.cr_node = dsa_node;
+      targs.flush_desc = false;
+      targs.idx = i;
+      targs.start_times = start_times;
+      targs.end_times = end_times;
+
+      pthread_barrier_init(&alloc_sync, NULL, 2);
+      createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+      createThreadPinned(&submitThread,submit_thread,&targs,20);
+      pthread_join(submitThread,NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("FlushBuf: %ld\n", avg);
+
+    for(int i=0; i<num_samples; i++){
+      args.flush_bufs = false;
+      args.prefault_bufs = true;
+      targs.desc_node = dsa_node;
+      targs.cr_node = dsa_node;
+      targs.flush_desc = true;
+      targs.idx = i;
+      targs.start_times = start_times;
+      targs.end_times = end_times;
+
+      pthread_barrier_init(&alloc_sync, NULL, 2);
+      createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+      createThreadPinned(&submitThread,submit_thread,&targs,20);
+      pthread_join(submitThread,NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("FlushDesc: %ld\n", avg);
+
+    for(int i=0; i<num_samples; i++){
+      args.flush_bufs = false;
+      args.prefault_bufs = true;
+      targs.desc_node = dsa_node;
+      targs.cr_node = dsa_node;
+      targs.flush_desc = true;
+      targs.idx = i;
+      targs.start_times = start_times;
+      targs.end_times = end_times;
+
+      pthread_barrier_init(&alloc_sync, NULL, 2);
+      createThreadPinned(&allocThread,buf_alloc_td,&args,20);
+      createThreadPinned(&submitThread,submit_thread,&targs,20);
+      pthread_join(submitThread,NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("FlushNone: %ld\n", avg);
   }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("FlushBuf-FlushDesc: %ld\n", avg);
-
-  for(int i=0; i<num_samples; i++){
-    args.flush_bufs = true;
-    args.prefault_bufs = true;
-    targs.desc_node = dsa_node;
-    targs.cr_node = dsa_node;
-    targs.flush_desc = false;
-    targs.idx = i;
-    targs.start_times = start_times;
-    targs.end_times = end_times;
-
-    pthread_barrier_init(&alloc_sync, NULL, 2);
-    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-    createThreadPinned(&submitThread,submit_thread,&targs,20);
-    pthread_join(submitThread,NULL);
-  }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("FlushBuf: %ld\n", avg);
-
-  for(int i=0; i<num_samples; i++){
-    args.flush_bufs = false;
-    args.prefault_bufs = true;
-    targs.desc_node = dsa_node;
-    targs.cr_node = dsa_node;
-    targs.flush_desc = true;
-    targs.idx = i;
-    targs.start_times = start_times;
-    targs.end_times = end_times;
-
-    pthread_barrier_init(&alloc_sync, NULL, 2);
-    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-    createThreadPinned(&submitThread,submit_thread,&targs,20);
-    pthread_join(submitThread,NULL);
-  }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("FlushDesc: %ld\n", avg);
-
-  for(int i=0; i<num_samples; i++){
-    args.flush_bufs = false;
-    args.prefault_bufs = true;
-    targs.desc_node = dsa_node;
-    targs.cr_node = dsa_node;
-    targs.flush_desc = true;
-    targs.idx = i;
-    targs.start_times = start_times;
-    targs.end_times = end_times;
-
-    pthread_barrier_init(&alloc_sync, NULL, 2);
-    createThreadPinned(&allocThread,buf_alloc_td,&args,20);
-    createThreadPinned(&submitThread,submit_thread,&targs,20);
-    pthread_join(submitThread,NULL);
-  }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("FlushNone: %ld\n", avg);
-
 exit:
 
   icp_sal_userStop();
