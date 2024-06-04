@@ -1109,6 +1109,146 @@ void *enqcmd_submission_latency(void *arg){
   /* wait and check all offloads == 1*/
 }
 
+/* movdir64b submission latency.h*/
+void *movdir64b_submission_latency(void *arg){
+  int num_samples = 1000;
+  uint64_t cycleCtrs[num_samples];
+  uint64_t start_times[num_samples];
+  uint64_t end_times[num_samples];
+  uint64_t run_times[num_samples];
+  uint64_t avg =0;
+
+  /* Use a single descriptor -- prefetch it, submit it repeatedly */
+
+  int dev_id = 2;
+  int wq_id = 0;
+  pthread_t submitThread, allocThread;
+
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int wq_type = ACCFG_WQ_SHARED;
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+  if (!dsa)
+    return -ENOMEM;
+
+  int rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  struct task_node * task_node;
+
+  int num_bufs = 128;
+  int xfer_size = 256;
+
+  acctest_alloc_multiple_tasks(dsa, num_bufs);
+
+  /* buffers */
+  int idx=0;
+  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(xfer_size, 0);
+    for(int j=0; j<xfer_size; j++){
+      __builtin_prefetch((const void*) dsa_mini_bufs[i] + j);
+      __builtin_prefetch((const void*) dsa_dst_mini_bufs[i] + j);
+    }
+  }
+
+  /* descs */
+  task_node = dsa->multi_task_node;
+  while(task_node){
+    prepare_memcpy_task(task_node->tsk, dsa,dsa_mini_bufs[idx], xfer_size,dsa_dst_mini_bufs[idx]);
+    task_node->tsk->desc->flags |= IDXD_OP_FLAG_CC;
+    idx++;
+    task_node = task_node->next;
+  }
+
+  for(int idx=0; idx<num_samples; idx++){
+    task_node = dsa->multi_task_node;
+    int retry = 0;
+    uint64_t start = sampleCoderdtsc();
+    while(task_node){
+      movdir64b(dsa->wq_reg, task_node->tsk->desc);
+
+      task_node = task_node->next;
+    }
+    uint64_t end = sampleCoderdtsc();
+    start_times[idx] = start;
+    end_times[idx] = end;
+
+    uint64_t cycles = end-start;
+    cycleCtrs[idx] = cycles;
+
+
+    task_node = dsa->multi_task_node;
+    while(task_node){
+      while(task_node->tsk->comp->status == 0){
+        _mm_pause();
+      }
+      task_node = task_node->next;
+    }
+
+    /* validate all tasks */
+    task_node = dsa->multi_task_node;
+    while(task_node){
+      if(task_node->tsk->comp->status != DSA_COMP_SUCCESS){
+        err("Task failed: 0x%x\n", task_node->tsk->comp->status);
+      }
+      task_node = task_node->next;
+    }
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("MovDir64BSubmit: %ld\n", avg);
+
+  // acctest_free(dsa);
+  if(munmap(dsa->wq_reg, PAGE_SIZE)){
+    err("Failed to unmap wq_reg\n");
+  }
+  close(dsa->fd);
+  accfg_unref(dsa->ctx);
+  struct task_node *tsk_node = NULL, *tmp_node = NULL;
+
+  tsk_node = dsa->multi_task_node;
+  while (tsk_node) {
+    tmp_node = tsk_node->next;
+    struct task *tsk = tsk_node->tsk;
+    /* void free_task(struct task *tsk) */
+
+
+    numa_free(tsk_node->tsk->desc, sizeof(struct hw_desc));
+    numa_free(tsk_node->tsk->comp, sizeof(struct completion_record));
+    mprotect(tsk->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+    numa_free(tsk->src1, xfer_size);
+    free(tsk->src2);
+    numa_free(tsk->dst1, xfer_size);
+    free(tsk->dst2);
+    free(tsk->input);
+    free(tsk->output);
+
+
+
+    tsk_node->tsk = NULL;
+    free(tsk_node);
+    tsk_node = tmp_node;
+  }
+  dsa->multi_task_node = NULL;
+
+  free(dsa);
+
+  /* Later on: Pin to different cores and submit 128 descs to the device */
+
+
+  /* enqcmds from socket 0 to socket 1 should take longer */
+
+  /* we will taskset to begin with */
+
+  /* check if !retry, we don't want the impact of a failed enq */
+
+  /* wait and check all offloads == 1*/
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -1116,7 +1256,8 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  enqcmd_submission_latency(NULL);
+  movdir64b_submission_latency(NULL);
+  // enqcmd_submission_latency(NULL);
 
 
 exit:
