@@ -1372,6 +1372,7 @@ int alloc_batch_task_on_node(struct acctest_context *ctx, unsigned int task_num,
 	return ACCTEST_STATUS_OK;
 }
 
+
 void *batch_memcpy(void *arg){
   struct acctest_context *dsa;
 	int rc = 0;
@@ -1441,18 +1442,42 @@ void *batch_memcpy(void *arg){
 
   /* Submit and check */
   btsk_node = ctx->multi_btask_node;
+  uint64_t start = sampleCoderdtsc();
   while (btsk_node) {
     acctest_desc_submit(ctx, btsk_node->btsk->core_task->desc);
-    rc = dsa_wait_batch(btsk_node->btsk, ctx);
-    if (rc != ACCTEST_STATUS_OK) {
-      err("batch failed stat %d\n", rc);
-      return rc;
+    while(btsk_node->btsk->core_task->comp->status == 0){
+      _mm_pause();
     }
 
     btsk_node = btsk_node->next;
   }
+  uint64_t end = sampleCoderdtsc();
+  PRINT("BatchMemcpy: %ld\n", end-start);
 
-  acctest_free_task(ctx);
+  /* free numa batch task*/
+  struct btask_node *tsk_node = NULL, *tmp_node = NULL;
+  tsk_node = ctx->multi_btask_node;
+  while (tsk_node) {
+    tmp_node = tsk_node->next;
+    // free_batch_task(tsk_node->btsk);
+    // free_task(btsk->core_task);
+    // void __clean_task(struct task *tsk)
+    numa_free(tsk_node->btsk->core_task->desc, sizeof(struct hw_desc));
+    numa_free(tsk_node->btsk->core_task->comp, sizeof(struct completion_record));
+    mprotect(tsk_node->btsk->core_task->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+    numa_free(tsk_node->btsk->core_task->src1, buf_size);
+    free(tsk_node->btsk->core_task->src2);
+    numa_free(tsk_node->btsk->core_task->dst1, buf_size);
+    free(tsk_node->btsk->core_task->dst2);
+    free(tsk_node->btsk->core_task->input);
+    free(tsk_node->btsk->core_task->output);
+
+    tsk_node->btsk = NULL;
+    free(tsk_node);
+    tsk_node = tmp_node;
+  }
+  ctx->multi_task_node = NULL;
+
   acctest_free(ctx);
 }
 
