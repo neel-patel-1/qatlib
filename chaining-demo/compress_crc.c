@@ -1277,22 +1277,38 @@ int batch_memcpy(){
   tflags = 1;
   int node = 1;
 
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+  if (!dsa)
+    return -ENOMEM;
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
   /* Buffers */
-  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * bsize);
-  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * bsize);
-  for(int i=0; i<bsize; i++){
-    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(buf_size, node);
-    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(buf_size, node);
-    for(int j=0; j<buf_size; j++){
-      __builtin_prefetch((const void*) dsa_mini_bufs[i] + j);
-      __builtin_prefetch((const void*) dsa_dst_mini_bufs[i] + j);
+  uint8_t ***batch_mini_bufs = malloc(sizeof(uint8_t **) * num_desc);
+  uint8_t ***batch_dst_mini_bufs = malloc(sizeof(uint8_t **) * num_desc);
+  for(int i=0; i<num_desc; i++){
+    batch_mini_bufs[i] = malloc(sizeof(uint8_t **) * bsize);
+    batch_dst_mini_bufs[i] = malloc(sizeof(uint8_t **) * bsize);
+    for(int j=0; j<bsize; j++){
+      batch_mini_bufs[i][j] = (uint8_t *)numa_alloc_onnode(buf_size, node);
+      batch_dst_mini_bufs[i][j] = (uint8_t *)numa_alloc_onnode(buf_size, node);
+      for(int k=0; k<buf_size; k++){
+        __builtin_prefetch((const void*) batch_mini_bufs[i][j] + k);
+        __builtin_prefetch((const void*) batch_dst_mini_bufs[i][j] + k);
+      }
     }
   }
+
 
   /* batch_test */
   struct acctest_context *ctx;
   struct btask_node *btsk_node;
   int dflags;
+  int batch_tsk_idx = 0;
+  ctx = dsa;
+  ctx->is_batch = 1;
   rc = alloc_batch_task(ctx, bsize, num_desc);
   dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | tflags;
   if (! (tflags & TEST_FLAGS_BOF) && ctx->bof){
@@ -1320,13 +1336,31 @@ int batch_memcpy(){
       btsk->sub_tasks[i].dflags = dflags;
 
       /* rc = dsa_init_task(&btsk->sub_tasks[i], tflags, opcode, xfer_size); */
-      prepare_memcpy_task(&(btsk->sub_tasks[i]), ctx, dsa_mini_bufs[i], buf_size, dsa_dst_mini_bufs[i]);
+      prepare_memcpy_task(&(btsk->sub_tasks[i]), ctx,
+        batch_mini_bufs[batch_tsk_idx][i], buf_size, batch_dst_mini_bufs[batch_tsk_idx][i]);
 
     }
     dsa_prep_batch_memcpy(btsk);
-
     btsk_node = btsk_node->next;
+  }
 
+  /* Submit and check */
+  btsk_node = ctx->multi_btask_node;
+  while (btsk_node) {
+    acctest_desc_submit(ctx, btsk_node->btsk->core_task->desc);
+    while(btsk_node->btsk->core_task->comp->status == 0){
+      _mm_pause();
+    }
+    btsk_node = btsk_node->next;
+  }
+
+  /* check status */
+  btsk_node = ctx->multi_btask_node;
+  while (btsk_node) {
+    if(btsk_node->btsk->core_task->comp->status != DSA_COMP_SUCCESS){
+      PRINT_ERR("Task failed: 0x%x\n", btsk_node->btsk->core_task->comp->status);
+    }
+    btsk_node = btsk_node->next;
   }
 
 }
@@ -1338,13 +1372,7 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  pthread_t submitThread;
-  for(int i=20; i<=39; i++){
-    // createThreadPinned(&submitThread, movdir64b_submission_latency, NULL, i);
-    // pthread_join(submitThread, NULL);
-    movdir64b_submission_latency(NULL);
-  }
-  // componentLocationSocket1();
+  batch_memcpy();
 
 exit:
 
