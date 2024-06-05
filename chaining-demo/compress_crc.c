@@ -1381,6 +1381,7 @@ typedef struct _batch_perf_test_args{
   uint64_t *end_times;
   int idx;
   int direct_sub;
+  int t_opcode;
 } batch_perf_test_args;
 
 void *batch_memcpy(void *arg){
@@ -1390,9 +1391,9 @@ void *batch_memcpy(void *arg){
 	int rc = 0;
 	unsigned long buf_size = DSA_TEST_SIZE;
 	int wq_type = -1;
-	int opcode = DSA_OPCODE_MEMMOVE;
-	int bopcode = DSA_OPCODE_MEMMOVE;
-	int tflags = TEST_FLAGS_BOF;
+	int opcode = DSA_OPCODE_BATCH;
+	int bopcode = args->t_opcode;
+	int tflags = TEST_FLAGS_BOF ;
 	int opt;
 	unsigned int bsize = args->bsize;
 	char dev_type[MAX_DEV_LEN];
@@ -1404,7 +1405,6 @@ void *batch_memcpy(void *arg){
 	char *edl_str = NULL;
 
   /* test batch*/
-  bopcode = 3;
   buf_size = args->xfer_size;
   edl = NULL;
   num_desc = args->num_batches; /*num batches*/
@@ -1501,6 +1501,7 @@ void *batch_memcpy(void *arg){
 
 
   /* validate the payloads and completions */
+  if(bopcode == DSA_OPCODE_MEMMOVE){
   btsk_node = ctx->multi_btask_node;
   while (btsk_node) {
     for(int j=0; j<bsize; j++){
@@ -1523,6 +1524,7 @@ void *batch_memcpy(void *arg){
       }
     }
     btsk_node = btsk_node->next;
+  }
   }
 
   /* free numa batch task*/
@@ -1568,7 +1570,7 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  int num_samples = 100;
+  int num_samples = 1000;
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
   uint64_t run_times[num_samples];
@@ -1584,7 +1586,10 @@ int main(){
   args.end_times = end_times;
   args.direct_sub = 0;
 
-  for(int batch_size=2; batch_size<=64; batch_size*=2){
+
+  args.t_opcode = DSA_OPCODE_NOOP;
+
+  for(int batch_size=2; batch_size<=2; batch_size*=2){
     PRINT("Batch_size:%d\n", batch_size);
     args.bsize = batch_size;
     for(int i=0; i<num_samples; i++){
@@ -1604,6 +1609,7 @@ int main(){
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
     PRINT("DirectSub: %ld\n", avg);
   }
+
 
 exit:
 
