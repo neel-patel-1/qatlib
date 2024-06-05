@@ -1347,7 +1347,7 @@ int test(){
 	int wq_type = SHARED;
 	int opcode = DSA_OPCODE_MEMMOVE;
 	int bopcode = DSA_OPCODE_MEMMOVE;
-	int tflags = TEST_FLAGS_BOF;
+	int tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CC;
 	int opt;
 	unsigned int bsize = 0;
 	char dev_type[MAX_DEV_LEN];
@@ -1366,6 +1366,32 @@ int test(){
   num_desc = 1; /*num batches*/
   tflags = 1;
   int node = 1;
+
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+  if (!dsa)
+    return -ENOMEM;
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  /* struct batch_task *alloc_batch_task_onnode(int node) */
+  struct batch_task *btsk;
+  btsk = malloc(sizeof(struct batch_task));
+  memset(btsk, 0, sizeof(struct batch_task));
+  btsk->task_num = bsize;
+  btsk->test_flags = tflags;
+
+  /* struct task *alloc_task_onnonde(int node ) */
+  struct task *tsk = malloc(sizeof(struct task));
+  memset(tsk, 0, sizeof(struct task));
+  tsk->desc = numa_alloc_onnode(sizeof(struct hw_desc), node);
+  memset(tsk->desc, 0, sizeof(struct hw_desc));
+  tsk->comp = numa_alloc_onnode(sizeof(struct completion_record), node);
+  memset(tsk->comp, 0, sizeof(struct completion_record));
+
+  btsk->core_task = tsk;
+
 }
 
 int main(){
