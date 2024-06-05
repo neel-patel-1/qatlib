@@ -1584,7 +1584,7 @@ int main(){
   args.end_times = end_times;
   args.direct_sub = 0;
 
-  for(int batch_size=2; batch_size<10; batch_size++){
+  for(int batch_size=2; batch_size<=64; batch_size*=2){
     PRINT("Batch_size:%d\n", batch_size);
     args.bsize = batch_size;
     for(int i=0; i<num_samples; i++){
