@@ -1584,8 +1584,8 @@ int main(){
   args.end_times = end_times;
   args.direct_sub = 0;
 
-  // for(int batch_size=2; batch_size<10; batch_size++){
-    int batch_size = 3;
+  for(int batch_size=2; batch_size<10; batch_size++){
+    PRINT("Batch_size:%d\n", batch_size);
     args.bsize = batch_size;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
@@ -1603,7 +1603,7 @@ int main(){
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
     PRINT("DirectSub: %ld\n", avg);
-  // }
+  }
 
 exit:
 
