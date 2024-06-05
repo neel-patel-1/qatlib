@@ -1311,6 +1311,7 @@ int batch_memcpy(){
   ctx->is_batch = 1;
   rc = alloc_batch_task(ctx, bsize, num_desc);
   dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | tflags;
+  tflags = dflags;
   if (! (tflags & TEST_FLAGS_BOF) && ctx->bof){
     PRINT_ERR("BOF not set\n");
     return -EINVAL;
@@ -1328,13 +1329,8 @@ int batch_memcpy(){
 
     for (i = 0; i < task_num; i++) {
       btsk->sub_tasks[i].desc = &btsk->sub_descs[i];
-      if (btsk->edl)
-        btsk->sub_tasks[i].comp = &btsk->sub_comps[(PAGE_SIZE * i) /
-          sizeof(struct completion_record)];
-      else
-        btsk->sub_tasks[i].comp = &btsk->sub_comps[i];
+      btsk->sub_tasks[i].comp = &btsk->sub_comps[i];
       btsk->sub_tasks[i].dflags = dflags;
-
       /* rc = dsa_init_task(&btsk->sub_tasks[i], tflags, opcode, xfer_size); */
       prepare_memcpy_task(&(btsk->sub_tasks[i]), ctx,
         batch_mini_bufs[batch_tsk_idx][i], buf_size, batch_dst_mini_bufs[batch_tsk_idx][i]);
