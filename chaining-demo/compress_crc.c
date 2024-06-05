@@ -1486,15 +1486,15 @@ void *batch_memcpy(void *arg){
     while (btsk_node) {
       for(int j=0; j<bsize; j++){
         acctest_desc_submit(ctx, btsk_node->btsk->sub_tasks[j].desc);
-        while(btsk_node->btsk->sub_tasks[j].comp->status == 0){
-          _mm_pause();
-        }
+
+      }
+      while(btsk_node->btsk->sub_tasks[bsize-1].comp->status == 0){
+        _mm_pause();
       }
       btsk_node = btsk_node->next;
     }
     end = sampleCoderdtsc();
   }
-  // PRINT("BatchMemcpy: %ld\n", end-start);
 
   args->start_times[args->idx] = start;
   args->end_times[args->idx] = end;
