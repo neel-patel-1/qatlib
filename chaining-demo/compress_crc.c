@@ -1295,6 +1295,40 @@ int init_batch_memcpy_task_onnode(struct batch_task *btsk, int task_num, int tfl
 	return ACCTEST_STATUS_OK;
 }
 
+int init_and_prep_noop_btsk(struct batch_task *btsk, int task_num, int tflags, int node){
+  int i, rc = ACCTEST_STATUS_OK;
+  struct task *sub_task;
+	uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+
+	btsk->task_num = task_num;
+	btsk->test_flags = tflags;
+
+	for (i = 0; i < task_num; i++) {
+      btsk->sub_tasks[i].desc = &btsk->sub_descs[i];
+      if (btsk->edl)
+        btsk->sub_tasks[i].comp = &btsk->sub_comps[(PAGE_SIZE * i) /
+          sizeof(struct completion_record)];
+      else
+        btsk->sub_tasks[i].comp = &btsk->sub_comps[i];
+      btsk->sub_tasks[i].dflags = dflags;
+      rc = init_task(&btsk->sub_tasks[i], tflags, 0, 0);
+      if (rc != ACCTEST_STATUS_OK) {
+        err("batch: init sub-task failed\n");
+        return rc;
+      }
+  }
+  for (i = 0; i < btsk->task_num; i++) {
+		sub_task = &btsk->sub_tasks[i];
+		acctest_prep_desc_common(sub_task->desc, sub_task->opcode,
+					 (uint64_t)(sub_task->dst1),
+					 (uint64_t)(sub_task->src1),
+					 0, dflags);
+		sub_task->desc->completion_addr = (uint64_t)(sub_task->comp);
+		sub_task->comp->status = 0;
+	}
+  return rc;
+}
+
 int alloc_batch_task_on_node(struct acctest_context *ctx, unsigned int task_num, int num_itr, int node)
 {
 	struct btask_node *btsk_node;
@@ -1434,28 +1468,33 @@ void *batch_memcpy(void *arg){
   while(btsk_node){
     struct batch_task *btsk = btsk_node->btsk;
     int task_num = bsize;
-    rc = init_batch_memcpy_task_onnode(btsk, bsize, tflags, bopcode, buf_size, dflags, node);
 
-    /* write prefault payloads and crs */
-    for(int j=0; j<task_num; j++){
-      for(int i=0; i<buf_size; i++){
-        ((char *)(btsk->sub_tasks[j].src1))[i] = 0x1;
-        ((char *)(btsk->sub_tasks[j].dst1))[i] = 0x2;
+    if(bopcode == DSA_OPCODE_MEMMOVE){
+      rc = init_batch_memcpy_task_onnode(btsk, bsize, tflags, bopcode, buf_size, dflags, node);
+
+      /* write prefault payloads and crs */
+      for(int j=0; j<task_num; j++){
+        for(int i=0; i<buf_size; i++){
+          ((char *)(btsk->sub_tasks[j].src1))[i] = 0x1;
+          ((char *)(btsk->sub_tasks[j].dst1))[i] = 0x2;
+        }
+        btsk->core_task->comp->status = 0;
       }
-      btsk->core_task->comp->status = 0;
-    }
 
-    /* flush all payloads, descs and crs */
-    for(int i=0; i<task_num; i++){
-      for(int j=0; j<buf_size; j++){
-        _mm_clflush((const void *)btsk->sub_tasks[i].src1 + j);
-        _mm_clflush((const void *)btsk->sub_tasks[i].dst1 + j);
+      /* flush all payloads, descs and crs */
+      for(int i=0; i<task_num; i++){
+        for(int j=0; j<buf_size; j++){
+          _mm_clflush((const void *)btsk->sub_tasks[i].src1 + j);
+          _mm_clflush((const void *)btsk->sub_tasks[i].dst1 + j);
+        }
+        _mm_clflush((const void *)btsk->sub_tasks[i].comp);
+        _mm_clflush((const void *)btsk->sub_tasks[i].desc);
       }
-      _mm_clflush((const void *)btsk->sub_tasks[i].comp);
-      _mm_clflush((const void *)btsk->sub_tasks[i].desc);
-    }
 
-    dsa_prep_batch_memcpy(btsk);
+      dsa_prep_batch_memcpy(btsk);
+    } else if(bopcode == DSA_OPCODE_NOOP){
+      rc = init_and_prep_noop_btsk(btsk,task_num,tflags,node);
+    }
     btsk_node = btsk_node->next;
   }
 
@@ -1606,14 +1645,14 @@ int main(){
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
     PRINT("Batch: %ld\n", avg);
 
-    args.direct_sub = 1;
-    for(int i=0; i<num_samples; i++){
-      args.idx = i;
-      createThreadPinned(&batchThread, batch_memcpy, &args, 20);
-      pthread_join(batchThread, NULL);
-    }
-    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("DirectSub: %ld\n", avg);
+    // args.direct_sub = 1;
+    // for(int i=0; i<num_samples; i++){
+    //   args.idx = i;
+    //   createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+    //   pthread_join(batchThread, NULL);
+    // }
+    // avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    // PRINT("DirectSub: %ld\n", avg);
   }
 
 
