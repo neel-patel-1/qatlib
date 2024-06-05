@@ -1337,7 +1337,35 @@ int batch_memcpy(){
     btsk_node = btsk_node->next;
   }
   acctest_free_task(ctx);
+  acctest_free(ctx);
+}
 
+int test(){
+  struct acctest_context *dsa;
+	int rc = 0;
+	unsigned long buf_size = DSA_TEST_SIZE;
+	int wq_type = SHARED;
+	int opcode = DSA_OPCODE_MEMMOVE;
+	int bopcode = DSA_OPCODE_MEMMOVE;
+	int tflags = TEST_FLAGS_BOF;
+	int opt;
+	unsigned int bsize = 0;
+	char dev_type[MAX_DEV_LEN];
+	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	unsigned int num_desc = 1;
+	struct evl_desc_list *edl = NULL;
+	char *edl_str = NULL;
+
+  /* test batch*/
+  bopcode = 3;
+  buf_size = 256;
+  edl = NULL;
+  bsize = 2;
+  num_desc = 1; /*num batches*/
+  tflags = 1;
+  int node = 1;
 }
 
 int main(){
