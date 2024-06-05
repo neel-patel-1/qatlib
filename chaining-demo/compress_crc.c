@@ -1249,7 +1249,129 @@ void *movdir64b_submission_latency(void *arg){
   /* wait and check all offloads == 1*/
 }
 
-/* device descriptor access test */
+/* device_descriptor_access_test.h */
+int init_memcpy_on_node(struct task *tsk, int tflags, int opcode, unsigned long xfer_size, int node)
+{
+	unsigned long force_align = PAGE_SIZE;
+
+	tsk->opcode = opcode;
+	tsk->test_flags = tflags;
+	tsk->xfer_size = xfer_size;
+
+	tsk->src1 = numa_alloc_onnode(xfer_size, node);
+	if (!tsk->src1)
+		return -ENOMEM;
+
+	tsk->dst1 = numa_alloc_onnode(xfer_size, node);
+	if (!tsk->dst1)
+		return -ENOMEM;
+
+	return ACCTEST_STATUS_OK;
+}
+
+int init_batch_memcpy_task_onnode(struct batch_task *btsk, int task_num, int tflags,
+		    int opcode, unsigned long xfer_size, unsigned long dflags, int node)
+{
+	int i, rc;
+
+	btsk->task_num = task_num;
+	btsk->test_flags = tflags;
+
+	for (i = 0; i < task_num; i++) {
+		btsk->sub_tasks[i].desc = &btsk->sub_descs[i];
+		if (btsk->edl)
+			btsk->sub_tasks[i].comp = &btsk->sub_comps[(PAGE_SIZE * i) /
+				sizeof(struct completion_record)];
+		else
+			btsk->sub_tasks[i].comp = &btsk->sub_comps[i];
+		btsk->sub_tasks[i].dflags = dflags;
+		rc = init_memcpy_on_node(&btsk->sub_tasks[i], tflags, opcode, xfer_size, node);
+		if (rc != ACCTEST_STATUS_OK) {
+			err("batch: init sub-task failed\n");
+			return rc;
+		}
+	}
+
+	return ACCTEST_STATUS_OK;
+}
+
+int alloc_batch_task_on_node(struct acctest_context *ctx, unsigned int task_num, int num_itr, int node)
+{
+	struct btask_node *btsk_node;
+	struct batch_task *btsk;
+	int cnt = 0;
+	int prot = PROT_READ | PROT_WRITE;
+	int mmap_flags = MAP_ANONYMOUS | MAP_PRIVATE;
+
+	if (!ctx->is_batch) {
+		err("%s is valid only if 'is_batch' is enabled", __func__);
+		return -EINVAL;
+	}
+
+	while (cnt < num_itr) {
+		btsk_node = ctx->multi_btask_node;
+
+		ctx->multi_btask_node = (struct btask_node *)
+			malloc(sizeof(struct btask_node));
+		if (!ctx->multi_btask_node)
+			return -ENOMEM;
+
+		ctx->multi_btask_node->btsk = malloc(sizeof(struct batch_task));
+		if (!ctx->multi_btask_node->btsk)
+			return -ENOMEM;
+		memset(ctx->multi_btask_node->btsk, 0, sizeof(struct batch_task));
+
+		btsk = ctx->multi_btask_node->btsk;
+
+		btsk->core_task = acctest_alloc_task(ctx);
+		if (!btsk->core_task)
+			return -ENOMEM;
+
+		btsk->sub_tasks = malloc(task_num * sizeof(struct task));
+		if (!btsk->sub_tasks)
+			return -ENOMEM;
+		memset(btsk->sub_tasks, 0, task_num * sizeof(struct task));
+
+		if (ctx->is_evl_test) {
+			btsk->sub_descs = mmap(NULL, PAGE_ALIGN(PAGE_SIZE +
+					       task_num * sizeof(struct hw_desc)),
+					       prot, mmap_flags, -1, 0);
+			if (!btsk->sub_descs)
+				return -ENOMEM;
+			memset(btsk->sub_descs, 0, PAGE_ALIGN(PAGE_SIZE +
+			       task_num * sizeof(struct hw_desc)));
+
+			btsk->sub_comps = numa_alloc_onnode(task_num * PAGE_SIZE, node);
+			if (!btsk->sub_comps)
+				return -ENOMEM;
+			memset(btsk->sub_comps, 0,
+			       task_num * PAGE_SIZE);
+		} else	{
+			btsk->sub_descs = numa_alloc_onnode(task_num * sizeof(struct hw_desc), node);
+			if (!btsk->sub_descs)
+				return -ENOMEM;
+			memset(btsk->sub_descs, 0, task_num * sizeof(struct hw_desc));
+
+			/* IAX completion record need to be 64-byte aligned */
+			btsk->sub_comps =
+				numa_alloc_onnode(task_num * sizeof(struct completion_record), node);
+			if (!btsk->sub_comps)
+				return -ENOMEM;
+			memset(btsk->sub_comps, 0,
+			       task_num * sizeof(struct completion_record));
+		}
+
+		dbg("batch task allocated %#lx, ctask %#lx, sub_tasks %#lx\n",
+		    btsk, btsk->core_task, btsk->sub_tasks);
+		dbg("sub_descs %#lx, sub_comps %#lx\n",
+		    btsk->sub_descs, btsk->sub_comps);
+		ctx->multi_btask_node->next = btsk_node;
+		cnt++;
+	}
+
+	return ACCTEST_STATUS_OK;
+}
+
 void *batch_memcpy(void *arg){
   struct acctest_context *dsa;
 	int rc = 0;
@@ -1291,7 +1413,7 @@ void *batch_memcpy(void *arg){
   int batch_tsk_idx = 0;
   ctx = dsa;
   ctx->is_batch = 1;
-  rc = alloc_batch_task(ctx, bsize, num_desc);
+  rc = alloc_batch_task_on_node(ctx, bsize, num_desc, node);
   dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | tflags;
   tflags = dflags;
   if (! (tflags & TEST_FLAGS_BOF) && ctx->bof){
@@ -1305,7 +1427,7 @@ void *batch_memcpy(void *arg){
     /* rc = init_batch_task_on_node(btsk_node->btsk, bsize, tflags, bopcode,
 					     buf_size, dflags);
             */
-    rc = init_batch_task(btsk, bsize, tflags, bopcode, buf_size, dflags);
+    rc = init_batch_memcpy_task_onnode(btsk, bsize, tflags, bopcode, buf_size, dflags, node);
     dsa_prep_batch_memcpy(btsk);
     btsk_node = btsk_node->next;
   }
@@ -1334,84 +1456,6 @@ void *batch_memcpy(void *arg){
   acctest_free(ctx);
 }
 
-int test(){
-  struct acctest_context *dsa;
-	int rc = 0;
-	unsigned long buf_size = DSA_TEST_SIZE;
-	int wq_type = SHARED;
-	int opcode = DSA_OPCODE_MEMMOVE;
-	int bopcode = DSA_OPCODE_MEMMOVE;
-	int tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CC;
-	int opt;
-	unsigned int bsize = 0;
-	char dev_type[MAX_DEV_LEN];
-	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	unsigned int num_desc = 1;
-	struct evl_desc_list *edl = NULL;
-	char *edl_str = NULL;
-
-  /* test batch*/
-  bopcode = 3;
-  buf_size = 256;
-  edl = NULL;
-  bsize = 2;
-  num_desc = 1; /*num batches*/
-  tflags = 1;
-  int node = 1;
-
-  dsa = acctest_init(tflags);
-  dsa->dev_type = ACCFG_DEVICE_DSA;
-  dsa->is_batch = 1;
-  if (!dsa)
-    return -ENOMEM;
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
-
-  /* struct batch_task *alloc_batch_task_onnode(int node, int bsize) */
-  int task_num = bsize;
-  struct batch_task *btsk;
-  btsk = malloc(sizeof(struct batch_task));
-  memset(btsk, 0, sizeof(struct batch_task));
-  btsk->task_num = bsize;
-  btsk->test_flags = tflags;
-
-  /* struct task *alloc_task_onnonde(int node ) */
-  struct task *tsk = malloc(sizeof(struct task));
-  memset(tsk, 0, sizeof(struct task));
-  tsk->desc = numa_alloc_onnode(sizeof(struct hw_desc), node);
-  memset(tsk->desc, 0, sizeof(struct hw_desc));
-  tsk->comp = numa_alloc_onnode(sizeof(struct completion_record), node);
-  memset(tsk->comp, 0, sizeof(struct completion_record));
-
-  /* struct batch_task *alloc_batch_task_onnode(int node) -- cont. */
-  btsk->core_task = tsk;
-  btsk->sub_tasks = malloc(task_num * sizeof(struct task));
-  memset(btsk->sub_tasks, 0, task_num * sizeof(struct task));
-  btsk->sub_descs = numa_alloc_onnode(task_num * sizeof(struct hw_desc), node);
-  memset(btsk->sub_descs, 0, task_num * sizeof(struct hw_desc));
-  btsk->sub_comps =
-				numa_alloc_onnode( task_num * sizeof(struct completion_record), node);
-  memset(btsk->sub_comps, 0,
-			       task_num * sizeof(struct completion_record));
-
-
-  init_batch_task(btsk, bsize, tflags, bopcode, buf_size, tflags);
-  dsa_prep_batch_memcpy(btsk);
-  dsa_prep_batch(btsk, tflags);
-  dump_sub_desc(btsk);
-
-  acctest_desc_submit(dsa, btsk->core_task->desc);
-  rc = dsa_wait_batch(btsk, dsa);
-  if (rc != ACCTEST_STATUS_OK) {
-    err("batch failed stat %d\n", rc);
-    return rc;
-  }
-
-  acctest_free(dsa);
-}
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
