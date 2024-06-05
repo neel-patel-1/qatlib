@@ -1372,8 +1372,16 @@ int alloc_batch_task_on_node(struct acctest_context *ctx, unsigned int task_num,
 	return ACCTEST_STATUS_OK;
 }
 
+typedef struct _batch_perf_test_args{
+  int node;
+  int bsize;
+  int num_batches;
+  int xfer_size;
+} batch_perf_test_args;
 
 void *batch_memcpy(void *arg){
+  batch_perf_test_args *args = (batch_perf_test_args *)arg;
+
   struct acctest_context *dsa;
 	int rc = 0;
 	unsigned long buf_size = DSA_TEST_SIZE;
@@ -1382,23 +1390,22 @@ void *batch_memcpy(void *arg){
 	int bopcode = DSA_OPCODE_MEMMOVE;
 	int tflags = TEST_FLAGS_BOF;
 	int opt;
-	unsigned int bsize = 0;
+	unsigned int bsize = args->bsize;
 	char dev_type[MAX_DEV_LEN];
 	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
 	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
 	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	unsigned int num_desc = 1;
+	unsigned int num_desc = args->num_batches;
 	struct evl_desc_list *edl = NULL;
 	char *edl_str = NULL;
 
   /* test batch*/
   bopcode = 3;
-  buf_size = 256;
+  buf_size = args->xfer_size;
   edl = NULL;
-  bsize = 2;
-  num_desc = 1; /*num batches*/
+  num_desc = args->num_batches; /*num batches*/
   tflags = 1;
-  int node = 1;
+  int node = args->node;
 
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
@@ -1425,10 +1432,17 @@ void *batch_memcpy(void *arg){
   while(btsk_node){
     struct batch_task *btsk = btsk_node->btsk;
     int task_num = bsize;
-    /* rc = init_batch_task_on_node(btsk_node->btsk, bsize, tflags, bopcode,
-					     buf_size, dflags);
-            */
     rc = init_batch_memcpy_task_onnode(btsk, bsize, tflags, bopcode, buf_size, dflags, node);
+
+    /* write prefault payloads and crs */
+    for(int j=0; j<task_num; j++){
+      for(int i=0; i<buf_size; i++){
+        ((char *)(btsk->sub_tasks[j].src1))[i] = 0x1;
+        ((char *)(btsk->sub_tasks[j].dst1))[i] = 0x2;
+      }
+      btsk->core_task->comp->status = 0;
+    }
+
     dsa_prep_batch_memcpy(btsk);
     btsk_node = btsk_node->next;
   }
@@ -1459,9 +1473,6 @@ void *batch_memcpy(void *arg){
   tsk_node = ctx->multi_btask_node;
   while (tsk_node) {
     tmp_node = tsk_node->next;
-    // free_batch_task(tsk_node->btsk);
-    // free_task(btsk->core_task);
-    // void __clean_task(struct task *tsk)
     numa_free(tsk_node->btsk->core_task->desc, sizeof(struct hw_desc));
     numa_free(tsk_node->btsk->core_task->comp, sizeof(struct completion_record));
     mprotect(tsk_node->btsk->core_task->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
@@ -1478,6 +1489,20 @@ void *batch_memcpy(void *arg){
   }
   ctx->multi_task_node = NULL;
 
+  /* validate the payloads */
+  btsk_node = ctx->multi_btask_node;
+  while (btsk_node) {
+    for(int j=0; j<bsize; j++){
+      for(int i=0; i<buf_size; i++){
+        if(((char *)(btsk_node->btsk->sub_tasks[j].src1))[i] != ((char *) btsk_node->btsk->sub_tasks[j].dst1)[i] ){
+          PRINT_ERR("Payload mismatch\n");
+          return -EINVAL;
+        }
+      }
+    }
+    btsk_node = btsk_node->next;
+  }
+
   acctest_free(ctx);
 }
 
@@ -1489,8 +1514,17 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  batch_memcpy(NULL);
-  // test();
+  batch_perf_test_args args;
+  args.node = 1;
+  args.bsize = 128;
+  args.num_batches = 1;
+  args.xfer_size = 256;
+  batch_memcpy(&args);
+
+  args.node = 1;
+  args.bsize = 128;
+  args.num_batches = 3;
+  batch_memcpy(&args);
 
 exit:
 
