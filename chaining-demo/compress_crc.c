@@ -1401,6 +1401,7 @@ int test(){
 				numa_alloc_onnode( task_num * sizeof(struct completion_record), node);
   memset(btsk->sub_comps, 0,
 			       task_num * sizeof(struct completion_record));
+  init_batch_task(btsk, bsize, tflags, bopcode, buf_size, tflags);
 }
 
 int main(){
