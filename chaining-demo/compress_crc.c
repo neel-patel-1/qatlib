@@ -1344,6 +1344,13 @@ int batch_memcpy(){
     btsk_node = btsk_node->next;
   }
 
+  btsk_node = ctx->multi_btask_node;
+  while (btsk_node) {
+    dsa_prep_batch(btsk_node->btsk, dflags);
+    dump_sub_desc(btsk_node->btsk);
+    btsk_node = btsk_node->next;
+  }
+
   /* Submit and check */
   btsk_node = ctx->multi_btask_node;
   while (btsk_node) {
