@@ -711,7 +711,7 @@ int dsa_wait_batch(struct batch_task *btsk, struct acctest_context *ctx)
 
 	struct task *ctsk = btsk->core_task;
 
-	info("wait batch\n");
+	// info("wait batch\n");
 
 again:
 	rc = acctest_wait_on_desc_timeout(ctsk->comp, ctx, ms_timeout);

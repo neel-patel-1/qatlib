@@ -1250,7 +1250,7 @@ void *movdir64b_submission_latency(void *arg){
 }
 
 /* device descriptor access test */
-int batch_memcpy(){
+void *batch_memcpy(void *arg){
   struct acctest_context *dsa;
 	int rc = 0;
 	unsigned long buf_size = DSA_TEST_SIZE;
@@ -1321,21 +1321,15 @@ int batch_memcpy(){
   btsk_node = ctx->multi_btask_node;
   while (btsk_node) {
     acctest_desc_submit(ctx, btsk_node->btsk->core_task->desc);
-
-    btsk_node = btsk_node->next;
-  }
-
-
-  btsk_node = ctx->multi_btask_node;
-  while (btsk_node) {
-
     rc = dsa_wait_batch(btsk_node->btsk, ctx);
     if (rc != ACCTEST_STATUS_OK) {
       err("batch failed stat %d\n", rc);
       return rc;
     }
+
     btsk_node = btsk_node->next;
   }
+
   acctest_free_task(ctx);
   acctest_free(ctx);
 }
@@ -1426,8 +1420,8 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  batch_memcpy();
-  test();
+  batch_memcpy(NULL);
+  // test();
 
 exit:
 

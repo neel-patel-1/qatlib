@@ -798,7 +798,7 @@ void dsa_prep_batch(struct batch_task *btsk, unsigned long desc_flags)
 {
 	struct task *ctsk = btsk->core_task;
 
-	info("preparing batch descriptor\n");
+	// info("preparing batch descriptor\n");
 
 	/* BOF bit is reserved for batch descriptor, turn it off */
 	desc_flags &= ~IDXD_OP_FLAG_BOF;
