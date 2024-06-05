@@ -1501,7 +1501,6 @@ void *batch_memcpy(void *arg){
 
 
   /* validate the payloads and completions */
-  if(bopcode == DSA_OPCODE_MEMMOVE){
   btsk_node = ctx->multi_btask_node;
   while (btsk_node) {
     for(int j=0; j<bsize; j++){
@@ -1514,17 +1513,24 @@ void *batch_memcpy(void *arg){
           PRINT_ERR("Task failed: 0x%x\n", btsk_node->btsk->core_task->comp->status);
         }
       }
-      for(int i=0; i<buf_size; i++){
-        char src = ((char *)(btsk_node->btsk->sub_tasks[j].src1))[i];
-        char dst = ((char *)(btsk_node->btsk->sub_tasks[j].dst1))[i];
-        if(src != 0x1 || dst != 0x1){
-          PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src, dst);
-          // return -EINVAL;
-        }
-      }
     }
     btsk_node = btsk_node->next;
   }
+  if(bopcode == DSA_OPCODE_MEMMOVE){
+    btsk_node = ctx->multi_btask_node;
+    while (btsk_node) {
+      for(int j=0; j<bsize; j++){
+        for(int i=0; i<buf_size; i++){
+          char src = ((char *)(btsk_node->btsk->sub_tasks[j].src1))[i];
+          char dst = ((char *)(btsk_node->btsk->sub_tasks[j].dst1))[i];
+          if(src != 0x1 || dst != 0x1){
+            PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src, dst);
+            // return -EINVAL;
+          }
+        }
+      }
+      btsk_node = btsk_node->next;
+    }
   }
 
   /* free numa batch task*/
@@ -1570,7 +1576,7 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  int num_samples = 1000;
+  int num_samples = 10;
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
   uint64_t run_times[num_samples];
@@ -1589,7 +1595,7 @@ int main(){
 
   args.t_opcode = DSA_OPCODE_NOOP;
 
-  for(int batch_size=2; batch_size<=2; batch_size*=2){
+  for(int batch_size=2; batch_size<=32; batch_size*=2){
     PRINT("Batch_size:%d\n", batch_size);
     args.bsize = batch_size;
     for(int i=0; i<num_samples; i++){
