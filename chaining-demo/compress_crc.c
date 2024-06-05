@@ -1119,10 +1119,12 @@ void *movdir64b_submission_latency(void *arg){
   uint64_t avg =0;
 
   /* Use a single descriptor -- prefetch it, submit it repeatedly */
-  struct acctest_context *dsa = NULL;
+
   int dev_id = 2;
   int wq_id = 0;
+  pthread_t submitThread, allocThread;
 
+  struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
   int wq_type = ACCFG_WQ_SHARED;
   dsa = acctest_init(tflags);
@@ -1159,8 +1161,6 @@ void *movdir64b_submission_latency(void *arg){
   while(task_node){
     prepare_memcpy_task(task_node->tsk, dsa,dsa_mini_bufs[idx], xfer_size,dsa_dst_mini_bufs[idx]);
     task_node->tsk->desc->flags |= IDXD_OP_FLAG_CC;
-    /* prefetch all descriptors */
-    __builtin_prefetch((const void*) task_node->tsk->desc);
     idx++;
     task_node = task_node->next;
   }
@@ -1234,6 +1234,7 @@ void *movdir64b_submission_latency(void *arg){
     tsk_node = tmp_node;
   }
   dsa->multi_task_node = NULL;
+
   free(dsa);
 
   /* Later on: Pin to different cores and submit 128 descs to the device */
@@ -1248,6 +1249,88 @@ void *movdir64b_submission_latency(void *arg){
   /* wait and check all offloads == 1*/
 }
 
+/* device descriptor access test */
+int batch_memcpy(){
+  struct acctest_context *dsa;
+	int rc = 0;
+	unsigned long buf_size = DSA_TEST_SIZE;
+	int wq_type = SHARED;
+	int opcode = DSA_OPCODE_MEMMOVE;
+	int bopcode = DSA_OPCODE_MEMMOVE;
+	int tflags = TEST_FLAGS_BOF;
+	int opt;
+	unsigned int bsize = 0;
+	char dev_type[MAX_DEV_LEN];
+	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	unsigned int num_desc = 1;
+	struct evl_desc_list *edl = NULL;
+	char *edl_str = NULL;
+
+  /* test batch*/
+  bopcode = 3;
+  buf_size = 256;
+  edl = NULL;
+  bsize = 2;
+  num_desc = 1; /*num batches*/
+  tflags = 1;
+  int node = 1;
+
+  /* Buffers */
+  uint8_t **dsa_mini_bufs = malloc(sizeof(uint8_t *) * bsize);
+  uint8_t **dsa_dst_mini_bufs = malloc(sizeof(uint8_t *) * bsize);
+  for(int i=0; i<bsize; i++){
+    dsa_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(buf_size, node);
+    dsa_dst_mini_bufs[i] = (uint8_t *)numa_alloc_onnode(buf_size, node);
+    for(int j=0; j<buf_size; j++){
+      __builtin_prefetch((const void*) dsa_mini_bufs[i] + j);
+      __builtin_prefetch((const void*) dsa_dst_mini_bufs[i] + j);
+    }
+  }
+
+  /* batch_test */
+  struct acctest_context *ctx;
+  struct btask_node *btsk_node;
+  int dflags;
+  rc = alloc_batch_task(ctx, bsize, num_desc);
+  dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | tflags;
+  if (! (tflags & TEST_FLAGS_BOF) && ctx->bof){
+    PRINT_ERR("BOF not set\n");
+    return -EINVAL;
+  }
+  btsk_node = ctx->multi_btask_node;
+  while(btsk_node){
+    struct batch_task *btsk = btsk_node->btsk;
+    int task_num = bsize;
+    /* rc = init_batch_task_on_node(btsk_node->btsk, bsize, tflags, bopcode,
+					     buf_size, dflags);
+            */
+    int i, rc;
+    btsk->task_num = task_num;
+    btsk->test_flags = tflags;
+
+    for (i = 0; i < task_num; i++) {
+      btsk->sub_tasks[i].desc = &btsk->sub_descs[i];
+      if (btsk->edl)
+        btsk->sub_tasks[i].comp = &btsk->sub_comps[(PAGE_SIZE * i) /
+          sizeof(struct completion_record)];
+      else
+        btsk->sub_tasks[i].comp = &btsk->sub_comps[i];
+      btsk->sub_tasks[i].dflags = dflags;
+
+      /* rc = dsa_init_task(&btsk->sub_tasks[i], tflags, opcode, xfer_size); */
+      prepare_memcpy_task(&(btsk->sub_tasks[i]), ctx, dsa_mini_bufs[i], buf_size, dsa_dst_mini_bufs[i]);
+
+    }
+    dsa_prep_batch_memcpy(btsk);
+
+    btsk_node = btsk_node->next;
+
+  }
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -1257,11 +1340,11 @@ int main(){
 
   pthread_t submitThread;
   for(int i=20; i<=39; i++){
-    createThreadPinned(&submitThread, movdir64b_submission_latency, NULL, i);
-    pthread_join(submitThread, NULL);
-    // movdir64b_submission_latency(NULL);
+    // createThreadPinned(&submitThread, movdir64b_submission_latency, NULL, i);
+    // pthread_join(submitThread, NULL);
+    movdir64b_submission_latency(NULL);
   }
-
+  // componentLocationSocket1();
 
 exit:
 
