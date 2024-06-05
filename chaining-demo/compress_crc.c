@@ -1375,7 +1375,8 @@ int test(){
   if (rc < 0)
     return -ENOMEM;
 
-  /* struct batch_task *alloc_batch_task_onnode(int node) */
+  /* struct batch_task *alloc_batch_task_onnode(int node, int bsize) */
+  int task_num = bsize;
   struct batch_task *btsk;
   btsk = malloc(sizeof(struct batch_task));
   memset(btsk, 0, sizeof(struct batch_task));
@@ -1390,8 +1391,16 @@ int test(){
   tsk->comp = numa_alloc_onnode(sizeof(struct completion_record), node);
   memset(tsk->comp, 0, sizeof(struct completion_record));
 
+  /* struct batch_task *alloc_batch_task_onnode(int node) -- cont. */
   btsk->core_task = tsk;
-
+  btsk->sub_tasks = malloc(task_num * sizeof(struct task));
+  memset(btsk->sub_tasks, 0, task_num * sizeof(struct task));
+  btsk->sub_descs = numa_alloc_onnode(task_num * sizeof(struct hw_desc), node);
+  memset(btsk->sub_descs, 0, task_num * sizeof(struct hw_desc));
+  btsk->sub_comps =
+				numa_alloc_onnode( task_num * sizeof(struct completion_record), node);
+  memset(btsk->sub_comps, 0,
+			       task_num * sizeof(struct completion_record));
 }
 
 int main(){
