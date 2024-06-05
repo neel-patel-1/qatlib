@@ -1530,33 +1530,34 @@ void *batch_memcpy(void *arg){
   tsk_node = ctx->multi_btask_node;
   while (tsk_node) {
     tmp_node = tsk_node->next;
-    /* free sub task components */
-    for(int i=0; i< bsize; i++){
-      numa_free(tsk_node->btsk->sub_tasks[i].desc, sizeof(struct hw_desc));
-      numa_free(tsk_node->btsk->sub_tasks[i].comp, sizeof(struct completion_record));
-      mprotect(tsk_node->btsk->sub_tasks[i].src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+
+    /* free descriptors */
+    numa_free(tsk_node->btsk->sub_descs, bsize * sizeof(struct hw_desc));
+
+    /* free comps */
+    numa_free(tsk_node->btsk->sub_comps, bsize * sizeof(struct completion_record));
+
+    /* free payloads */
+    for(int i=0; i<bsize; i++){
       numa_free(tsk_node->btsk->sub_tasks[i].src1, buf_size);
-      free(tsk_node->btsk->sub_tasks[i].src2);
       numa_free(tsk_node->btsk->sub_tasks[i].dst1, buf_size);
-      free(tsk_node->btsk->sub_tasks[i].dst2);
-      free(tsk_node->btsk->sub_tasks[i].input);
-      free(tsk_node->btsk->sub_tasks[i].output);
     }
 
-    numa_free(tsk_node->btsk->core_task->desc, sizeof(struct hw_desc));
-    numa_free(tsk_node->btsk->core_task->comp, sizeof(struct completion_record));
-    free(tsk_node->btsk->core_task->dst2);
-    free(tsk_node->btsk->core_task->input);
-    free(tsk_node->btsk->core_task->output);
+    /* free sub tasks */
+    free(tsk_node->btsk->sub_tasks);
+
+    /* free batch task*/
+    free(tsk_node->btsk);
 
     tsk_node->btsk = NULL;
     free(tsk_node);
     tsk_node = tmp_node;
   }
+  // free(ctx->multi_btask_node);
   ctx->multi_task_node = NULL;
 
-
-  acctest_free(dsa);
+  free(dsa);
+  // acctest_free(dsa);
 }
 
 
@@ -1577,29 +1578,32 @@ int main(){
   pthread_t batchThread;
   batch_perf_test_args args;
   args.node = 1;
-  args.bsize = 10;
   args.num_batches = 1;
   args.xfer_size = 256;
   args.start_times = start_times;
   args.end_times = end_times;
   args.direct_sub = 0;
 
-  for(int i=0; i<num_samples; i++){
-    args.idx = i;
-    createThreadPinned(&batchThread, batch_memcpy, &args, 20);
-    pthread_join(batchThread, NULL);
-  }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("Batch: %ld\n", avg);
+  // for(int batch_size=2; batch_size<10; batch_size++){
+    int batch_size = 3;
+    args.bsize = batch_size;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("Batch: %ld\n", avg);
 
-  args.direct_sub = 1;
-  for(int i=0; i<num_samples; i++){
-    args.idx = i;
-    createThreadPinned(&batchThread, batch_memcpy, &args, 20);
-    pthread_join(batchThread, NULL);
-  }
-  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-  PRINT("DirectSub: %ld\n", avg);
+    args.direct_sub = 1;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("DirectSub: %ld\n", avg);
+  // }
 
 exit:
 
