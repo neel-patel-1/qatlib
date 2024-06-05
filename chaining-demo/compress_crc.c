@@ -1530,12 +1530,21 @@ void *batch_memcpy(void *arg){
   tsk_node = ctx->multi_btask_node;
   while (tsk_node) {
     tmp_node = tsk_node->next;
+    /* free sub task components */
+    for(int i=0; i< bsize; i++){
+      numa_free(tsk_node->btsk->sub_tasks[i].desc, sizeof(struct hw_desc));
+      numa_free(tsk_node->btsk->sub_tasks[i].comp, sizeof(struct completion_record));
+      mprotect(tsk_node->btsk->sub_tasks[i].src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
+      numa_free(tsk_node->btsk->sub_tasks[i].src1, buf_size);
+      free(tsk_node->btsk->sub_tasks[i].src2);
+      numa_free(tsk_node->btsk->sub_tasks[i].dst1, buf_size);
+      free(tsk_node->btsk->sub_tasks[i].dst2);
+      free(tsk_node->btsk->sub_tasks[i].input);
+      free(tsk_node->btsk->sub_tasks[i].output);
+    }
+
     numa_free(tsk_node->btsk->core_task->desc, sizeof(struct hw_desc));
     numa_free(tsk_node->btsk->core_task->comp, sizeof(struct completion_record));
-    mprotect(tsk_node->btsk->core_task->src1, PAGE_SIZE, PROT_READ | PROT_WRITE);
-    numa_free(tsk_node->btsk->core_task->src1, buf_size);
-    free(tsk_node->btsk->core_task->src2);
-    numa_free(tsk_node->btsk->core_task->dst1, buf_size);
     free(tsk_node->btsk->core_task->dst2);
     free(tsk_node->btsk->core_task->input);
     free(tsk_node->btsk->core_task->output);
@@ -1547,7 +1556,7 @@ void *batch_memcpy(void *arg){
   ctx->multi_task_node = NULL;
 
 
-  // acctest_free(dsa);
+  acctest_free(dsa);
 }
 
 
@@ -1558,7 +1567,7 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  int num_samples = 10;
+  int num_samples = 100;
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
   uint64_t run_times[num_samples];
@@ -1568,7 +1577,7 @@ int main(){
   pthread_t batchThread;
   batch_perf_test_args args;
   args.node = 1;
-  args.bsize = 2;
+  args.bsize = 10;
   args.num_batches = 1;
   args.xfer_size = 256;
   args.start_times = start_times;
