@@ -1369,6 +1369,7 @@ int test(){
 
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
+  dsa->is_batch = 1;
   if (!dsa)
     return -ENOMEM;
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
@@ -1401,7 +1402,21 @@ int test(){
 				numa_alloc_onnode( task_num * sizeof(struct completion_record), node);
   memset(btsk->sub_comps, 0,
 			       task_num * sizeof(struct completion_record));
+
+
   init_batch_task(btsk, bsize, tflags, bopcode, buf_size, tflags);
+  dsa_prep_batch_memcpy(btsk);
+  dsa_prep_batch(btsk, tflags);
+  dump_sub_desc(btsk);
+
+  acctest_desc_submit(dsa, btsk->core_task->desc);
+  rc = dsa_wait_batch(btsk, dsa);
+  if (rc != ACCTEST_STATUS_OK) {
+    err("batch failed stat %d\n", rc);
+    return rc;
+  }
+
+  acctest_free(dsa);
 }
 
 int main(){
@@ -1412,6 +1427,7 @@ int main(){
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
   batch_memcpy();
+  test();
 
 exit:
 
