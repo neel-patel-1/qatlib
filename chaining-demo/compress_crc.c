@@ -1392,7 +1392,7 @@ void *batch_memcpy(void *arg){
 	int wq_type = -1;
 	int opcode = DSA_OPCODE_MEMMOVE;
 	int bopcode = DSA_OPCODE_MEMMOVE;
-	int tflags = 0;
+	int tflags = TEST_FLAGS_BOF;
 	int opt;
 	unsigned int bsize = args->bsize;
 	char dev_type[MAX_DEV_LEN];
@@ -1425,12 +1425,11 @@ void *batch_memcpy(void *arg){
   ctx = dsa;
   ctx->is_batch = 1;
   rc = alloc_batch_task_on_node(ctx, bsize, num_desc, node);
-  dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | tflags;
-  // tflags = dflags;
-  // if (! (tflags & TEST_FLAGS_BOF) && ctx->bof){
-  //   PRINT_ERR("BOF not set\n");
-  //   return -EINVAL;
-  // }
+  dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR ;
+  if (! (tflags & TEST_FLAGS_BOF) && ctx->bof){
+    PRINT_ERR("BOF not set\n");
+    return -EINVAL;
+  }
   btsk_node = ctx->multi_btask_node;
   while(btsk_node){
     struct batch_task *btsk = btsk_node->btsk;
