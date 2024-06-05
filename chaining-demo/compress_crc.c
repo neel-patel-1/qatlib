@@ -1615,7 +1615,7 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  int num_samples = 10;
+  int num_samples = 100;
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
   uint64_t run_times[num_samples];
@@ -1645,14 +1645,14 @@ int main(){
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
     PRINT("Batch: %ld\n", avg);
 
-    // args.direct_sub = 1;
-    // for(int i=0; i<num_samples; i++){
-    //   args.idx = i;
-    //   createThreadPinned(&batchThread, batch_memcpy, &args, 20);
-    //   pthread_join(batchThread, NULL);
-    // }
-    // avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    // PRINT("DirectSub: %ld\n", avg);
+    args.direct_sub = 1;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("DirectSub: %ld\n", avg);
   }
 
 
