@@ -1377,6 +1377,10 @@ typedef struct _batch_perf_test_args{
   int bsize;
   int num_batches;
   int xfer_size;
+  uint64_t *start_times;
+  uint64_t *end_times;
+  int idx;
+  int direct_sub;
 } batch_perf_test_args;
 
 void *batch_memcpy(void *arg){
@@ -1385,7 +1389,7 @@ void *batch_memcpy(void *arg){
   struct acctest_context *dsa;
 	int rc = 0;
 	unsigned long buf_size = DSA_TEST_SIZE;
-	int wq_type = SHARED;
+	int wq_type = -1;
 	int opcode = DSA_OPCODE_MEMMOVE;
 	int bopcode = DSA_OPCODE_MEMMOVE;
 	int tflags = TEST_FLAGS_BOF;
@@ -1443,6 +1447,16 @@ void *batch_memcpy(void *arg){
       btsk->core_task->comp->status = 0;
     }
 
+    /* flush all payloads, descs and crs */
+    for(int i=0; i<task_num; i++){
+      for(int j=0; j<buf_size; j++){
+        _mm_clflush((const void *)btsk->sub_tasks[i].src1 + j);
+        _mm_clflush((const void *)btsk->sub_tasks[i].dst1 + j);
+      }
+      _mm_clflush((const void *)btsk->sub_tasks[i].comp);
+      _mm_clflush((const void *)btsk->sub_tasks[i].desc);
+    }
+
     dsa_prep_batch_memcpy(btsk);
     btsk_node = btsk_node->next;
   }
@@ -1456,17 +1470,51 @@ void *batch_memcpy(void *arg){
 
   /* Submit and check */
   btsk_node = ctx->multi_btask_node;
-  uint64_t start = sampleCoderdtsc();
-  while (btsk_node) {
-    acctest_desc_submit(ctx, btsk_node->btsk->core_task->desc);
-    while(btsk_node->btsk->core_task->comp->status == 0){
-      _mm_pause();
-    }
+  uint64_t start, end;
+  if(args->direct_sub == 0){
+    start = sampleCoderdtsc();
+    while (btsk_node) {
+      acctest_desc_submit(ctx, btsk_node->btsk->core_task->desc);
+      while(btsk_node->btsk->core_task->comp->status == 0){
+        _mm_pause();
+      }
 
+      btsk_node = btsk_node->next;
+    }
+    end = sampleCoderdtsc();
+  } else {
+    /* (1) Is iterating through the b-task nodes and just submitting the sub-tasks easier/faster ?*/
+    start = sampleCoderdtsc();
+    while (btsk_node) {
+      for(int j=0; j<bsize; j++){
+        acctest_desc_submit(ctx, btsk_node->btsk->sub_tasks[j].desc);
+        while(btsk_node->btsk->sub_tasks[j].comp->status == 0){
+          _mm_pause();
+        }
+      }
+      btsk_node = btsk_node->next;
+    }
+    end = sampleCoderdtsc();
+  }
+  // PRINT("BatchMemcpy: %ld\n", end-start);
+
+  args->start_times[args->idx] = start;
+  args->end_times[args->idx] = end;
+
+
+  /* validate the payloads */
+  btsk_node = ctx->multi_btask_node;
+  while (btsk_node) {
+    for(int j=0; j<bsize; j++){
+      for(int i=0; i<buf_size; i++){
+        if(((char *)(btsk_node->btsk->sub_tasks[j].src1))[i] != ((char *) btsk_node->btsk->sub_tasks[j].dst1)[i] ){
+          PRINT_ERR("Payload mismatch\n");
+          return -EINVAL;
+        }
+      }
+    }
     btsk_node = btsk_node->next;
   }
-  uint64_t end = sampleCoderdtsc();
-  PRINT("BatchMemcpy: %ld\n", end-start);
 
   /* free numa batch task*/
   struct btask_node *tsk_node = NULL, *tmp_node = NULL;
@@ -1489,19 +1537,6 @@ void *batch_memcpy(void *arg){
   }
   ctx->multi_task_node = NULL;
 
-  /* validate the payloads */
-  btsk_node = ctx->multi_btask_node;
-  while (btsk_node) {
-    for(int j=0; j<bsize; j++){
-      for(int i=0; i<buf_size; i++){
-        if(((char *)(btsk_node->btsk->sub_tasks[j].src1))[i] != ((char *) btsk_node->btsk->sub_tasks[j].dst1)[i] ){
-          PRINT_ERR("Payload mismatch\n");
-          return -EINVAL;
-        }
-      }
-    }
-    btsk_node = btsk_node->next;
-  }
 
   acctest_free(ctx);
 }
@@ -1514,17 +1549,39 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
+  int num_samples = 100;
+  uint64_t start_times[num_samples];
+  uint64_t end_times[num_samples];
+  uint64_t run_times[num_samples];
+  uint64_t avg = 0;
+
+
+  pthread_t batchThread;
   batch_perf_test_args args;
   args.node = 1;
   args.bsize = 128;
   args.num_batches = 1;
   args.xfer_size = 256;
-  batch_memcpy(&args);
+  args.start_times = start_times;
+  args.end_times = end_times;
+  args.direct_sub = 0;
 
-  args.node = 1;
-  args.bsize = 128;
-  args.num_batches = 3;
-  batch_memcpy(&args);
+  for(int i=0; i<num_samples; i++){
+    args.idx = i;
+    createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+    pthread_join(batchThread, NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("Batch: %ld\n", avg);
+
+  args.direct_sub = 1;
+  for(int i=0; i<num_samples; i++){
+    args.idx = i;
+    createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+    pthread_join(batchThread, NULL);
+  }
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+  PRINT("DirectSub: %ld\n", avg);
 
 exit:
 
