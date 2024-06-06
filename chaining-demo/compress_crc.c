@@ -1952,22 +1952,38 @@ typedef struct _time_preempt_args_t {
   uint64_t *ts4;
   uint64_t *ts5;
   uint64_t *ts6;
+  uint64_t *ts7;
+  uint64_t *ts8;
+  uint64_t *ts9;
+  uint64_t *ts10;
+  uint64_t *ts11;
+  uint64_t *ts12;
+  uint64_t *ts13;
+  uint64_t *ts14;
+  uint64_t *ts15;
   struct completion_record *signal;
   int idx;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
+    time_preempt_args_t *f_arg = (time_preempt_args_t *)(arg.data);
+    int idx = f_arg->idx;
+    uint64_t *ts8 = f_arg->ts8;
+    uint64_t *ts9 = f_arg->ts9;
+    uint64_t *ts10 = f_arg->ts10;
+
+    ts8[idx] = sampleCoderdtsc();
 
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
-    time_preempt_args_t *f_arg = (time_preempt_args_t *)(arg.data);
     struct completion_record *signal = f_arg->signal;
+    ts9[idx] = sampleCoderdtsc();
 
     while(signal->status == 0){
-      /* Received the signal */
-
       _mm_pause();
     }
+    /* Received the signal */
+    ts10[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
 }
 
@@ -1979,6 +1995,9 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts4 = r_arg->ts4;
     uint64_t *ts5 = r_arg->ts5;
     uint64_t *ts6 = r_arg->ts6;
+    uint64_t *ts12 = r_arg->ts12;
+    uint64_t *ts13 = r_arg->ts13;
+
 
   /* made it to the offload context */
     ts3[idx] = sampleCoderdtsc();
@@ -2005,9 +2024,9 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     acctest_desc_submit(dsa, tsk->desc);
     ts6[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
-    // ts7[idx] = sampleCoderdtsc();
-
     /* made it back to the offload context to perform some post processing */
+    ts12[idx] = sampleCoderdtsc();
+
     for(int i=0; i<16*1024; i++){
       if(src[i] != 0x1 || dst[i] != 0x1){
         PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src[i], dst[i]);
@@ -2015,6 +2034,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
       }
     }
     /* returning control to the scheduler */
+    ts13[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
 
 }
@@ -2029,6 +2049,15 @@ int filler_thread_cycle_estimate_ts(){
   t_args.ts4 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts5 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts6 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts7 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts8 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts9 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts10 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts11 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts12 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts13 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts14 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts15 = malloc(sizeof(uint64_t) * num_requests);
 
   uint64_t *ts0 = t_args.ts0;
   uint64_t *ts1 = t_args.ts1;
@@ -2037,6 +2066,15 @@ int filler_thread_cycle_estimate_ts(){
   uint64_t *ts4 = t_args.ts4;
   uint64_t *ts5 = t_args.ts5;
   uint64_t *ts6 = t_args.ts6;
+  uint64_t *ts7 = t_args.ts7;
+  uint64_t *ts8 = t_args.ts8;
+  uint64_t *ts9 = t_args.ts9;
+  uint64_t *ts10 = t_args.ts10;
+  uint64_t *ts11 = t_args.ts11;
+  uint64_t *ts12 = t_args.ts12;
+  uint64_t *ts13 = t_args.ts13;
+  uint64_t *ts14 = t_args.ts14;
+  uint64_t *ts15 = t_args.ts15;
 
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
@@ -2051,12 +2089,16 @@ int filler_thread_cycle_estimate_ts(){
 
     ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
     off_req_xfer = fcontext_swap(child->context, &t_args);
+    ts7[i] = sampleCoderdtsc(); /* req yielded*/
 
     fcontext_swap(filler->context, &t_args);
+    ts11[i] = sampleCoderdtsc(); /* filler done*/
     off_req_ctx = off_req_xfer.prev_context;
     fcontext_swap(off_req_ctx, &t_args);
+    ts14[i] = sampleCoderdtsc(); /* req done*/
 
     fcontext_destroy(filler);
+    ts15[i] = sampleCoderdtsc(); /* filler destroyed*/
     fcontext_destroy(child);
     fcontext_destroy_proxy(self);
   }
@@ -2073,6 +2115,24 @@ int filler_thread_cycle_estimate_ts(){
   PRINT("Prepare_Offload: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
   PRINT("Submit_Offload: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts8, ts7, num_requests);
+  PRINT("ContextSwitchIntoFiller: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts9, ts8, num_requests);
+  PRINT("FillerCPUWork: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts10, ts9, num_requests);
+  PRINT("RemainingAxWaitingCycles: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts11, ts10, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
+  PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
+  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
+  PRINT("Destroy_a_request_processing_context: %ld\n", avg);
 }
 
 int main(){
