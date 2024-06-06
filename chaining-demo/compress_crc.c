@@ -17,6 +17,8 @@
 
 #include <zlib.h>
 
+#include <math.h>
+
 
 #include "idxd.h"
 #include "dsa.h"
@@ -1786,6 +1788,11 @@ void block_offload_request(fcontext_transfer_t arg) {
     /* Offload, yield, post process*/
     uint8_t *src = (uint8_t *)malloc(16*1024);
     uint8_t *dst = (uint8_t *)malloc(16*1024);
+    /* populate the bufs */
+    for(int i=0; i<16*1024; i++){
+      src[i] = 0x1;
+      dst[i] = 0x2;
+    }
     struct task *tsk = acctest_alloc_task(dsa);
     prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
 
@@ -1797,6 +1804,14 @@ void block_offload_request(fcontext_transfer_t arg) {
       _mm_pause();
     }
     fcontext_swap(parent, NULL);
+
+    /* validate the bufs */
+    for(int i=0; i<16*1024; i++){
+      if(src[i] != 0x1 || dst[i] != 0x1){
+        PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src[i], dst[i]);
+        // return -EINVAL;
+      }
+    }
 }
 
 void time_the_yield(fcontext_transfer_t arg) {
@@ -1818,9 +1833,64 @@ void time_the_yield(fcontext_transfer_t arg) {
 
 }
 
+#define INPUT_SIZE 10
+#define HIDDEN_SIZE 10
+#define OUTPUT_SIZE 1
+
+
+typedef struct _filler_thread_args{
+  uint64_t ops_completed;
+  volatile uint64_t *signal;
+} filler_thread_args;
+
+double sigmoid(double x) {
+    return 1.0 / (1.0 + exp(-x));
+}
 
 void filler_request(fcontext_transfer_t arg) {
     fcontext_t parent = arg.prev_context;
+    uint64_t ops = 0;
+    filler_thread_args *f_arg = (filler_thread_args *)(arg.data);
+    volatile uint64_t *signal = f_arg->signal;
+
+    double input[INPUT_SIZE];
+    double weights_ih[INPUT_SIZE][HIDDEN_SIZE];
+    double weights_ho[HIDDEN_SIZE][OUTPUT_SIZE];
+    double output[OUTPUT_SIZE];
+    double hidden[HIDDEN_SIZE] = {0};
+calculate:
+    // Input to hidden layer
+    for (int i = 0; i < INPUT_SIZE; i++) {
+        for (int j = 0; j < HIDDEN_SIZE; j++) {
+            hidden[j] += input[i] * weights_ih[i][j];
+        }
+    }
+
+    // Apply activation function
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        hidden[i] = sigmoid(hidden[i]);
+    }
+
+    // Hidden to output layer
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        for (int j = 0; j < OUTPUT_SIZE; j++) {
+            output[j] += hidden[i] * weights_ho[i][j];
+        }
+    }
+
+    // Apply activation function
+    for (int i = 0; i < OUTPUT_SIZE; i++) {
+        output[i] = sigmoid(output[i]);
+    }
+    f_arg->ops_completed += 1;
+    /* perform BE operation */
+
+    /* check for preemption signal */
+    if(*signal == 1){
+      signal = 0;
+      fcontext_swap(parent, NULL);
+    }
+    goto calculate;
     ret_val = 1;
     fcontext_swap(parent, NULL);
 }
@@ -1861,8 +1931,24 @@ int main(){
     fcontext_destroy_proxy(self);
   }
   end = sampleCoderdtsc();
-  PRINT("Block-Offload: %ld\n", end-start);
+  PRINT("Block-Offload-RPS: %ld\n", num_requests / (end-start));
 
+  /* overlap ax offloads */
+  start = sampleCoderdtsc();
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t *child = fcontext_create(block_offload_request);
+    fcontext_state_t *filler = fcontext_create(filler_request);
+    fcontext_swap(child->context, NULL);
+    fcontext_swap(filler->context, NULL);
+
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+  end = sampleCoderdtsc();
+  PRINT("Filler-RPS: %ld\n", num_requests / (end-start));
+
+  /* time_yield() */
   request_args args;
   args.start_times = malloc(sizeof(uint64_t) * num_requests);
   args.end_times = malloc(sizeof(uint64_t) * num_requests);
