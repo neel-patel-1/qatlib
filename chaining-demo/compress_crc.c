@@ -1758,7 +1758,7 @@ int direct_vs_indirect(){
 }
 
 /* fcontext_switch.h */
-int num_requests =  100;
+int num_requests =  1000;
 int ret_val;
 struct acctest_context *dsa = NULL;
 
@@ -1981,7 +1981,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts6 = r_arg->ts6;
 
   /* made it to the offload context */
-    ts2[idx] = sampleCoderdtsc();
+    ts3[idx] = sampleCoderdtsc();
 
     fcontext_t parent = arg.prev_context;
     uint8_t *src = (uint8_t *)malloc(16*1024);
@@ -1994,18 +1994,18 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     struct task *tsk = acctest_alloc_task(dsa);
 
     /*finished all app work */
-    ts3[idx] = sampleCoderdtsc();
+    ts4[idx] = sampleCoderdtsc();
 
     prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
     r_arg->signal = tsk->comp;
 
     /* about to submit */
-    ts4[idx] = sampleCoderdtsc();
+    ts5[idx] = sampleCoderdtsc();
 
     acctest_desc_submit(dsa, tsk->desc);
-    ts5[idx] = sampleCoderdtsc();
-    fcontext_swap(parent, NULL);
     ts6[idx] = sampleCoderdtsc();
+    fcontext_swap(parent, NULL);
+    // ts7[idx] = sampleCoderdtsc();
 
     /* made it back to the offload context to perform some post processing */
     for(int i=0; i<16*1024; i++){
@@ -2063,9 +2063,15 @@ int filler_thread_cycle_estimate_ts(){
 
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
+  avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
+  PRINT("Create_a_request_processing_context: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
+  PRINT("ContextSwitchIntoRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
+  PRINT("RequestCPUWork: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
   PRINT("Prepare_Offload: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts5, ts3, num_requests);
+  avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
   PRINT("Submit_Offload: %ld\n", avg);
 }
 
@@ -2095,7 +2101,7 @@ int main(){
   ret_val = 1;
 
   // filler_thre();
-  filler_thread_cycle_estimate();
+  // filler_thread_cycle_estimate();
   filler_thread_cycle_estimate_ts();
 
 
