@@ -1872,6 +1872,74 @@ void filler_request(fcontext_transfer_t arg) {
     fcontext_swap(parent, NULL);
 }
 
+int blocking_request_rps(){
+  uint64_t start, end;
+
+  start = sampleCoderdtsc();
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t *child = fcontext_create(block_offload_request);
+    fcontext_swap(child->context, NULL);
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+  end = sampleCoderdtsc();
+  PRINT("Block-Offload-Cycles: %ld\n", (end-start));
+}
+
+int filler_thread_cycle_estimate(){
+  uint64_t start, end;
+
+  filler_thread_args f_args;
+  f_args.signal = 0;
+  f_args.filler_cycles = 0;
+
+  request_args r_args;
+  r_args.comp = NULL;
+
+  /* overlap ax offloads */
+  start = sampleCoderdtsc();
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t *child = fcontext_create(yield_offload_request);
+    fcontext_state_t *filler = fcontext_create(filler_request);
+    fcontext_swap(child->context, &r_args);
+    f_args.signal = (struct completion_record *) r_args.comp;
+    fcontext_swap(filler->context, &f_args);
+    // fcontext_swap(child->context, &r_args);
+
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+  end = sampleCoderdtsc();
+  PRINT("Yield-RPS-Cycles: %ld\n",  (end-start));
+  PRINT("Filler-Cycles: %ld\n", f_args.filler_cycles);
+}
+
+int yield_time(){
+
+
+  /* time_yield() */
+  request_args args;
+  args.start_times = malloc(sizeof(uint64_t) * num_requests);
+  args.end_times = malloc(sizeof(uint64_t) * num_requests);
+
+
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t *child = fcontext_create(time_the_yield);
+    args.idx = i;
+    fcontext_swap(child->context, &args);
+    args.end_times[i] = sampleCoderdtsc();
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+  uint64_t avg = 0;
+  uint64_t run_times[num_requests];
+  avg_samples_from_arrays(run_times,avg, args.end_times, args.start_times, num_requests);
+  PRINT("Yield Time: %ld\n", avg);
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -1897,62 +1965,9 @@ int main(){
 
   ret_val = 1;
 
-  uint64_t start, end;
 
-  start = sampleCoderdtsc();
-  for(int i=0; i<num_requests; i++){
-    fcontext_state_t *self = fcontext_create_proxy();
-    fcontext_state_t *child = fcontext_create(block_offload_request);
-    fcontext_swap(child->context, NULL);
-    fcontext_destroy(child);
-    fcontext_destroy_proxy(self);
-  }
-  end = sampleCoderdtsc();
-  PRINT("Block-Offload-Cycles: %ld\n", (end-start));
+  filler_thread_cycle_estimate();
 
-  filler_thread_args f_args;
-  f_args.signal = 0;
-  f_args.filler_cycles = 0;
-
-  request_args r_args;
-  r_args.comp = NULL;
-
-  /* overlap ax offloads */
-  start = sampleCoderdtsc();
-  for(int i=0; i<num_requests; i++){
-    fcontext_state_t *self = fcontext_create_proxy();
-    fcontext_state_t *child = fcontext_create(yield_offload_request);
-    fcontext_state_t *filler = fcontext_create(filler_request);
-    fcontext_swap(child->context, &r_args);
-    f_args.signal = (struct completion_record *) r_args.comp;
-    fcontext_swap(filler->context, &f_args);
-
-    fcontext_destroy(child);
-    fcontext_destroy_proxy(self);
-  }
-  end = sampleCoderdtsc();
-  PRINT("Yield-RPS-Cycles: %ld\n",  (end-start));
-  PRINT("Filler-Cycles: %ld\n", f_args.filler_cycles);
-
-  /* time_yield() */
-  request_args args;
-  args.start_times = malloc(sizeof(uint64_t) * num_requests);
-  args.end_times = malloc(sizeof(uint64_t) * num_requests);
-
-
-  for(int i=0; i<num_requests; i++){
-    fcontext_state_t *self = fcontext_create_proxy();
-    fcontext_state_t *child = fcontext_create(time_the_yield);
-    args.idx = i;
-    fcontext_swap(child->context, &args);
-    args.end_times[i] = sampleCoderdtsc();
-    fcontext_destroy(child);
-    fcontext_destroy_proxy(self);
-  }
-  uint64_t avg = 0;
-  uint64_t run_times[num_requests];
-  avg_samples_from_arrays(run_times,avg, args.end_times, args.start_times, num_requests);
-  PRINT("Yield Time: %ld\n", avg);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
