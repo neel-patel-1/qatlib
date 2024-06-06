@@ -1418,6 +1418,9 @@ typedef struct _batch_perf_test_args{
   int idx;
   int direct_sub;
   int t_opcode;
+  int flush_descs;
+  int preftch_descs;
+  int flush_payload;
 } batch_perf_test_args;
 
 void *batch_memcpy(void *arg){
@@ -1483,23 +1486,32 @@ void *batch_memcpy(void *arg){
         btsk->core_task->comp->status = 0;
       }
 
+      dsa_prep_batch_memcpy(btsk);
+    } else if(bopcode == DSA_OPCODE_NOOP){
+      rc = init_and_prep_noop_btsk(btsk,task_num,tflags,node);
+    }
+
+    if(args->flush_payload == 1){
       /* flush all payloads, descs and crs */
       for(int i=0; i<task_num; i++){
         for(int j=0; j<buf_size; j++){
           _mm_clflush((const void *)btsk->sub_tasks[i].src1 + j);
           _mm_clflush((const void *)btsk->sub_tasks[i].dst1 + j);
         }
-        _mm_clflush((const void *)btsk->sub_tasks[i].comp);
-        _mm_clflush((const void *)btsk->sub_tasks[i].desc);
       }
-
-      dsa_prep_batch_memcpy(btsk);
-    } else if(bopcode == DSA_OPCODE_NOOP){
-      rc = init_and_prep_noop_btsk(btsk,task_num,tflags,node);
-      /* flush all descs and crs */
+    }
+    if(args->flush_descs == 1){
+          /* flush all descs and crs */
       for(int i=0; i<task_num; i++){
         _mm_clflush((const void *)btsk->sub_tasks[i].comp);
         _mm_clflush((const void *)btsk->sub_tasks[i].desc);
+      }
+    }
+    if(args->preftch_descs == 1){
+      /* prefetch all descs and crs */
+      for(int i=0; i<task_num; i++){
+        __builtin_prefetch((const void *)btsk->sub_tasks[i].comp);
+        __builtin_prefetch((const void *)btsk->sub_tasks[i].desc);
       }
     }
     btsk_node = btsk_node->next;
@@ -1553,13 +1565,11 @@ void *batch_memcpy(void *arg){
       if(args->direct_sub){
         rc = btsk_node->btsk->sub_tasks[j].comp->status;
         if(rc != DSA_COMP_SUCCESS){
-          rc2 = btsk_node->btsk->core_task->comp->status;
           PRINT_ERR("Task failed: 0x%x\n", rc);
         }
       } else {
         rc = btsk_node->btsk->sub_tasks[j].comp->status;
         if(rc != DSA_COMP_SUCCESS){
-          rc2 = btsk_node->btsk->sub_tasks[j]->comp->status;
           PRINT_ERR("Task failed: 0x%x\n", rc);
         }
       }
@@ -1626,7 +1636,7 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  int num_samples = 100;
+  int num_samples = 1000;
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
   uint64_t run_times[num_samples];
@@ -1643,6 +1653,7 @@ int main(){
   args.wq_id = 0;
 
   args.t_opcode = DSA_OPCODE_NOOP;
+  args.flush_payload = 0;
 
   for(int batch_size=2; batch_size<=32; batch_size*=2){
     PRINT("Batch_size:%d\n", batch_size);
@@ -1650,14 +1661,32 @@ int main(){
 
     args.node = 1;
     args.direct_sub = 0;
+    args.preftch_descs = 1;
+    args.flush_descs = 0;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
       createThreadPinned(&batchThread, batch_memcpy, &args, 30);
       pthread_join(batchThread, NULL);
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("Batch-Local: %ld\n", avg);
+    PRINT("Batch-Local-LLC: %ld\n", avg);
 
+    args.node = 1;
+    args.direct_sub = 0;
+    args.preftch_descs = 0;
+    args.flush_descs = 1;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 30);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("Batch-Local-DRAM: %ld\n", avg);
+
+    args.node = 0;
+    args.direct_sub = 0;
+    args.preftch_descs = 1;
+    args.flush_descs = 0;
     args.node = 0;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
@@ -1665,26 +1694,69 @@ int main(){
       pthread_join(batchThread, NULL);
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("Batch-Far: %ld\n", avg);
+    PRINT("Batch-Far-LLC: %ld\n", avg);
+
+    args.node = 0;
+    args.direct_sub = 0;
+    args.preftch_descs = 0;
+    args.flush_descs = 1;
+    args.node = 0;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 10);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("Batch-Far-DRAM: %ld\n", avg);
+
 
     args.node = 1;
     args.direct_sub = 1;
+    args.preftch_descs = 1;
+    args.flush_descs = 0;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
       createThreadPinned(&batchThread, batch_memcpy, &args, 30);
       pthread_join(batchThread, NULL);
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("DirectSub-Local: %ld\n", avg);
+    PRINT("DirectSub-Local-LLC: %ld\n", avg);
+
+    args.node = 1;
+    args.direct_sub = 1;
+    args.preftch_descs = 0;
+    args.flush_descs = 1;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 30);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("DirectSub-Local-DRAM: %ld\n", avg);
 
     args.node = 0;
+    args.direct_sub = 1;
+    args.preftch_descs = 1;
+    args.flush_descs = 0;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
       createThreadPinned(&batchThread, batch_memcpy, &args, 10);
       pthread_join(batchThread, NULL);
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("DirectSub-Far: %ld\n", avg);
+    PRINT("DirectSub-Far-LLC: %ld\n", avg);
+
+    args.node = 0;
+    args.direct_sub = 1;
+    args.preftch_descs = 0;
+    args.flush_descs = 1;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 10);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("DirectSub-Far-DRAM: %ld\n", avg);
   }
 
 
