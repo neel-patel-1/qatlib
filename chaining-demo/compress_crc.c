@@ -1915,7 +1915,7 @@ int filler_thread_cycle_estimate(){
     fcontext_destroy_proxy(self);
   }
   end = sampleCoderdtsc();
-  PRINT("Yield-RPS-Cycles: %ld\n",  (end-start));
+  PRINT("Yield-RPS-Cycles-Total: %ld\n",  (end-start));
   PRINT("Filler-Cycles: %ld\n", f_args.filler_cycles);
 }
 
@@ -1943,6 +1943,108 @@ int yield_time(){
   PRINT("Yield Time: %ld\n", avg);
 }
 
+/* TimeTheUspacePreempt.h*/
+typedef struct _time_preempt_args_t {
+  uint64_t *ts0;
+  uint64_t *ts1;
+  uint64_t *ts2;
+  uint64_t *ts3;
+  uint64_t *ts4;
+  uint64_t *ts5;
+  struct completion_record *signal;
+  int idx;
+} time_preempt_args_t;
+void filler_request_ts(fcontext_transfer_t arg) {
+    /* made it to the filler context */
+
+    fcontext_t parent = arg.prev_context;
+    uint64_t ops = 0;
+    time_preempt_args_t *f_arg = (time_preempt_args_t *)(arg.data);
+    struct completion_record *signal = f_arg->signal;
+
+    while(signal->status == 0){
+      /* Received the signal */
+
+      _mm_pause();
+    }
+    fcontext_swap(parent, NULL);
+}
+
+void yield_offload_request_ts (fcontext_transfer_t arg) {
+    time_preempt_args_t *r_arg = (time_preempt_args_t *)(arg.data);
+    int idx = r_arg->idx;
+    uint64_t *ts2 = r_arg->ts2;
+  /* made it to the offload context */
+    ts2[idx] = sampleCoderdtsc();
+
+    fcontext_t parent = arg.prev_context;
+    uint8_t *src = (uint8_t *)malloc(16*1024);
+    uint8_t *dst = (uint8_t *)malloc(16*1024);
+
+    for(int i=0; i<16*1024; i++){
+      src[i] = 0x1;
+      dst[i] = 0x2;
+    }
+    struct task *tsk = acctest_alloc_task(dsa);
+
+    /*finished all app work */
+
+    prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
+    r_arg->signal = tsk->comp;
+
+    /* about to submit */
+
+    acctest_desc_submit(dsa, tsk->desc);
+    fcontext_swap(parent, NULL);
+
+    /* made it back to the offload context to perform some post processing */
+    for(int i=0; i<16*1024; i++){
+      if(src[i] != 0x1 || dst[i] != 0x1){
+        PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src[i], dst[i]);
+        // return -EINVAL;
+      }
+    }
+    /* returning control to the scheduler */
+    fcontext_swap(parent, NULL);
+
+}
+
+int filler_thread_cycle_estimate_ts(){
+
+  time_preempt_args_t t_args;
+  t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts2 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts3 = malloc(sizeof(uint64_t) * num_requests);
+
+  uint64_t *ts0 = t_args.ts0;
+  uint64_t *ts1 = t_args.ts1;
+  uint64_t *ts2 = t_args.ts2;
+  uint64_t *ts3 = t_args.ts3;
+
+  fcontext_transfer_t off_req_xfer;
+
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    ts0[i] = sampleCoderdtsc();
+    fcontext_state_t *child = fcontext_create(yield_offload_request);
+    ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
+    fcontext_state_t *filler = fcontext_create(filler_request);
+
+    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
+    off_req_xfer = fcontext_swap(child->context, &t_args);
+
+    fcontext_t off_req_ctx = off_req_xfer.prev_context;
+    fcontext_swap(filler->context, &t_args);
+    fcontext_swap(off_req_ctx, &t_args);
+
+    fcontext_destroy(filler);
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -1968,8 +2070,9 @@ int main(){
 
   ret_val = 1;
 
-
+  // filler_thre();
   filler_thread_cycle_estimate();
+
 
 
   acctest_free_task(dsa);
@@ -1978,11 +2081,7 @@ int main(){
   /* scheduler thread waits for offload completion and switches tasks */
   /* figure of merit is filler ops completed */
   /* Want to measure the request throughput*/
-  /*
 
-
-
-  */
 
 exit:
 
