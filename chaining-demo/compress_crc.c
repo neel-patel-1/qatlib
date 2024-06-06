@@ -1407,6 +1407,8 @@ int alloc_batch_task_on_node(struct acctest_context *ctx, unsigned int task_num,
 }
 
 typedef struct _batch_perf_test_args{
+  int devid;
+  int wq_id;
   int node;
   int bsize;
   int num_batches;
@@ -1431,8 +1433,8 @@ void *batch_memcpy(void *arg){
 	int opt;
 	unsigned int bsize = args->bsize;
 	char dev_type[MAX_DEV_LEN];
-	int wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
-	int dev_id = ACCTEST_DEVICE_ID_NO_INPUT;
+	int wq_id = args->wq_id;
+	int dev_id = args->devid;
 	int dev_wq_id = ACCTEST_DEVICE_ID_NO_INPUT;
 	unsigned int num_desc = args->num_batches;
 	struct evl_desc_list *edl = NULL;
@@ -1494,6 +1496,11 @@ void *batch_memcpy(void *arg){
       dsa_prep_batch_memcpy(btsk);
     } else if(bopcode == DSA_OPCODE_NOOP){
       rc = init_and_prep_noop_btsk(btsk,task_num,tflags,node);
+      /* flush all descs and crs */
+      for(int i=0; i<task_num; i++){
+        _mm_clflush((const void *)btsk->sub_tasks[i].comp);
+        _mm_clflush((const void *)btsk->sub_tasks[i].desc);
+      }
     }
     btsk_node = btsk_node->next;
   }
@@ -1544,12 +1551,16 @@ void *batch_memcpy(void *arg){
   while (btsk_node) {
     for(int j=0; j<bsize; j++){
       if(args->direct_sub){
-        if(btsk_node->btsk->sub_tasks[j].comp->status != DSA_COMP_SUCCESS){
-          PRINT_ERR("Task failed: 0x%x\n", btsk_node->btsk->sub_tasks[j].comp->status);
+        rc = btsk_node->btsk->sub_tasks[j].comp->status;
+        if(rc != DSA_COMP_SUCCESS){
+          rc2 = btsk_node->btsk->core_task->comp->status;
+          PRINT_ERR("Task failed: 0x%x\n", rc);
         }
       } else {
-        if(btsk_node->btsk->core_task->comp->status != DSA_COMP_SUCCESS){
-          PRINT_ERR("Task failed: 0x%x\n", btsk_node->btsk->core_task->comp->status);
+        rc = btsk_node->btsk->sub_tasks[j].comp->status;
+        if(rc != DSA_COMP_SUCCESS){
+          rc2 = btsk_node->btsk->sub_tasks[j]->comp->status;
+          PRINT_ERR("Task failed: 0x%x\n", rc);
         }
       }
     }
@@ -1624,35 +1635,56 @@ int main(){
 
   pthread_t batchThread;
   batch_perf_test_args args;
-  args.node = 1;
   args.num_batches = 1;
   args.xfer_size = 256;
   args.start_times = start_times;
   args.end_times = end_times;
-  args.direct_sub = 0;
-
+  args.devid = 2;
+  args.wq_id = 0;
 
   args.t_opcode = DSA_OPCODE_NOOP;
 
   for(int batch_size=2; batch_size<=32; batch_size*=2){
     PRINT("Batch_size:%d\n", batch_size);
     args.bsize = batch_size;
+
+    args.node = 1;
+    args.direct_sub = 0;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
-      createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+      createThreadPinned(&batchThread, batch_memcpy, &args, 30);
       pthread_join(batchThread, NULL);
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("Batch: %ld\n", avg);
+    PRINT("Batch-Local: %ld\n", avg);
 
+    args.node = 0;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 10);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("Batch-Far: %ld\n", avg);
+
+    args.node = 1;
     args.direct_sub = 1;
     for(int i=0; i<num_samples; i++){
       args.idx = i;
-      createThreadPinned(&batchThread, batch_memcpy, &args, 20);
+      createThreadPinned(&batchThread, batch_memcpy, &args, 30);
       pthread_join(batchThread, NULL);
     }
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
-    PRINT("DirectSub: %ld\n", avg);
+    PRINT("DirectSub-Local: %ld\n", avg);
+
+    args.node = 0;
+    for(int i=0; i<num_samples; i++){
+      args.idx = i;
+      createThreadPinned(&batchThread, batch_memcpy, &args, 10);
+      pthread_join(batchThread, NULL);
+    }
+    avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
+    PRINT("DirectSub-Far: %ld\n", avg);
   }
 
 
