@@ -36,6 +36,7 @@
 
 #include <numa.h>
 #include <sys/user.h>
+#include "fcontext.h"
 
 int gDebugParam = 1;
 
@@ -1754,6 +1755,75 @@ int direct_vs_indirect(){
   }
 }
 
+/* fcontext_switch.h */
+int num_requests =  1000;
+int ret_val;
+struct acctest_context *dsa = NULL;
+
+typedef struct _request_args{
+  int idx;
+  uint64_t *start_times;
+  uint64_t *end_times;
+} request_args;
+
+void yield_offload_request(fcontext_transfer_t arg) {
+    fcontext_t parent = arg.prev_context;
+    /* Offload, yield, post process*/
+    uint8_t *src = (uint8_t *)malloc(16*1024);
+    uint8_t *dst = (uint8_t *)malloc(16*1024);
+    struct task *tsk = acctest_alloc_task(dsa);
+    prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
+
+    arg.data = tsk;
+
+    acctest_desc_submit(dsa, tsk->desc);
+    fcontext_swap(parent, NULL);
+
+}
+
+void block_offload_request(fcontext_transfer_t arg) {
+    fcontext_t parent = arg.prev_context;
+    /* Offload, yield, post process*/
+    uint8_t *src = (uint8_t *)malloc(16*1024);
+    uint8_t *dst = (uint8_t *)malloc(16*1024);
+    struct task *tsk = acctest_alloc_task(dsa);
+    prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
+
+    arg.data = tsk;
+    ret_val = 0;
+
+    acctest_desc_submit(dsa, tsk->desc);
+    while(tsk->comp->status == 0){
+      _mm_pause();
+    }
+    fcontext_swap(parent, NULL);
+}
+
+void time_the_yield(fcontext_transfer_t arg) {
+    fcontext_t parent = arg.prev_context;
+    /* Offload, yield, post process*/
+    uint8_t *src = (uint8_t *)malloc(16*1024);
+    uint8_t *dst = (uint8_t *)malloc(16*1024);
+    struct task *tsk = acctest_alloc_task(dsa);
+    prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
+
+    request_args *r_arg = (request_args *)(arg.data);
+    int idx = r_arg->idx;
+    uint64_t *start_times = r_arg->start_times;
+    uint64_t *end_times = r_arg->end_times;
+    ret_val = 0;
+
+    start_times[idx] = sampleCoderdtsc();
+    fcontext_swap(parent, NULL);
+
+}
+
+
+void filler_request(fcontext_transfer_t arg) {
+    fcontext_t parent = arg.prev_context;
+    ret_val = 1;
+    fcontext_swap(parent, NULL);
+}
 
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -1762,8 +1832,67 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
+  int tflags = TEST_FLAGS_BOF;
+	int wq_id = 0;
+	int dev_id = 2;
+  int opcode = DSA_OPCODE_MEMMOVE;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+
+  int num_offload_requests = 1;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+  ret_val = 1;
+
+  uint64_t start, end;
+
+  start = sampleCoderdtsc();
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t *child = fcontext_create(block_offload_request);
+    fcontext_swap(child->context, NULL);
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+  end = sampleCoderdtsc();
+  PRINT("Block-Offload: %ld\n", end-start);
+
+  request_args args;
+  args.start_times = malloc(sizeof(uint64_t) * num_requests);
+  args.end_times = malloc(sizeof(uint64_t) * num_requests);
 
 
+  for(int i=0; i<num_requests; i++){
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t *child = fcontext_create(time_the_yield);
+    args.idx = i;
+    fcontext_swap(child->context, &args);
+    args.end_times[i] = sampleCoderdtsc();
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+  uint64_t avg = 0;
+  uint64_t run_times[num_requests];
+  avg_samples_from_arrays(run_times,avg, args.end_times, args.start_times, num_requests);
+  PRINT("Yield Time: %ld\n", avg);
+
+  acctest_free_task(dsa);
+  acctest_free(dsa);
+
+  /* scheduler thread waits for offload completion and switches tasks */
+  /* figure of merit is filler ops completed */
+  /* Want to measure the request throughput*/
+  /*
+
+
+
+  */
 
 exit:
 

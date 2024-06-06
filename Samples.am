@@ -232,6 +232,9 @@ compress_crc_SOURCES = \
 	$(srcdir)/idxd/util/log.c \
 	$(srcdir)/idxd/test/accel_test.c \
 	$(srcdir)/idxd/test/dsa_prep.c \
+	$(srcdir)/fcontext/src/asm/jump_x86_64_sysv_elf_gas.S \
+	$(srcdir)/fcontext/src/asm/make_x86_64_sysv_elf_gas.S \
+	$(srcdir)/fcontext/src/asm/ontop_x86_64_sysv_elf_gas.S \
 	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
 
 compress_crc_CFLAGS = \
@@ -240,6 +243,7 @@ compress_crc_CFLAGS = \
 	-I$(srcdir)/idxd/test \
 	-I$(srdir)/idxd \
 	-I$(srcdir)/accfg \
+	-I$(srcdir)/fcontext/inc \
 	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
