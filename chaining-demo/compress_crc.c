@@ -1903,11 +1903,14 @@ int filler_thread_cycle_estimate(){
     fcontext_state_t *self = fcontext_create_proxy();
     fcontext_state_t *child = fcontext_create(yield_offload_request);
     fcontext_state_t *filler = fcontext_create(filler_request);
-    fcontext_swap(child->context, &r_args);
+
+    fcontext_transfer_t off_req_xfer = fcontext_swap(child->context, &r_args);
+    fcontext_t off_req_ctx = off_req_xfer.prev_context;
     f_args.signal = (struct completion_record *) r_args.comp;
     fcontext_swap(filler->context, &f_args);
-    // fcontext_swap(child->context, &r_args);
+    fcontext_swap(off_req_ctx, &r_args);
 
+    fcontext_destroy(filler);
     fcontext_destroy(child);
     fcontext_destroy_proxy(self);
   }
