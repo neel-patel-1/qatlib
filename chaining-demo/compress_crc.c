@@ -1628,14 +1628,8 @@ void *batch_memcpy(void *arg){
   // acctest_free(dsa);
 }
 
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
+/* direct_vs_indirect .h */
+int direct_vs_indirect(){
   int num_samples = 1000;
   uint64_t start_times[num_samples];
   uint64_t end_times[num_samples];
@@ -1758,6 +1752,17 @@ int main(){
     avg_samples_from_arrays(run_times,avg, end_times, start_times, num_samples);
     PRINT("DirectSub-Far-DRAM: %ld\n", avg);
   }
+}
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+
 
 
 exit:
