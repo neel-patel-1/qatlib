@@ -1850,7 +1850,7 @@ void time_the_yield(fcontext_transfer_t arg) {
 }
 
 typedef struct _filler_thread_args{
-  const volatile uint8_t *signal;
+  struct completion_record *signal;
   uint64_t filler_cycles;
 } filler_thread_args;
 
@@ -1860,14 +1860,14 @@ void filler_request(fcontext_transfer_t arg) {
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
     filler_thread_args *f_arg = (filler_thread_args *)(arg.data);
-    const volatile uint8_t *signal = f_arg->signal;
+    struct completion_record *signal = f_arg->signal;
     uint64_t filler_cycles = f_arg->filler_cycles;
 
     /* check for preemption signal */
-    while(*signal == 0){
+    while(signal->status == 0){
       _mm_pause();
     }
-    end = sampleCoderdtsc();
+    uint64_t end = sampleCoderdtsc();
     f_arg->filler_cycles += end-start;
     fcontext_swap(parent, NULL);
 }
@@ -1908,7 +1908,7 @@ int main(){
     fcontext_destroy_proxy(self);
   }
   end = sampleCoderdtsc();
-  PRINT("Block-Offload-RPS: %ld\n", num_requests / (end-start));
+  PRINT("Block-Offload-Cycles: %ld\n", (end-start));
 
   filler_thread_args f_args;
   f_args.signal = 0;
@@ -1921,18 +1921,18 @@ int main(){
   start = sampleCoderdtsc();
   for(int i=0; i<num_requests; i++){
     fcontext_state_t *self = fcontext_create_proxy();
-    fcontext_state_t *child = fcontext_create(block_offload_request);
+    fcontext_state_t *child = fcontext_create(yield_offload_request);
     fcontext_state_t *filler = fcontext_create(filler_request);
     fcontext_swap(child->context, &r_args);
-    f_args.signal = (const volatile uint8_t *) r_args.comp;
-    _mm_sfence();
+    f_args.signal = (struct completion_record *) r_args.comp;
     fcontext_swap(filler->context, &f_args);
 
     fcontext_destroy(child);
     fcontext_destroy_proxy(self);
   }
   end = sampleCoderdtsc();
-  PRINT("Filler-RPS: %ld\n", num_requests / (end-start));
+  PRINT("Yield-RPS-Cycles: %ld\n",  (end-start));
+  PRINT("Filler-Cycles: %ld\n", f_args.filler_cycles);
 
   /* time_yield() */
   request_args args;
