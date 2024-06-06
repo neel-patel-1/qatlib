@@ -1758,7 +1758,7 @@ int direct_vs_indirect(){
 }
 
 /* fcontext_switch.h */
-int num_requests =  1000;
+int num_requests =  100;
 int ret_val;
 struct acctest_context *dsa = NULL;
 
@@ -1951,6 +1951,7 @@ typedef struct _time_preempt_args_t {
   uint64_t *ts3;
   uint64_t *ts4;
   uint64_t *ts5;
+  uint64_t *ts6;
   struct completion_record *signal;
   int idx;
 } time_preempt_args_t;
@@ -1974,6 +1975,11 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     time_preempt_args_t *r_arg = (time_preempt_args_t *)(arg.data);
     int idx = r_arg->idx;
     uint64_t *ts2 = r_arg->ts2;
+    uint64_t *ts3 = r_arg->ts3;
+    uint64_t *ts4 = r_arg->ts4;
+    uint64_t *ts5 = r_arg->ts5;
+    uint64_t *ts6 = r_arg->ts6;
+
   /* made it to the offload context */
     ts2[idx] = sampleCoderdtsc();
 
@@ -1988,14 +1994,18 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     struct task *tsk = acctest_alloc_task(dsa);
 
     /*finished all app work */
+    ts3[idx] = sampleCoderdtsc();
 
     prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
     r_arg->signal = tsk->comp;
 
     /* about to submit */
+    ts4[idx] = sampleCoderdtsc();
 
     acctest_desc_submit(dsa, tsk->desc);
+    ts5[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
+    ts6[idx] = sampleCoderdtsc();
 
     /* made it back to the offload context to perform some post processing */
     for(int i=0; i<16*1024; i++){
@@ -2016,26 +2026,34 @@ int filler_thread_cycle_estimate_ts(){
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts2 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts3 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts4 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts5 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts6 = malloc(sizeof(uint64_t) * num_requests);
 
   uint64_t *ts0 = t_args.ts0;
   uint64_t *ts1 = t_args.ts1;
   uint64_t *ts2 = t_args.ts2;
   uint64_t *ts3 = t_args.ts3;
+  uint64_t *ts4 = t_args.ts4;
+  uint64_t *ts5 = t_args.ts5;
+  uint64_t *ts6 = t_args.ts6;
 
   fcontext_transfer_t off_req_xfer;
+  fcontext_t off_req_ctx;
 
   for(int i=0; i<num_requests; i++){
+    t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
     ts0[i] = sampleCoderdtsc();
-    fcontext_state_t *child = fcontext_create(yield_offload_request);
+    fcontext_state_t *child = fcontext_create(yield_offload_request_ts);
     ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
-    fcontext_state_t *filler = fcontext_create(filler_request);
+    fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
     ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
     off_req_xfer = fcontext_swap(child->context, &t_args);
 
-    fcontext_t off_req_ctx = off_req_xfer.prev_context;
     fcontext_swap(filler->context, &t_args);
+    off_req_ctx = off_req_xfer.prev_context;
     fcontext_swap(off_req_ctx, &t_args);
 
     fcontext_destroy(filler);
@@ -2043,6 +2061,12 @@ int filler_thread_cycle_estimate_ts(){
     fcontext_destroy_proxy(self);
   }
 
+  uint64_t avg = 0;
+  uint64_t run_times[num_requests];
+  avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
+  PRINT("Prepare_Offload: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts5, ts3, num_requests);
+  PRINT("Submit_Offload: %ld\n", avg);
 }
 
 int main(){
@@ -2072,6 +2096,7 @@ int main(){
 
   // filler_thre();
   filler_thread_cycle_estimate();
+  filler_thread_cycle_estimate_ts();
 
 
 
