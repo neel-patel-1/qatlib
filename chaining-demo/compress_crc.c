@@ -2132,7 +2132,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
-    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC); // LLC
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF ); // LLC
     r_arg->signal = tsk->comp;
 
     /* about to submit */
