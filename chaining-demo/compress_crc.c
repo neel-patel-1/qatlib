@@ -2151,7 +2151,12 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
-    chase_pointers(dst, numAccesses);
+    for(int i=0; i<memSize; i+=4096){
+      if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
+        PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[i], src[i]);
+        // return -EINVAL;
+      }
+    }
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
