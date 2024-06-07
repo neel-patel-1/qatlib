@@ -2144,11 +2144,11 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* made it back to the offload context to perform some post processing */
     ts12[idx] = sampleCoderdtsc();
 
-    // for(int i=0; i<16*1024; i++){
-    //   __builtin_prefetch(((const void *)(&src[i])));
-    //   __builtin_prefetch(((const void *)(&dst[i])));
+    for(int i=0; i<16*1024; i++){ // L1
+      __builtin_prefetch(((const void *)(&src[i])));
+      __builtin_prefetch(((const void *)(&dst[i])));
 
-    // }
+    }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
     chase_pointers(dst, numAccesses);
