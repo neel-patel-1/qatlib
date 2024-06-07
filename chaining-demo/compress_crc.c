@@ -2323,7 +2323,7 @@ int filler_thread_cycle_estimate_ts(){
 }
 
 
-int blocking_thread_throughput(){
+int switch_thread_throughput(){
   int num_tests = 10;
   int num_requests = 1000;
   time_preempt_args_t t_args;
@@ -2378,12 +2378,15 @@ int blocking_thread_throughput(){
       t_args.idx = i;
       fcontext_state_t *self = fcontext_create_proxy();
 
-      fcontext_state_t *child = fcontext_create(blocking_offload_request_ts);
+      fcontext_state_t *child = fcontext_create(yield_offload_request_ts);
       /* how long to create context for a request?*/
       fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
-      /* about to ctx switch ?*/
       off_req_xfer = fcontext_swap(child->context, &t_args);
+      /* about to ctx switch ?*/
+      fcontext_swap(filler->context, &t_args);
+      off_req_ctx = off_req_xfer.prev_context;
+      fcontext_swap(off_req_ctx, &t_args);
       /* req yielded*/
 
       /* req done*/
@@ -2399,7 +2402,7 @@ int blocking_thread_throughput(){
 
   uint64_t avg = 0;
   avg_samples_from_arrays(run_times,avg, end_times, start_times, num_tests);
-  PRINT("Blocking-Thread-%d-Requests-Cycles: %ld\n", num_requests, avg);
+  PRINT("Switch-Thread-%d-Requests-Cycles: %ld\n", num_requests, avg);
 
 }
 
@@ -2429,7 +2432,7 @@ int main(){
   // blocking_thread_cycle_estimate_ts();
   // filler_thread_cycle_estimate_ts();
 
-  blocking_thread_throughput();
+  switch_thread_throughput();
 
 
   acctest_free_task(dsa);
