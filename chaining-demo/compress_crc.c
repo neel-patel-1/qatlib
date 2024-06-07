@@ -1854,7 +1854,7 @@ uint64_t uniform_distribution(uint64_t rangeLow, uint64_t rangeHigh) {
   double randval = rand()/(1.0 + RAND_MAX);
   uint64_t randVal = rangeLow + (rangeHigh - rangeLow) * randval;
   if(randVal < rangeLow || randVal >= rangeHigh){
-    PRINT_ERR("randVal: %ld\n", randVal);
+    PRINT_ERR("randVal: %ld rangeLow:%ld rangeHigh:%ld \n", randVal, rangeLow, rangeHigh);
     exit(-1);
   }
   return randVal;
@@ -1939,7 +1939,7 @@ bool chase_pointers(void **memory, int count){
     p = (void **) *p;
   }
   chase_pointers_global = *p;
-  if(count != 0){
+  if(count > 0){
     PRINT_ERR("count: %d\n", count);
     return false;
   }
@@ -2074,6 +2074,7 @@ typedef struct _time_preempt_args_t {
   uint64_t *ts16;
   struct completion_record *signal;
   int idx;
+  int src_size;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2109,7 +2110,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts12 = r_arg->ts12;
     uint64_t *ts13 = r_arg->ts13;
     uint64_t *ts14 = r_arg->ts14;
-    int memSize = 32 ;
+    int memSize = r_arg->src_size ;
     int numAccesses = memSize / sizeof(void *);
 
 
@@ -2124,7 +2125,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
-    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, 0); // DRAM
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF); // DRAM
     r_arg->signal = tsk->comp;
 
     /* about to submit */
