@@ -2100,9 +2100,9 @@ void filler_request_ts(fcontext_transfer_t arg) {
       _mm_pause();
     }
     /* filler knows offload has completed -- flush to check if we can make host acc take longer*/
-    for(int i=0; i<size; i+=64){
-      _mm_clflush(dst + i);
-    }
+    // for(int i=0; i<size; i+=64){
+    //   _mm_clflush(dst + i);
+    // }
     /* Received the signal */
     ts10[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
