@@ -2109,7 +2109,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts12 = r_arg->ts12;
     uint64_t *ts13 = r_arg->ts13;
     uint64_t *ts14 = r_arg->ts14;
-    int memSize = 16;
+    int memSize = 32 ;
     int numAccesses = memSize / sizeof(void *);
 
 
@@ -2143,7 +2143,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     // }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
-    debug_chain(dst);
+    chase_pointers(dst, numAccesses);
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
