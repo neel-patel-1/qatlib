@@ -1849,6 +1849,30 @@ void time_the_yield(fcontext_transfer_t arg) {
 
 }
 
+/* mem_acc_pattern.h */
+void **create_random_chain(int size){
+  uint64_t len = size / sizeof(void *);
+
+  void ** memory = (void *)malloc(sizeof(void *) *len);
+  size_t  *indices = malloc(sizeof(size_t) * len);
+  for (int i = 0; i < len; i++) {
+    indices[i] = i;
+  }
+  for (int i = 0; i < len; i++) {
+    size_t j = rand() % len;
+    size_t tmp = indices[i];
+    indices[i] = indices[j];
+    indices[j] = tmp;
+  }
+
+  for (int i = 0; i < len; i++) {
+    memory[i] = &memory[indices[i]];
+  }
+  memory[indices[len - 1]] = (void *) &memory[indices[0]];
+  return memory;
+
+}
+
 typedef struct _filler_thread_args{
   struct completion_record *signal;
   uint64_t filler_cycles;
@@ -2170,9 +2194,8 @@ int main(){
 
   ret_val = 1;
 
-  // filler_thre();
-  // filler_thread_cycle_estimate();
-  filler_thread_cycle_estimate_ts();
+  create_random_chain(sizeof(uint64_t) * 16*1024);
+  // for(int i=0; i<)
 
 
 
