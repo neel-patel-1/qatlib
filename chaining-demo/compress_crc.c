@@ -1961,6 +1961,7 @@ typedef struct _time_preempt_args_t {
   uint64_t *ts13;
   uint64_t *ts14;
   uint64_t *ts15;
+  uint64_t *ts16;
   struct completion_record *signal;
   int idx;
 } time_preempt_args_t;
@@ -1997,6 +1998,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts6 = r_arg->ts6;
     uint64_t *ts12 = r_arg->ts12;
     uint64_t *ts13 = r_arg->ts13;
+    uint64_t *ts14 = r_arg->ts14;
 
 
   /* made it to the offload context */
@@ -2028,13 +2030,18 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     for(int i=0; i<16*1024; i++){
+      __builtin_prefetch(((const void *)(&dst[i])));
+
+    }
+    ts13[idx] = sampleCoderdtsc();
+    for(int i=0; i<16*1024; i++){
       if(src[i] != 0x1 || dst[i] != 0x1){
         PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src[i], dst[i]);
         // return -EINVAL;
       }
     }
     /* returning control to the scheduler */
-    ts13[idx] = sampleCoderdtsc();
+    ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
 
 }
@@ -2058,6 +2065,7 @@ int filler_thread_cycle_estimate_ts(){
   t_args.ts13 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts14 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts15 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts16 = malloc(sizeof(uint64_t) * num_requests);
 
   uint64_t *ts0 = t_args.ts0;
   uint64_t *ts1 = t_args.ts1;
@@ -2075,6 +2083,7 @@ int filler_thread_cycle_estimate_ts(){
   uint64_t *ts13 = t_args.ts13;
   uint64_t *ts14 = t_args.ts14;
   uint64_t *ts15 = t_args.ts15;
+  uint64_t *ts16 = t_args.ts16;
 
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
@@ -2095,10 +2104,10 @@ int filler_thread_cycle_estimate_ts(){
     ts11[i] = sampleCoderdtsc(); /* filler done*/
     off_req_ctx = off_req_xfer.prev_context;
     fcontext_swap(off_req_ctx, &t_args);
-    ts14[i] = sampleCoderdtsc(); /* req done*/
+    ts15[i] = sampleCoderdtsc(); /* req done*/
 
     fcontext_destroy(filler);
-    ts15[i] = sampleCoderdtsc(); /* filler destroyed*/
+    ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
     fcontext_destroy(child);
     fcontext_destroy_proxy(self);
   }
@@ -2129,9 +2138,9 @@ int filler_thread_cycle_estimate_ts(){
   PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
-  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
   PRINT("Destroy_a_request_processing_context: %ld\n", avg);
 }
 
