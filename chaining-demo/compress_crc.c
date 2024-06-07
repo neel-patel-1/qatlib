@@ -1850,6 +1850,7 @@ void time_the_yield(fcontext_transfer_t arg) {
 }
 
 /* mem_acc_pattern.h */
+volatile void *chase_pointers_global;
 void **create_random_chain(int size){
   uint64_t len = size / sizeof(void *);
 
@@ -1870,6 +1871,27 @@ void **create_random_chain(int size){
   }
   memory[indices[len - 1]] = (void *) &memory[indices[0]];
   return memory;
+
+}
+void chase_pointers(void **memory, int count){
+  void ** p = (void **)memory;
+  while (count -- > 0) {
+    p = (void **) *p;
+  }
+  chase_pointers_global = *p;
+}
+
+void debug_chain(void **memory){
+  void ** p = memory;
+  size_t count = 0;
+  PRINT_DBG("chain at %p:\n", memory);
+  do {
+    PRINT_DBG("  %p -> %p\n", p, *p);
+    p = (void **) *p;
+    count++;
+  } while (p != memory);
+  PRINT_DBG("# of pointers in chain: %lu\n", count);
+
 
 }
 
@@ -2194,8 +2216,10 @@ int main(){
 
   ret_val = 1;
 
-  create_random_chain(sizeof(uint64_t) * 16*1024);
-  // for(int i=0; i<)
+  int num_indices = 16;
+  // void **memory = (void *)malloc(sizeof(void *) *num_indices);
+  void ** memory = create_random_chain(sizeof(void *) *num_indices);
+  debug_chain(memory);
 
 
 
