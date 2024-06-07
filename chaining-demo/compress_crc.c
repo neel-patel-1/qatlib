@@ -2117,10 +2117,17 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
   /* made it to the offload context */
     ts3[idx] = sampleCoderdtsc();
 
+    /* prefault the pages */
+
+
     fcontext_t parent = arg.prev_context;
     void **dst = (void **)malloc(memSize);
     void **src = (void **)create_random_chain_starting_at(memSize, dst);
     struct task *tsk = acctest_alloc_task(dsa);
+    for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
+      ((uint8_t*)(dst))[i] = 0;
+    }
+
 
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
