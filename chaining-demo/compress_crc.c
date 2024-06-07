@@ -2132,7 +2132,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
-    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF ); // DRAM
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC); // DRAM
     r_arg->signal = tsk->comp;
 
     /* about to submit */
@@ -2144,14 +2144,14 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* made it back to the offload context to perform some post processing */
     ts12[idx] = sampleCoderdtsc();
 
-    // for(int i=0; i<memSize; i++){ // L1
-    //   __builtin_prefetch(((const void *)(&src[i])));
-    //   __builtin_prefetch(((const void *)(&dst[i])));
+    for(int i=0; i<memSize; i++){ // L1
+      __builtin_prefetch(((const void *)(&src[i])));
+      __builtin_prefetch(((const void *)(&dst[i])));
 
-    // }
+    }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
-    for(int i=0; i<memSize; i+=4096){
+    for(int i=0; i<memSize; i+=1){
       if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
         PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[i], src[i]);
         // return -EINVAL;
