@@ -2431,8 +2431,8 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  blocking_thread_cycle_estimate_ts();
-  // filler_thread_cycle_estimate_ts();
+  // blocking_thread_cycle_estimate_ts();
+  filler_thread_cycle_estimate_ts();
 
 
   acctest_free_task(dsa);
