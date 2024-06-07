@@ -1758,7 +1758,7 @@ int direct_vs_indirect(){
 }
 
 /* fcontext_switch.h */
-int num_requests =  1000;
+int num_requests =  1;
 int ret_val;
 struct acctest_context *dsa = NULL;
 
@@ -1908,12 +1908,16 @@ void **create_random_chain(int size){
   return memory;
 
 }
-void chase_pointers(void **memory, int count){
+bool chase_pointers(void **memory, int count){
   void ** p = (void **)memory;
   while (count -- > 0) {
     p = (void **) *p;
   }
   chase_pointers_global = *p;
+  if(count != 0){
+    PRINT_ERR("count: %d\n", count);
+    return false;
+  }
 }
 
 void debug_chain(void **memory){
@@ -2080,25 +2084,22 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts12 = r_arg->ts12;
     uint64_t *ts13 = r_arg->ts13;
     uint64_t *ts14 = r_arg->ts14;
+    int memSize = 16;
+    int numAccesses = memSize / sizeof(void *);
 
 
   /* made it to the offload context */
     ts3[idx] = sampleCoderdtsc();
 
     fcontext_t parent = arg.prev_context;
-    uint8_t *src = (uint8_t *)malloc(16*1024);
-    uint8_t *dst = (uint8_t *)malloc(16*1024);
-
-    for(int i=0; i<16*1024; i++){
-      src[i] = 0x1;
-      dst[i] = 0x2;
-    }
+    void **src = (void **)create_random_chain(memSize);
+    void **dst = (void **)malloc(memSize);
     struct task *tsk = acctest_alloc_task(dsa);
 
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
-    prepare_memcpy_task(tsk, dsa, src, 16*1024, dst);
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, 0); // DRAM
     r_arg->signal = tsk->comp;
 
     /* about to submit */
@@ -2116,12 +2117,8 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     // }
     ts13[idx] = sampleCoderdtsc();
-    for(int i=0; i<16*1024; i++){
-      if(src[i] != 0x1 || dst[i] != 0x1){
-        PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src[i], dst[i]);
-        // return -EINVAL;
-      }
-    }
+    /* perform accesses */
+    debug_chain(src);
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
@@ -2249,13 +2246,7 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  ret_val = 1;
-
-  int num_indices = 16;
-  // void **memory = (void *)malloc(sizeof(void *) *num_indices);
-  void ** memory = create_random_chain(sizeof(void *) *num_indices);
-  debug_chain(memory);
-
+  filler_thread_cycle_estimate_ts();
 
 
   acctest_free_task(dsa);
