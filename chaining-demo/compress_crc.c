@@ -1907,6 +1907,31 @@ void **create_random_chain(int size){
   memory[indices[len - 1]] = (void *) &memory[indices[0]];
   return memory;
 
+
+}
+void **create_random_chain_starting_at(int size, void **st_addr){
+  uint64_t len = size / sizeof(void *);
+  void ** memory = (void *)malloc(sizeof(void *) *len);
+  uint64_t  *indices = malloc(sizeof(uint64_t) * len);
+  for (int i = 0; i < len; i++) {
+    indices[i] = i;
+  }
+  for (int i = 0; i < len-1; ++i) {
+    uint64_t rand = uniform_distribution(i, len);
+    uint64_t j = rand;
+    //(rand() % (len - i)) ;
+    if( i == j) continue;
+    uint64_t tmp = indices[i];
+    indices[i] = indices[j];
+    indices[j] = tmp;
+  }
+
+  for (int i = 1; i < len; ++i) {
+    memory[indices[i-1]] = (void *) &st_addr[indices[i]];
+  }
+  memory[indices[len - 1]] = (void *) &st_addr[indices[0]];
+  return memory;
+
 }
 bool chase_pointers(void **memory, int count){
   void ** p = (void **)memory;
@@ -2092,8 +2117,8 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts3[idx] = sampleCoderdtsc();
 
     fcontext_t parent = arg.prev_context;
-    void **src = (void **)create_random_chain(memSize);
     void **dst = (void **)malloc(memSize);
+    void **src = (void **)create_random_chain_starting_at(memSize, dst);
     struct task *tsk = acctest_alloc_task(dsa);
 
     /*finished all app work */
@@ -2118,7 +2143,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     // }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
-    debug_chain(src);
+    debug_chain(dst);
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
