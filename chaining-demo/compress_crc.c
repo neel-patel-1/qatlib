@@ -2159,7 +2159,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 }
 
 int filler_thread_cycle_estimate_ts(){
-
+  int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2197,10 +2197,12 @@ int filler_thread_cycle_estimate_ts(){
   uint64_t *ts15 = t_args.ts15;
   uint64_t *ts16 = t_args.ts16;
 
+
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
-
-  for(int i=0; i<num_requests; i++){
+  t_args.src_size = 16*1024;
+  int i=0;
+  for(i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
     ts0[i] = sampleCoderdtsc();
