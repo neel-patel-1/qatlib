@@ -2030,6 +2030,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     for(int i=0; i<16*1024; i++){
+      __builtin_prefetch(((const void *)(&src[i])));
       __builtin_prefetch(((const void *)(&dst[i])));
 
     }
