@@ -1850,24 +1850,32 @@ void time_the_yield(fcontext_transfer_t arg) {
 }
 
 /* mem_acc_pattern.h */
+uint64_t uniform_distribution(uint64_t rangeLow, uint64_t rangeHigh) {
+    return (rangeLow +1 % rangeHigh);
+}
 volatile void *chase_pointers_global;
 void **create_random_chain(int size){
   uint64_t len = size / sizeof(void *);
 
   void ** memory = (void *)malloc(sizeof(void *) *len);
-  size_t  *indices = malloc(sizeof(size_t) * len);
+  uint64_t  *indices = malloc(sizeof(uint64_t) * len);
   for (int i = 0; i < len; i++) {
     indices[i] = i;
   }
-  for (int i = 0; i < len; i++) {
-    size_t j = rand() % len;
-    size_t tmp = indices[i];
+  for (int i = 0; i < len-1; ++i) {
+    uint64_t rand = uniform_distribution(i, len);
+    uint64_t j = rand;
+    //(rand() % (len - i)) ;
+    if( i == j) continue;
+    uint64_t tmp = indices[i];
     indices[i] = indices[j];
     indices[j] = tmp;
+    PRINT("i: %ld j: %ld\n", i, j);
+    PRINT("indices[i]: %ld indices[j]: %ld\n", indices[i], indices[j]);
   }
 
-  for (int i = 0; i < len; i++) {
-    memory[i] = &memory[indices[i]];
+  for (int i = 1; i < len; ++i) {
+    memory[indices[i-1]] = (void *) &memory[indices[i]];
   }
   memory[indices[len - 1]] = (void *) &memory[indices[0]];
   return memory;
@@ -2216,7 +2224,7 @@ int main(){
 
   ret_val = 1;
 
-  int num_indices = 16;
+  int num_indices = 64;
   // void **memory = (void *)malloc(sizeof(void *) *num_indices);
   void ** memory = create_random_chain(sizeof(void *) *num_indices);
   debug_chain(memory);
