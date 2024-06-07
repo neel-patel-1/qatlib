@@ -2084,18 +2084,18 @@ void filler_request_ts(fcontext_transfer_t arg) {
     uint64_t *ts9 = f_arg->ts9;
     uint64_t *ts10 = f_arg->ts10;
 
-    ts8[idx] = sampleCoderdtsc();
+
 
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
-    ts9[idx] = sampleCoderdtsc();
+
 
     while(signal->status == 0){
       _mm_pause();
     }
     /* Received the signal */
-    ts10[idx] = sampleCoderdtsc();
+
     fcontext_swap(parent, NULL);
 }
 
@@ -2115,7 +2115,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
 
   /* made it to the offload context */
-    ts3[idx] = sampleCoderdtsc();
+
 
     /* prefault the pages */
 
@@ -2130,26 +2130,26 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
 
     /*finished all app work */
-    ts4[idx] = sampleCoderdtsc();
+
 
     prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC); // DRAM
     r_arg->signal = tsk->comp;
 
     /* about to submit */
-    ts5[idx] = sampleCoderdtsc();
+
 
     acctest_desc_submit(dsa, tsk->desc);
-    ts6[idx] = sampleCoderdtsc();
+
     fcontext_swap(parent, NULL);
     /* made it back to the offload context to perform some post processing */
-    ts12[idx] = sampleCoderdtsc();
+
 
     // for(int i=0; i<memSize; i++){ // L1
     //   __builtin_prefetch(((const void *)(&src[i])));
     //   __builtin_prefetch(((const void *)(&dst[i])));
 
     // }
-    ts13[idx] = sampleCoderdtsc();
+
     /* perform accesses */
     for(int i=0; i<memSize; i+=1){
       if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
@@ -2158,7 +2158,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
       }
     }
     /* returning control to the scheduler */
-    ts14[idx] = sampleCoderdtsc();
+
     fcontext_swap(parent, NULL);
 
 }
@@ -2178,7 +2178,7 @@ void blocking_offload_request_ts (fcontext_transfer_t arg) {
 
 
   /* made it to the offload context */
-    ts3[idx] = sampleCoderdtsc();
+
 
     /* prefault the pages */
 
@@ -2193,22 +2193,22 @@ void blocking_offload_request_ts (fcontext_transfer_t arg) {
 
 
     /*finished all app work */
-    ts4[idx] = sampleCoderdtsc();
+
 
     prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC); // DRAM
     r_arg->signal = tsk->comp;
 
     /* about to submit */
-    ts5[idx] = sampleCoderdtsc();
+
 
     acctest_desc_submit(dsa, tsk->desc);
-    ts6[idx] = sampleCoderdtsc();
+
 
     while(tsk->comp->status == 0){
       _mm_pause();
     }
 
-    ts13[idx] = sampleCoderdtsc();
+
     /* perform accesses */
     for(int i=0; i<memSize; i+=1){
       if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
@@ -2217,7 +2217,7 @@ void blocking_offload_request_ts (fcontext_transfer_t arg) {
       }
     }
     /* returning control to the scheduler */
-    ts14[idx] = sampleCoderdtsc();
+
     fcontext_swap(parent, NULL);
 
 }
@@ -2269,23 +2269,23 @@ int filler_thread_cycle_estimate_ts(){
   for(i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
-    ts0[i] = sampleCoderdtsc();
+
     fcontext_state_t *child = fcontext_create(yield_offload_request_ts);
-    ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
+     /* how long to create context for a request?*/
     fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
-    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
+     /* about to ctx switch ?*/
     off_req_xfer = fcontext_swap(child->context, &t_args);
-    ts7[i] = sampleCoderdtsc(); /* req yielded*/
+     /* req yielded*/
 
     fcontext_swap(filler->context, &t_args);
-    ts11[i] = sampleCoderdtsc(); /* filler done*/
+     /* filler done*/
     off_req_ctx = off_req_xfer.prev_context;
     fcontext_swap(off_req_ctx, &t_args);
-    ts15[i] = sampleCoderdtsc(); /* req done*/
+     /* req done*/
 
     fcontext_destroy(filler);
-    ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
+     /* filler destroyed*/
     fcontext_destroy(child);
     fcontext_destroy_proxy(self);
   }
@@ -2323,7 +2323,8 @@ int filler_thread_cycle_estimate_ts(){
 }
 
 
-int blocking_thread_cycle_estimate_ts(){
+int blocking_thread_throughput(){
+  int num_tests = 10;
   int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
@@ -2367,45 +2368,39 @@ int blocking_thread_cycle_estimate_ts(){
   fcontext_t off_req_ctx;
   t_args.src_size = 16*1024;
   int i=0;
-  for(i=0; i<num_requests; i++){
-    t_args.idx = i;
-    fcontext_state_t *self = fcontext_create_proxy();
-    ts0[i] = sampleCoderdtsc();
-    fcontext_state_t *child = fcontext_create(blocking_offload_request_ts);
-    ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
-    fcontext_state_t *filler = fcontext_create(filler_request_ts);
+  uint64_t start, end;
+  uint64_t start_times[num_requests];
+  uint64_t end_times[num_requests];
+  uint64_t run_times[num_requests];
+  for(i=0; i<num_tests; i++){
+    start = sampleCoderdtsc();
+    for(int j=0; j<num_requests; j++){
+      t_args.idx = i;
+      fcontext_state_t *self = fcontext_create_proxy();
 
-    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
-    off_req_xfer = fcontext_swap(child->context, &t_args);
-    ts7[i] = sampleCoderdtsc(); /* req yielded*/
+      fcontext_state_t *child = fcontext_create(blocking_offload_request_ts);
+      /* how long to create context for a request?*/
+      fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
-    ts15[i] = sampleCoderdtsc(); /* req done*/
-    fcontext_destroy(filler);
-    ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
-    fcontext_destroy(child);
-    fcontext_destroy_proxy(self);
+      /* about to ctx switch ?*/
+      off_req_xfer = fcontext_swap(child->context, &t_args);
+      /* req yielded*/
+
+      /* req done*/
+      fcontext_destroy(filler);
+      /* filler destroyed*/
+      fcontext_destroy(child);
+      fcontext_destroy_proxy(self);
+    }
+    end = sampleCoderdtsc();
+    start_times[i] = start;
+    end_times[i] = end;
   }
 
   uint64_t avg = 0;
-  uint64_t run_times[num_requests];
-  avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
-  PRINT("Create_a_request_processing_context: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
-  PRINT("ContextSwitchIntoRequest: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
-  PRINT("RequestCPUWork: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
-  PRINT("Prepare_Offload: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
-  PRINT("Submit_Offload: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts13, ts6, num_requests);
-  PRINT("WaitAxCycles: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
-  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
-  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
-  PRINT("Destroy_a_request_processing_context: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, end_times, start_times, num_tests);
+  PRINT("Blocking-Thread-%d-Requests-Cycles: %ld\n", num_requests, avg);
+
 }
 
 int main(){
@@ -2432,7 +2427,9 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
   // blocking_thread_cycle_estimate_ts();
-  filler_thread_cycle_estimate_ts();
+  // filler_thread_cycle_estimate_ts();
+
+  blocking_thread_throughput();
 
 
   acctest_free_task(dsa);
