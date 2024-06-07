@@ -2162,6 +2162,65 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     fcontext_swap(parent, NULL);
 
 }
+void blocking_offload_request_ts (fcontext_transfer_t arg) {
+    time_preempt_args_t *r_arg = (time_preempt_args_t *)(arg.data);
+    int idx = r_arg->idx;
+    uint64_t *ts2 = r_arg->ts2;
+    uint64_t *ts3 = r_arg->ts3;
+    uint64_t *ts4 = r_arg->ts4;
+    uint64_t *ts5 = r_arg->ts5;
+    uint64_t *ts6 = r_arg->ts6;
+    uint64_t *ts12 = r_arg->ts12;
+    uint64_t *ts13 = r_arg->ts13;
+    uint64_t *ts14 = r_arg->ts14;
+    int memSize = r_arg->src_size ;
+    int numAccesses = memSize / sizeof(void *);
+
+
+  /* made it to the offload context */
+    ts3[idx] = sampleCoderdtsc();
+
+    /* prefault the pages */
+
+
+    fcontext_t parent = arg.prev_context;
+    void **dst = (void **)malloc(memSize);
+    void **src = (void **)create_random_chain_starting_at(memSize, dst);
+    struct task *tsk = acctest_alloc_task(dsa);
+    for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
+      ((uint8_t*)(dst))[i] = 0;
+    }
+
+
+    /*finished all app work */
+    ts4[idx] = sampleCoderdtsc();
+
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC); // DRAM
+    r_arg->signal = tsk->comp;
+
+    /* about to submit */
+    ts5[idx] = sampleCoderdtsc();
+
+    acctest_desc_submit(dsa, tsk->desc);
+    ts6[idx] = sampleCoderdtsc();
+
+    while(tsk->comp->status == 0){
+      _mm_pause();
+    }
+
+    ts13[idx] = sampleCoderdtsc();
+    /* perform accesses */
+    for(int i=0; i<memSize; i+=1){
+      if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
+        PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[i], src[i]);
+        // return -EINVAL;
+      }
+    }
+    /* returning control to the scheduler */
+    ts14[idx] = sampleCoderdtsc();
+    fcontext_swap(parent, NULL);
+
+}
 
 int filler_thread_cycle_estimate_ts(){
   int num_requests = 1000;
@@ -2263,6 +2322,92 @@ int filler_thread_cycle_estimate_ts(){
   PRINT("Destroy_a_request_processing_context: %ld\n", avg);
 }
 
+
+int blocking_thread_cycle_estimate_ts(){
+  int num_requests = 1000;
+  time_preempt_args_t t_args;
+  t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts2 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts3 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts4 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts5 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts6 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts7 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts8 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts9 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts10 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts11 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts12 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts13 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts14 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts15 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts16 = malloc(sizeof(uint64_t) * num_requests);
+
+  uint64_t *ts0 = t_args.ts0;
+  uint64_t *ts1 = t_args.ts1;
+  uint64_t *ts2 = t_args.ts2;
+  uint64_t *ts3 = t_args.ts3;
+  uint64_t *ts4 = t_args.ts4;
+  uint64_t *ts5 = t_args.ts5;
+  uint64_t *ts6 = t_args.ts6;
+  uint64_t *ts7 = t_args.ts7;
+  uint64_t *ts8 = t_args.ts8;
+  uint64_t *ts9 = t_args.ts9;
+  uint64_t *ts10 = t_args.ts10;
+  uint64_t *ts11 = t_args.ts11;
+  uint64_t *ts12 = t_args.ts12;
+  uint64_t *ts13 = t_args.ts13;
+  uint64_t *ts14 = t_args.ts14;
+  uint64_t *ts15 = t_args.ts15;
+  uint64_t *ts16 = t_args.ts16;
+
+
+  fcontext_transfer_t off_req_xfer;
+  fcontext_t off_req_ctx;
+  t_args.src_size = 16*1024;
+  int i=0;
+  for(i=0; i<num_requests; i++){
+    t_args.idx = i;
+    fcontext_state_t *self = fcontext_create_proxy();
+    ts0[i] = sampleCoderdtsc();
+    fcontext_state_t *child = fcontext_create(blocking_offload_request_ts);
+    ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
+    fcontext_state_t *filler = fcontext_create(filler_request_ts);
+
+    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
+    off_req_xfer = fcontext_swap(child->context, &t_args);
+    ts7[i] = sampleCoderdtsc(); /* req yielded*/
+
+    ts15[i] = sampleCoderdtsc(); /* req done*/
+    fcontext_destroy(filler);
+    ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+
+  uint64_t avg = 0;
+  uint64_t run_times[num_requests];
+  avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
+  PRINT("Create_a_request_processing_context: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
+  PRINT("ContextSwitchIntoRequest: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
+  PRINT("RequestCPUWork: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
+  PRINT("Prepare_Offload: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
+  PRINT("Submit_Offload: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts13, ts6, num_requests);
+  PRINT("WaitAxCycles: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
+  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
+  PRINT("Destroy_a_request_processing_context: %ld\n", avg);
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -2286,7 +2431,8 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  filler_thread_cycle_estimate_ts();
+  blocking_thread_cycle_estimate_ts();
+  // filler_thread_cycle_estimate_ts();
 
 
   acctest_free_task(dsa);
