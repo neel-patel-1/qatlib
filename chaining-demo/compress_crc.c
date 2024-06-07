@@ -2029,10 +2029,10 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* made it back to the offload context to perform some post processing */
     ts12[idx] = sampleCoderdtsc();
 
-    for(int i=0; i<16*1024; i++){
-      __builtin_prefetch(((const void *)(&dst[i])));
+    // for(int i=0; i<16*1024; i++){
+    //   __builtin_prefetch(((const void *)(&dst[i])));
 
-    }
+    // }
     ts13[idx] = sampleCoderdtsc();
     for(int i=0; i<16*1024; i++){
       if(src[i] != 0x1 || dst[i] != 0x1){
@@ -2136,7 +2136,7 @@ int filler_thread_cycle_estimate_ts(){
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
   PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
+  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
