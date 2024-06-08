@@ -2102,12 +2102,13 @@ void filler_request_ts(fcontext_transfer_t arg) {
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
 
-    ts9[idx] = sampleCoderdtsc();
-
     /* filler would not keep accessing after the preemption signal */
     for(int i=0; i<fill_buf_size; i+=64){
       ACCESS_ONCE(fill_buf[i]);
     }
+
+    ts9[idx] = sampleCoderdtsc();
+
 
     while(signal->status == 0){
       _mm_pause();
