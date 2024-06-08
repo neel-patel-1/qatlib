@@ -2518,22 +2518,38 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-  int flag_sets[] = {IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF, IDXD_OP_FLAG_BOF};
   int xfer_size = 16 * 1024;
-  for(int do_flush=0; do_flush<=1; do_flush++){
-    for (enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
-      for(int tflags = 0; tflags <= 1; tflags++){
-        for(int filler_pollute = 0; filler_pollute <= 1; filler_pollute++){
-          for(int do_prefetch = 0; do_prefetch <= 1; do_prefetch++){
+  for(int do_flush=0; do_flush<=0; do_flush++){
+    for (enum acc_pattern pat = GATHER; pat <= GATHER; pat++){
+      for(int cctrl = 0; cctrl <= 1; cctrl++){
+        if(cctrl == 1){
+          tflags = IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF;
+        } else{
+          tflags = IDXD_OP_FLAG_BOF;
+        }
+        int filler_pollute_max;
+        if(cctrl == 1){
+          filler_pollute_max = 1;
+        } else{
+          filler_pollute_max = 0;
+        }
+        for(int filler_pollute = 0; filler_pollute <= filler_pollute_max; filler_pollute++){
+          int do_prefetch_max;
+          if(filler_pollute == 0){
+            do_prefetch_max = 1;
+          } else{
+            do_prefetch_max = 0;
+          }
+          for(int do_prefetch = 0; do_prefetch <= do_prefetch_max; do_prefetch++){
               PRINT("\n");
               PRINT("XferSize: %d ", xfer_size);
               PRINT("Pattern: %s ", pattern_str(pat));
               PRINT("Prefetch: %d ", do_prefetch);
               PRINT("Flush: %d ", do_flush);
               PRINT("FillerPollute: %d ", filler_pollute);
-              PRINT("TestFlags: 0x%x ", flag_sets[tflags]);
+              PRINT("CacheControl: %d ", cctrl);
 
-              ax_output_pat_interference(LINEAR, xfer_size, do_prefetch, 0, filler_pollute, flag_sets[tflags]);
+              ax_output_pat_interference(LINEAR, xfer_size, do_prefetch, 0, filler_pollute, tflags);
           }
         }
       }
