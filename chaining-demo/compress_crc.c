@@ -2077,6 +2077,7 @@ typedef struct _time_preempt_args_t {
   int idx;
   int src_size;
   int preftch_ax_out;
+  int flush_ax_out;
   int test_flags;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
@@ -2119,8 +2120,10 @@ void filler_request_ts(fcontext_transfer_t arg) {
     }
 
     /* filler knows offload has completed -- flush to check if we can make host acc take longer*/
-    for(int i=0; i<size; i+=64){
-      _mm_clflush(dst + i);
+    if(f_arg->flush_ax_out){
+      for(int i=0; i<size; i+=64){
+        _mm_clflush(dst + i);
+      }
     }
     /* Received the signal */
     ts10[idx] = sampleCoderdtsc();
@@ -2232,6 +2235,7 @@ int filler_thread_cycle_estimate_ts(){
   fcontext_t off_req_ctx;
   t_args.src_size = 16*1024;
   t_args.preftch_ax_out = 0;
+  t_args.flush_ax_out = 0;
   t_args.test_flags = IDXD_OP_FLAG_CC;
   int i=0;
   for(i=0; i<num_requests; i++){
