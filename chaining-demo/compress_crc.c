@@ -2082,6 +2082,7 @@ typedef struct _time_preempt_args_t {
   int preftch_ax_out;
   int flush_ax_out;
   int test_flags;
+  int pollute_llc_way;
   enum acc_pattern pat;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
@@ -2119,8 +2120,10 @@ void filler_request_ts(fcontext_transfer_t arg) {
     }
 
     /* filler would not keep accessing after the preemption signal */
-    for(int i=0; i<fill_buf_size; i+=64){
-      ACCESS_ONCE(fill_buf[i]);
+    if(f_arg->pollute_llc_way){
+      for(int i=0; i<fill_buf_size; i+=64){
+        ACCESS_ONCE(fill_buf[i]);
+      }
     }
 
     /* filler knows offload has completed -- flush to check if we can make host acc take longer*/
@@ -2252,10 +2255,11 @@ int filler_thread_cycle_estimate_ts(){
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
   t_args.src_size = 16*1024;
-  t_args.preftch_ax_out = 1;
+  t_args.preftch_ax_out = 0;
   t_args.flush_ax_out = 0;
-  t_args.test_flags = IDXD_OP_FLAG_CC;
+  t_args.test_flags = NULL;
   t_args.pat = LINEAR;
+  t_args.pollute_llc_way = 0;
   int i=0;
   for(i=0; i<num_requests; i++){
     t_args.idx = i;
