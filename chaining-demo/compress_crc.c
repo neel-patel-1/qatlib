@@ -2122,6 +2122,7 @@ void filler_request_ts(fcontext_transfer_t arg) {
     /* filler would not keep accessing after the preemption signal */
     if(f_arg->pollute_llc_way){
       for(int i=0; i<fill_buf_size; i+=64){
+        // ((volatile char *)fill_buf)[i] = (char)(i%256);
         ACCESS_ONCE(fill_buf[i]);
       }
     }
