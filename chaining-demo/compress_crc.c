@@ -2052,7 +2052,10 @@ int yield_time(){
   avg_samples_from_arrays(run_times,avg, args.end_times, args.start_times, num_requests);
   PRINT("Yield Time: %ld\n", avg);
 }
-
+enum acc_pattern {
+  LINEAR,
+  RANDOM
+};
 /* TimeTheUspacePreempt.h*/
 typedef struct _time_preempt_args_t {
   uint64_t *ts0;
@@ -2079,6 +2082,7 @@ typedef struct _time_preempt_args_t {
   int preftch_ax_out;
   int flush_ax_out;
   int test_flags;
+  enum acc_pattern pat;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2185,7 +2189,20 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
-    chase_pointers(dst, numAccesses);
+    switch(r_arg->pat){
+      case LINEAR:
+        for(int i=0; i<memSize; i+=128){
+          chase_pointers_global = ((uint8_t *)dst)[i];
+          if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
+            PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[i], src[i]);
+            // return -EINVAL;
+          }
+        }
+        break;
+      case RANDOM:
+        chase_pointers(dst, numAccesses);
+        break;
+    }
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
@@ -2237,7 +2254,8 @@ int filler_thread_cycle_estimate_ts(){
   t_args.src_size = 16*1024;
   t_args.preftch_ax_out = 0;
   t_args.flush_ax_out = 1;
-  t_args.test_flags = IDXD_OP_FLAG_CC;
+  t_args.test_flags = NULL;
+  t_args.pat = LINEAR;
   int i=0;
   for(i=0; i<num_requests; i++){
     t_args.idx = i;
