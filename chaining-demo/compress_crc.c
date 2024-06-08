@@ -1959,6 +1959,31 @@ void debug_chain(void **memory){
 
 }
 
+void **create_gather_list(int size){
+  uint64_t len = size / sizeof(void *);
+  void ** memory = (void *)malloc(sizeof(void *) *len);
+  uint64_t  *indices = malloc(sizeof(uint64_t) * len);
+  for (int i = 0; i < len; i++) {
+    indices[i] = i;
+  }
+  for (int i = 0; i < len-1; ++i) {
+    uint64_t rand = uniform_distribution(i, len);
+    uint64_t j = rand;
+    //(rand() % (len - i)) ;
+    if( i == j) continue;
+    uint64_t tmp = indices[i];
+    indices[i] = indices[j];
+    indices[j] = tmp;
+  }
+
+  for (int i = 1; i < len; ++i) {
+    memory[indices[i-1]] = (void *) &memory[indices[i]];
+  }
+  memory[indices[len - 1]] = (void *) &memory[indices[0]];
+  return memory;
+
+}
+
 typedef struct _filler_thread_args{
   struct completion_record *signal;
   uint64_t filler_cycles;
@@ -2054,8 +2079,19 @@ int yield_time(){
 }
 enum acc_pattern {
   LINEAR,
-  RANDOM
+  RANDOM,
+  GATHER
 };
+char *pattern_str(enum acc_pattern pat){
+  switch(pat){
+    case LINEAR:
+      return "LINEAR";
+    case RANDOM:
+      return "RANDOM";
+    case GATHER:
+      return "GATHER";
+  }
+}
 /* TimeTheUspacePreempt.h*/
 typedef struct _time_preempt_args_t {
   uint64_t *ts0;
@@ -2318,6 +2354,132 @@ int filler_thread_cycle_estimate_ts(){
 
   free(t_args.ts0);
   free(t_args.ts1);
+  free(t_args.ts2);
+  free(t_args.ts3);
+  free(t_args.ts4);
+  free(t_args.ts5);
+  free(t_args.ts6);
+  free(t_args.ts7);
+  free(t_args.ts8);
+  free(t_args.ts9);
+  free(t_args.ts10);
+  free(t_args.ts11);
+  free(t_args.ts12);
+  free(t_args.ts13);
+  free(t_args.ts14);
+  free(t_args.ts15);
+  free(t_args.ts16);
+
+}
+
+int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefetch,
+  int do_flush, int filler_pollute,  int tflags ){
+  int num_requests = 1;
+  time_preempt_args_t t_args;
+  t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts2 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts3 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts4 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts5 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts6 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts7 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts8 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts9 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts10 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts11 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts12 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts13 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts14 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts15 = malloc(sizeof(uint64_t) * num_requests);
+  t_args.ts16 = malloc(sizeof(uint64_t) * num_requests);
+
+  uint64_t *ts0 = t_args.ts0;
+  uint64_t *ts1 = t_args.ts1;
+  uint64_t *ts2 = t_args.ts2;
+  uint64_t *ts3 = t_args.ts3;
+  uint64_t *ts4 = t_args.ts4;
+  uint64_t *ts5 = t_args.ts5;
+  uint64_t *ts6 = t_args.ts6;
+  uint64_t *ts7 = t_args.ts7;
+  uint64_t *ts8 = t_args.ts8;
+  uint64_t *ts9 = t_args.ts9;
+  uint64_t *ts10 = t_args.ts10;
+  uint64_t *ts11 = t_args.ts11;
+  uint64_t *ts12 = t_args.ts12;
+  uint64_t *ts13 = t_args.ts13;
+  uint64_t *ts14 = t_args.ts14;
+  uint64_t *ts15 = t_args.ts15;
+  uint64_t *ts16 = t_args.ts16;
+
+
+  fcontext_transfer_t off_req_xfer;
+  fcontext_t off_req_ctx;
+
+  switch(pat){
+    case LINEAR:
+      t_args.pat = LINEAR;
+      break;
+    case RANDOM:
+      t_args.pat = RANDOM;
+      break;
+    case GATHER:
+      t_args.pat = GATHER;
+      break;
+  }
+  t_args.src_size = xfer_size;
+  t_args.preftch_ax_out = do_prefetch;
+  t_args.flush_ax_out = do_flush;
+  t_args.test_flags = tflags;
+  t_args.pollute_llc_way = filler_pollute;
+  for(int i=0; i<num_requests; i++){
+    t_args.idx = i;
+    fcontext_state_t *self = fcontext_create_proxy();
+    ts0[i] = sampleCoderdtsc();
+    fcontext_state_t *child = fcontext_create(yield_offload_request_ts);
+    ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
+    fcontext_state_t *filler = fcontext_create(filler_request_ts);
+
+    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
+    off_req_xfer = fcontext_swap(child->context, &t_args);
+    ts7[i] = sampleCoderdtsc(); /* req yielded*/
+
+    fcontext_swap(filler->context, &t_args);
+    ts11[i] = sampleCoderdtsc(); /* filler done*/
+    off_req_ctx = off_req_xfer.prev_context;
+    fcontext_swap(off_req_ctx, &t_args);
+    ts15[i] = sampleCoderdtsc(); /* req done*/
+
+    fcontext_destroy(filler);
+    ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
+    fcontext_destroy(child);
+    fcontext_destroy_proxy(self);
+  }
+
+  uint64_t avg = 0;
+  uint64_t run_times[num_requests];
+
+  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
+  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+
+  free(t_args.ts0);
+  free(t_args.ts1);
+  free(t_args.ts2);
+  free(t_args.ts3);
+  free(t_args.ts4);
+  free(t_args.ts5);
+  free(t_args.ts6);
+  free(t_args.ts7);
+  free(t_args.ts8);
+  free(t_args.ts9);
+  free(t_args.ts10);
+  free(t_args.ts11);
+  free(t_args.ts12);
+  free(t_args.ts13);
+  free(t_args.ts14);
+  free(t_args.ts15);
+  free(t_args.ts16);
+
 }
 
 int main(){
@@ -2343,7 +2505,27 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  filler_thread_cycle_estimate_ts();
+  int xfer_size = 16 * 1024;
+  for (enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
+    for(int do_prefetch = 0; do_prefetch <= 1; do_prefetch++){
+      for(int do_flush = 0; do_flush <= 1; do_flush++){
+        for(int filler_pollute = 0; filler_pollute <= 1; filler_pollute++){
+          for(int tflags = 1; tflags <= 1; tflags++){
+            PRINT("--------------------\n")
+            PRINT("Pattern: %s\n", pattern_str(pat));
+            PRINT("Prefetch: %d\n", do_prefetch);
+            PRINT("Flush: %d\n", do_flush);
+            PRINT("FillerPollute: %d\n", filler_pollute);
+            PRINT("TestFlags: %d\n", tflags);
+            // ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+            ax_output_pat_interference(LINEAR, xfer_size, 0, 0, 0, IDXD_OP_FLAG_CC);
+
+
+          }
+        }
+      }
+    }
+  }
 
 
   acctest_free_task(dsa);
