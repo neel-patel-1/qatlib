@@ -2143,6 +2143,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts14 = r_arg->ts14;
     int memSize = r_arg->src_size ;
     int numAccesses = memSize / sizeof(void *);
+    int flags = r_arg->test_flags;
 
 
   /* made it to the offload context */
@@ -2163,7 +2164,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
-    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF); // DRAM
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags); // DRAM
     r_arg->signal = tsk->comp;
     r_arg->tsk = tsk;
 
