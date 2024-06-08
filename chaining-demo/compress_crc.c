@@ -2374,7 +2374,7 @@ int filler_thread_cycle_estimate_ts(){
 
 int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefetch,
   int do_flush, int filler_pollute,  int tflags ){
-  int num_requests = 1;
+  int num_requests = 100;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2460,7 +2460,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   uint64_t run_times[num_requests];
 
   avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
-  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+  PRINT("RequestOnCPUPostProcessing: %ld ", avg);
 
   free(t_args.ts0);
   free(t_args.ts1);
@@ -2506,26 +2506,24 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   int flag_sets[] = {IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF, IDXD_OP_FLAG_BOF};
   int xfer_size = 16 * 1024;
-  for (enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
-    for(int do_prefetch = 0; do_prefetch <= 1; do_prefetch++){
-      for(int do_flush = 0; do_flush <= 1; do_flush++){
+  for(int do_flush=0; do_flush<=1; do_flush++){
+    for (enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
+      for(int tflags = 0; tflags <= 1; tflags++){
         for(int filler_pollute = 0; filler_pollute <= 1; filler_pollute++){
-          for(int tflags = 0; tflags <= 1; tflags++){
-            PRINT("--------------------\n");
-            PRINT("Pattern: %s\n", pattern_str(pat));
-            PRINT("Prefetch: %d\n", do_prefetch);
-            PRINT("Flush: %d\n", do_flush);
-            PRINT("FillerPollute: %d\n", filler_pollute);
-            PRINT("TestFlags: 0x%x\n", flag_sets[tflags]);
-            // ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
-            ax_output_pat_interference(LINEAR, xfer_size, 0, 0, 0, flag_sets[tflags]);
-
-
+          for(int do_prefetch = 0; do_prefetch <= 1; do_prefetch++){
+              PRINT("\n");
+              PRINT("Pattern: %s ", pattern_str(pat));
+              PRINT("Prefetch: %d ", do_prefetch);
+              PRINT("Flush: %d ", do_flush);
+              PRINT("FillerPollute: %d ", filler_pollute);
+              PRINT("TestFlags: 0x%x ", flag_sets[tflags]);
+              ax_output_pat_interference(LINEAR, xfer_size, do_prefetch, 0, filler_pollute, flag_sets[tflags]);
           }
         }
       }
     }
   }
+  PRINT("\n");
 
 
   acctest_free_task(dsa);
