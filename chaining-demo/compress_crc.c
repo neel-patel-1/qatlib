@@ -2091,7 +2091,7 @@ void filler_request_ts(fcontext_transfer_t arg) {
     #define L3_CACHE_SIZE 38797312ULL
     #define SPR_NUM_WAYS 15ULL
     #define SPR_LLC_WAY_SIZE (L3_CACHE_SIZE/SPR_NUM_WAYS)
-    int fill_buf_size = SPR_LLC_WAY_SIZE;
+    int fill_buf_size = L3_CACHE_SIZE;
     char *fill_buf = (char *)malloc(fill_buf_size);
 
 
@@ -2102,16 +2102,18 @@ void filler_request_ts(fcontext_transfer_t arg) {
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
 
-    /* filler would not keep accessing after the preemption signal */
-    for(int i=0; i<fill_buf_size; i+=64){
-      ACCESS_ONCE(fill_buf[i]);
-    }
+
 
     ts9[idx] = sampleCoderdtsc();
 
 
     while(signal->status == 0){
       _mm_pause();
+    }
+
+    /* filler would not keep accessing after the preemption signal */
+    for(int i=0; i<fill_buf_size; i+=64){
+      ACCESS_ONCE(fill_buf[i]);
     }
 
     /* filler knows offload has completed -- flush to check if we can make host acc take longer*/
