@@ -2235,8 +2235,8 @@ int filler_thread_cycle_estimate_ts(){
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
   t_args.src_size = 16*1024;
-  t_args.preftch_ax_out = 1;
-  t_args.flush_ax_out = 0;
+  t_args.preftch_ax_out = 0;
+  t_args.flush_ax_out = 1;
   t_args.test_flags = IDXD_OP_FLAG_CC;
   int i=0;
   for(i=0; i<num_requests; i++){
