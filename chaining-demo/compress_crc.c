@@ -1959,27 +1959,19 @@ void debug_chain(void **memory){
 
 }
 
-void **create_gather_list(int size){
-  uint64_t len = size / sizeof(void *);
-  void ** memory = (void *)malloc(sizeof(void *) *len);
-  uint64_t  *indices = malloc(sizeof(uint64_t) * len);
-  for (int i = 0; i < len; i++) {
-    indices[i] = i;
+int *create_gather_array(int size){
+  int * memory = (int *)malloc(sizeof(int) * size);
+  for (int i = 0; i < size; i++) {
+    memory[i] = i;
   }
-  for (int i = 0; i < len-1; ++i) {
-    uint64_t rand = uniform_distribution(i, len);
-    uint64_t j = rand;
-    //(rand() % (len - i)) ;
+  /* swap elements of gather array */
+  for (int i = 0; i < size-1; ++i) {
+    int j = (rand() % (size - i)) + i;
     if( i == j) continue;
-    uint64_t tmp = indices[i];
-    indices[i] = indices[j];
-    indices[j] = tmp;
+    int tmp = memory[i];
+    memory[i] = memory[j];
+    memory[j] = tmp;
   }
-
-  for (int i = 1; i < len; ++i) {
-    memory[indices[i-1]] = (void *) &memory[indices[i]];
-  }
-  memory[indices[len - 1]] = (void *) &memory[indices[0]];
   return memory;
 
 }
@@ -2197,11 +2189,24 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     fcontext_t parent = arg.prev_context;
     void **dst = (void **)malloc(memSize);
-    void **src = (void **)create_random_chain_starting_at(memSize, dst);
-    struct task *tsk = acctest_alloc_task(dsa);
+    void **src;
+    int *indices;
+    // if(r_arg->pat == RANDOM){
+      src = (void **)create_random_chain_starting_at(memSize, dst);
+    // } else {
+    //   src = malloc(memSize);
+    //   for(int i=0; i<memSize; i++){
+    //     src[i] = i;
+    //   }
+    // }
+    if (r_arg->pat == GATHER)
+      indices = create_gather_array(numAccesses);
+
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
     }
+
+    struct task *tsk = acctest_alloc_task(dsa);
 
 
     /*finished all app work */
@@ -2240,6 +2245,15 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
         break;
       case RANDOM:
         chase_pointers(dst, numAccesses);
+        break;
+      case GATHER:
+        for(int i=0; i<numAccesses; i++){
+          chase_pointers_global = ((uint8_t *)dst)[indices[i]];
+          if(((uint8_t *)dst)[indices[i]] != ((uint8_t *)src)[indices[i]]){
+            PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[indices[i]], src[indices[i]]);
+            return -EINVAL;
+          }
+        }
         break;
     }
     /* returning control to the scheduler */
