@@ -2076,6 +2076,8 @@ typedef struct _time_preempt_args_t {
   struct task *tsk;
   int idx;
   int src_size;
+  int preftch_ax_out;
+  int test_flags;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2171,11 +2173,12 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* made it back to the offload context to perform some post processing */
     ts12[idx] = sampleCoderdtsc();
 
-    // for(int i=0; i<16*1024; i++){
-    //   __builtin_prefetch(((const void *)(&src[i])));
-    //   __builtin_prefetch(((const void *)(&dst[i])));
-
-    // }
+    if(r_arg->preftch_ax_out){
+      for(int i=0; i<16*1024; i++){
+        __builtin_prefetch(((const void *)(&src[i])));
+        __builtin_prefetch(((const void *)(&dst[i])));
+      }
+    }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
     chase_pointers(dst, numAccesses);
@@ -2228,6 +2231,8 @@ int filler_thread_cycle_estimate_ts(){
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
   t_args.src_size = 16*1024;
+  t_args.preftch_ax_out = 0;
+  t_args.test_flags = IDXD_OP_FLAG_CC;
   int i=0;
   for(i=0; i<num_requests; i++){
     t_args.idx = i;
@@ -2283,6 +2288,9 @@ int filler_thread_cycle_estimate_ts(){
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
   PRINT("Destroy_a_request_processing_context: %ld\n", avg);
+
+  free(t_args.ts0);
+  free(t_args.ts1);
 }
 
 int main(){
