@@ -2257,7 +2257,7 @@ int filler_thread_cycle_estimate_ts(){
   t_args.src_size = 16*1024;
   t_args.preftch_ax_out = 0;
   t_args.flush_ax_out = 0;
-  t_args.test_flags = NULL;
+  t_args.test_flags = IDXD_OP_FLAG_CC;
   t_args.pat = LINEAR;
   t_args.pollute_llc_way = 1;
   int i=0;
