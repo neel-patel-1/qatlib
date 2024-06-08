@@ -2504,21 +2504,21 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-
+  int flag_sets[] = {IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF, IDXD_OP_FLAG_BOF};
   int xfer_size = 16 * 1024;
   for (enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
     for(int do_prefetch = 0; do_prefetch <= 1; do_prefetch++){
       for(int do_flush = 0; do_flush <= 1; do_flush++){
         for(int filler_pollute = 0; filler_pollute <= 1; filler_pollute++){
-          for(int tflags = 1; tflags <= 1; tflags++){
-            PRINT("--------------------\n")
+          for(int tflags = 0; tflags <= 1; tflags++){
+            PRINT("--------------------\n");
             PRINT("Pattern: %s\n", pattern_str(pat));
             PRINT("Prefetch: %d\n", do_prefetch);
             PRINT("Flush: %d\n", do_flush);
             PRINT("FillerPollute: %d\n", filler_pollute);
-            PRINT("TestFlags: %d\n", tflags);
+            PRINT("TestFlags: 0x%x\n", flag_sets[tflags]);
             // ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
-            ax_output_pat_interference(LINEAR, xfer_size, 0, 0, 0, IDXD_OP_FLAG_CC);
+            ax_output_pat_interference(LINEAR, xfer_size, 0, 0, 0, flag_sets[tflags]);
 
 
           }
