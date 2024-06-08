@@ -2520,7 +2520,7 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   int xfer_size = 16 * 1024;
   for(int do_flush=0; do_flush<=0; do_flush++){
-    for (enum acc_pattern pat = GATHER; pat <= GATHER; pat++){
+    for (enum acc_pattern pat = LINEAR; pat <= GATHER; pat++){
       for(int cctrl = 0; cctrl <= 1; cctrl++){
         if(cctrl == 1){
           tflags = IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF;
