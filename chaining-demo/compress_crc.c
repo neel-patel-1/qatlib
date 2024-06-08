@@ -2259,7 +2259,7 @@ int filler_thread_cycle_estimate_ts(){
   t_args.preftch_ax_out = 1;
   t_args.flush_ax_out = 0;
   t_args.test_flags = IDXD_OP_FLAG_CC;
-  t_args.pat = RANDOM;
+  t_args.pat = LINEAR;
   t_args.pollute_llc_way = 0;
   int i=0;
   for(i=0; i<num_requests; i++){
