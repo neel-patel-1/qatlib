@@ -2073,6 +2073,7 @@ typedef struct _time_preempt_args_t {
   uint64_t *ts15;
   uint64_t *ts16;
   struct completion_record *signal;
+  struct task *tsk;
   int idx;
   int src_size;
 } time_preempt_args_t;
@@ -2084,15 +2085,40 @@ void filler_request_ts(fcontext_transfer_t arg) {
     uint64_t *ts9 = f_arg->ts9;
     uint64_t *ts10 = f_arg->ts10;
 
+    struct task *tsk = f_arg->tsk;
+    void *dst = (void *)tsk->desc->dst_addr;
+    int size = tsk->desc->xfer_size;
+    #define L3_CACHE_SIZE 38797312ULL
+    #define SPR_NUM_WAYS 15ULL
+    #define SPR_LLC_WAY_SIZE (L3_CACHE_SIZE/SPR_NUM_WAYS)
+    int fill_buf_size = L3_CACHE_SIZE;
+    char *fill_buf = (char *)malloc(fill_buf_size);
+
+
     ts8[idx] = sampleCoderdtsc();
+    /* filler CPU work*/
 
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
+
+
+
     ts9[idx] = sampleCoderdtsc();
+
 
     while(signal->status == 0){
       _mm_pause();
+    }
+
+    /* filler would not keep accessing after the preemption signal */
+    for(int i=0; i<fill_buf_size; i+=64){
+      ACCESS_ONCE(fill_buf[i]);
+    }
+
+    /* filler knows offload has completed -- flush to check if we can make host acc take longer*/
+    for(int i=0; i<size; i+=64){
+      _mm_clflush(dst + i);
     }
     /* Received the signal */
     ts10[idx] = sampleCoderdtsc();
@@ -2134,6 +2160,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF); // DRAM
     r_arg->signal = tsk->comp;
+    r_arg->tsk = tsk;
 
     /* about to submit */
     ts5[idx] = sampleCoderdtsc();
