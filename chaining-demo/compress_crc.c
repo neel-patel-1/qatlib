@@ -2374,7 +2374,7 @@ int filler_thread_cycle_estimate_ts(){
 
 int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefetch,
   int do_flush, int filler_pollute,  int tflags ){
-  int num_requests = 100;
+  int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2512,11 +2512,13 @@ int main(){
         for(int filler_pollute = 0; filler_pollute <= 1; filler_pollute++){
           for(int do_prefetch = 0; do_prefetch <= 1; do_prefetch++){
               PRINT("\n");
+              PRINT("XferSize: %d ", xfer_size);
               PRINT("Pattern: %s ", pattern_str(pat));
               PRINT("Prefetch: %d ", do_prefetch);
               PRINT("Flush: %d ", do_flush);
               PRINT("FillerPollute: %d ", filler_pollute);
               PRINT("TestFlags: 0x%x ", flag_sets[tflags]);
+
               ax_output_pat_interference(LINEAR, xfer_size, do_prefetch, 0, filler_pollute, flag_sets[tflags]);
           }
         }
