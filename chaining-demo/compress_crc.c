@@ -2558,19 +2558,15 @@ int access_pattern_dsa_output_location(){
   acctest_free(dsa);
 }
 
+/* Comp breakdown .h */
 static void mDcDpCallback(CpaDcDpOpData *pOpData)
 {
     pOpData->pCallbackTag = (void *)1;
 }
 
-int main(){
+CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle sessionHandles){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  int num_requests = 1000;
+    int num_requests = 1000;
   uint64_t avg;
   uint64_t run_times[num_requests];
 
@@ -2786,6 +2782,17 @@ int main(){
   avg_samples_from_arrays(run_times, avg, ts3, ts2, num_requests);
   PRINT("Desc Wait: %ld\n", avg);
 
+}
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  dpCompLatency(dcInstHandles, sessionHandles);
 
 
 exit:
