@@ -2496,13 +2496,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
 }
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
+int access_pattern_dsa_output_location(){
   int tflags = TEST_FLAGS_BOF;
 	int wq_id = 0;
 	int dev_id = 2;
@@ -2560,6 +2554,60 @@ int main(){
 
   acctest_free_task(dsa);
   acctest_free(dsa);
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  CpaDcInstanceCapabilities cap = {0};
+  CpaInstanceHandle dcInstHandle;
+  Cpa32U buffMetaSize = 0;
+  Cpa16U numInterBuffLists = 0;
+  int numInstances;
+
+  status = cpaDcGetNumInstances(&numInstances);
+  PRINT_DBG("Num Instances: %d\n", numInstances);
+  sampleDcGetInstance(&dcInstHandles[0]);
+  status = cpaDcGetInstances(numInstances, dcInstHandles);
+  dcInstHandle = dcInstHandles[0];
+  if (status != CPA_STATUS_SUCCESS)
+  {
+    PRINT_ERR("Failed to query capabilities\n");
+  } else {
+    if (!cap.statelessDeflateCompression ||
+        !cap.statelessDeflateDecompression || !cap.checksumCRC32 ||
+        !cap.dynamicHuffman)
+    {
+        PRINT_ERR("Error: Unsupported functionality\n");
+        return CPA_STATUS_FAIL;
+    } else {
+      status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
+      if(status != CPA_STATUS_SUCCESS){
+        PRINT_ERR("Failed to get buffer meta size\n");
+      } else {
+        if( buffMetaSize != 0){
+          PRINT_ERR("Buffer Meta Size: %d\n", buffMetaSize);
+        } else {
+          status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+                                                    &numInterBuffLists);
+          if(status != CPA_STATUS_SUCCESS){
+            PRINT_ERR("Failed to get num intermediate buffers\n");
+          } else {
+            if(numInterBuffLists != 0){
+              PRINT_ERR("Num Intermediate Buffers: %d\n", numInterBuffLists);
+            } else {
+              PRINT("Capabilities supported\n");
+            }
+          }
+        }
+      }
+    }
+  }
+
 
   /* scheduler thread waits for offload completion and switches tasks */
   /* figure of merit is filler ops completed */
