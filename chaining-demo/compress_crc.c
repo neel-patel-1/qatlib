@@ -2574,6 +2574,12 @@ int main(){
   uint64_t avg;
   uint64_t run_times[num_requests];
 
+  uint8_t *dataBuffer = NULL;
+  dataBuffer = (uint8_t *)malloc(1024);
+  for(int i=0; i<1024; i++){
+    dataBuffer[i] = uniform_distribution(0, 255);
+  }
+
   uint64_t ts0[num_requests];
   uint64_t ts1[num_requests];
   uint64_t ts2[num_requests];
@@ -2607,7 +2613,7 @@ int main(){
 
   Cpa32U bufSize = 1024;
   Cpa32U dstBufferSize = bufSize;
-  Cpa32U numBuffers = 16;
+  Cpa32U numBuffers = 1;
 
   status = cpaDcGetNumInstances(&numInstances);
   PRINT_DBG("Num Instances: %d\n", numInstances);
@@ -2686,6 +2692,7 @@ int main(){
 
   for( int idx = 0; idx<numBuffers; idx++){
     status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufSize / numBuffers);
+    memcpy(pSrcBuffer, &(dataBuffer[idx * (bufSize/numBuffers)]), bufSize / numBuffers);
     if(status != CPA_STATUS_SUCCESS){
       PRINT_ERR("Failed to allocate buffer\n");
       return CPA_STATUS_FAIL;
