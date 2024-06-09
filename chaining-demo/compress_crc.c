@@ -2567,13 +2567,16 @@ int main(){
   CpaInstanceHandle dcInstHandle;
   Cpa32U buffMetaSize = 0;
   Cpa16U numInterBuffLists = 0;
-  int numInstances;
+  Cpa16U numInstances;
+  CpaBufferList **bufferInterArray = NULL;
+  Cpa32U bufSize = 1024;
 
   status = cpaDcGetNumInstances(&numInstances);
   PRINT_DBG("Num Instances: %d\n", numInstances);
   sampleDcGetInstance(&dcInstHandles[0]);
   status = cpaDcGetInstances(numInstances, dcInstHandles);
   dcInstHandle = dcInstHandles[0];
+  status = cpaDcQueryCapabilities(dcInstHandle, &cap);
   if (status != CPA_STATUS_SUCCESS)
   {
     PRINT_ERR("Failed to query capabilities\n");
@@ -2586,27 +2589,36 @@ int main(){
         return CPA_STATUS_FAIL;
     } else {
       status = cpaDcBufferListGetMetaSize(dcInstHandle, 1, &buffMetaSize);
-      if(status != CPA_STATUS_SUCCESS){
-        PRINT_ERR("Failed to get buffer meta size\n");
-      } else {
-        if( buffMetaSize != 0){
-          PRINT_ERR("Buffer Meta Size: %d\n", buffMetaSize);
-        } else {
-          status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
+      status = cpaDcGetNumIntermediateBuffers(dcInstHandle,
                                                     &numInterBuffLists);
-          if(status != CPA_STATUS_SUCCESS){
-            PRINT_ERR("Failed to get num intermediate buffers\n");
-          } else {
-            if(numInterBuffLists != 0){
-              PRINT_ERR("Num Intermediate Buffers: %d\n", numInterBuffLists);
-            } else {
-              PRINT("Capabilities supported\n");
-            }
-          }
-        }
+
+      if (CPA_STATUS_SUCCESS == status && 0 != numInterBuffLists)
+      {
+          status = PHYS_CONTIG_ALLOC(
+              &bufferInterArray, numInterBuffLists * sizeof(CpaBufferList *));
       }
+      for (Cpa16U bufferNum = 0; bufferNum < numInterBuffLists; bufferNum++)
+      {
+        status = PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum],
+                                           sizeof(CpaBufferList));
+        status = PHYS_CONTIG_ALLOC(
+                    &bufferInterArray[bufferNum]->pPrivateMetaData,
+                    buffMetaSize);
+        status =
+            PHYS_CONTIG_ALLOC(&bufferInterArray[bufferNum]->pBuffers,
+                              sizeof(CpaFlatBuffer));
+
+        status = PHYS_CONTIG_ALLOC(
+                    &bufferInterArray[bufferNum]->pBuffers->pData,
+                    2 * bufSize);
+                bufferInterArray[bufferNum]->numBuffers = 1;
+                bufferInterArray[bufferNum]->pBuffers->dataLenInBytes =
+                    2 * bufSize;
+      }
+      status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
     }
   }
+
 
 
   /* scheduler thread waits for offload completion and switches tasks */
