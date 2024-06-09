@@ -2583,11 +2583,17 @@ int main(){
 
   Cpa32U bufferListMemSize = 0;
   CpaPhysBufferList *pBufferListSrc = NULL;
+  CpaPhysBufferList *pBufferListDst = NULL;
   Cpa8U *pSrcBuffer = NULL;
+  Cpa32U dstFbSize = 0;
+  Cpa8U *pDstBuffer = NULL;
+
+
 
   CpaDcDpOpData *pOpData = NULL;
 
   Cpa32U bufSize = 1024;
+  Cpa32U dstBufferSize = bufSize;
   Cpa32U numBuffers = 2;
 
   status = cpaDcGetNumInstances(&numInstances);
@@ -2677,9 +2683,22 @@ int main(){
         CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
     pBufferListSrc->flatBuffers[idx].dataLenInBytes = bufSize / numBuffers;
   }
+  status = cpaDcDeflateCompressBound(
+        dcInstHandle, CPA_DC_HT_FULL_DYNAMIC, bufSize, &dstBufferSize);
 
+  int idx = 0;
+  bufferListMemSize = sizeof(CpaPhysBufferList) + dstBufferSize;
+  status =
+      PHYS_CONTIG_ALLOC_ALIGNED(&pBufferListDst, bufferListMemSize, 8);
+  status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstFbSize);
+  pBufferListDst->numBuffers = numBuffers;
+  pBufferListDst->flatBuffers[idx].dataLenInBytes = dstFbSize;
+  pBufferListDst->flatBuffers[idx].bufferPhysAddr =
+      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pDstBuffer,
+                        dcInstHandle,
+                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
 
-
+  status = PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaDcDpOpData), 8);
 exit:
 
   icp_sal_userStop();
