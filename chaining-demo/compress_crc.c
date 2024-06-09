@@ -2576,9 +2576,14 @@ int main(){
 
   uint8_t *dataBuffer = NULL;
   dataBuffer = (uint8_t *)malloc(1024);
-  for(int i=0; i<1024; i++){
-    dataBuffer[i] = uniform_distribution(0, 255);
+  FILE *fp = fopen("/lib/firmware/calgary", "r");
+  if (fp == NULL)
+  {
+    PRINT_ERR("Failed to open file\n");
+    return CPA_STATUS_FAIL;
   }
+  fread(dataBuffer, 1024, 1, fp);
+  fclose(fp);
 
   uint64_t ts0[num_requests];
   uint64_t ts1[num_requests];
