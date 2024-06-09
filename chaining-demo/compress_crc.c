@@ -2576,7 +2576,19 @@ int main(){
   Cpa16U numInterBuffLists = 0;
   Cpa16U numInstances;
   CpaBufferList **bufferInterArray = NULL;
+  CpaDcSessionHandle sessionHdl = NULL;
+  CpaDcSessionSetupData sd = {0};
+  Cpa32U ctx_size = 0;
+  Cpa32U sess_size = 0;
+
+  Cpa32U bufferListMemSize = 0;
+  CpaPhysBufferList *pBufferListSrc = NULL;
+  Cpa8U *pSrcBuffer = NULL;
+
+  CpaDcDpOpData *pOpData = NULL;
+
   Cpa32U bufSize = 1024;
+  Cpa32U numBuffers = 2;
 
   status = cpaDcGetNumInstances(&numInstances);
   PRINT_DBG("Num Instances: %d\n", numInstances);
@@ -2587,6 +2599,7 @@ int main(){
   if (status != CPA_STATUS_SUCCESS)
   {
     PRINT_ERR("Failed to query capabilities\n");
+    return CPA_STATUS_FAIL;
   } else {
     if (!cap.statelessDeflateCompression ||
         !cap.statelessDeflateDecompression || !cap.checksumCRC32 ||
@@ -2626,14 +2639,45 @@ int main(){
       status =
         cpaDcStartInstance(dcInstHandle, numInterBuffLists, bufferInterArray);
       status = cpaDcDpRegCbFunc(dcInstHandle, mDcDpCallback);
+
+      sd.compLevel = CPA_DC_L4;
+      sd.compType = CPA_DC_DEFLATE;
+      sd.huffType = CPA_DC_HT_FULL_DYNAMIC;
+      if(cap.autoSelectBestHuffmanTree)
+        sd.autoSelectBestHuffmanTree = CPA_DC_ASB_ENABLED;
+      else
+        sd.autoSelectBestHuffmanTree = CPA_DC_ASB_DISABLED;
+      sd.sessDirection = CPA_DC_DIR_COMBINED;
+      sd.sessState = CPA_DC_STATELESS;
+      sd.checksum = CPA_DC_CRC32;
+      status = cpaDcGetSessionSize(dcInstHandle, &sd, &sess_size, &ctx_size);
+
+      status = PHYS_CONTIG_ALLOC(&sessionHdl, sess_size);
+      status = cpaDcDpInitSession(dcInstHandle,
+                                    sessionHdl, /* session memory */
+                                    &sd);
+
     }
   }
 
+  bufferListMemSize =
+        sizeof(CpaPhysBufferList) + (numBuffers * sizeof(CpaPhysFlatBuffer));
+  status = PHYS_CONTIG_ALLOC_ALIGNED(&pBufferListSrc, bufferListMemSize, 8);
+  pBufferListSrc->numBuffers = numBuffers;
 
+  for( int idx = 0; idx<numBuffers; idx++){
+    status = PHYS_CONTIG_ALLOC(&pSrcBuffer, bufSize / numBuffers);
+    if(status != CPA_STATUS_SUCCESS){
+      PRINT_ERR("Failed to allocate buffer\n");
+      return CPA_STATUS_FAIL;
+    }
+    pBufferListSrc->flatBuffers[idx].bufferPhysAddr =
+      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer,
+        dcInstHandle,
+        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+    pBufferListSrc->flatBuffers[idx].dataLenInBytes = bufSize / numBuffers;
+  }
 
-  /* scheduler thread waits for offload completion and switches tasks */
-  /* figure of merit is filler ops completed */
-  /* Want to measure the request throughput*/
 
 
 exit:
