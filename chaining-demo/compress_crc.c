@@ -2690,6 +2690,7 @@ int main(){
   bufferListMemSize = sizeof(CpaPhysBufferList) + dstBufferSize;
   status =
       PHYS_CONTIG_ALLOC_ALIGNED(&pBufferListDst, bufferListMemSize, 8);
+  dstFbSize = dstBufferSize;
   status = PHYS_CONTIG_ALLOC(&pDstBuffer, dstFbSize);
   pBufferListDst->numBuffers = numBuffers;
   pBufferListDst->flatBuffers[idx].dataLenInBytes = dstFbSize;
@@ -2699,6 +2700,50 @@ int main(){
                         CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
 
   status = PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaDcDpOpData), 8);
+
+  /* desc prep */
+  memset(pOpData, 0, sizeof(CpaDcDpOpData));
+  pOpData->bufferLenToCompress = bufSize;
+  pOpData->bufferLenForData = dstBufferSize;
+  pOpData->dcInstance = dcInstHandle;
+  pOpData->pSessionHandle = sessionHdl;
+  pOpData->srcBuffer =
+      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListSrc,
+                        dcInstHandle,
+                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+  pOpData->srcBufferLen = CPA_DP_BUFLIST;
+  pOpData->destBuffer =
+      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListDst,
+                        dcInstHandle,
+                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+  pOpData->destBufferLen = CPA_DP_BUFLIST;
+  pOpData->sessDirection = CPA_DC_DIR_COMPRESS;
+  INIT_DC_DP_CNV_OPDATA(pOpData);
+  pOpData->thisPhys =
+      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
+                        dcInstHandle,
+                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+  pOpData->pCallbackTag = (void *)0;
+
+  /* submit desc */
+  status = cpaDcDpEnqueueOp(pOpData, CPA_TRUE);
+
+  // wait for desc
+   do
+    {
+        status = icp_sal_DcPollDpInstance(dcInstHandle, 1);
+    } while (((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
+            (pOpData->pCallbackTag == (void *)0));
+
+    if (pOpData->responseStatus != CPA_STATUS_SUCCESS)
+    {
+        PRINT_ERR(
+            "status from compression operation failed. (status = %d)\n",
+            pOpData->responseStatus);
+        status = CPA_STATUS_FAIL;
+    }
+
+
 exit:
 
   icp_sal_userStop();
