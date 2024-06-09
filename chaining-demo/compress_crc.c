@@ -2570,6 +2570,20 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
+  int num_requests = 1000;
+  uint64_t avg;
+  uint64_t run_times[num_requests];
+
+  uint64_t ts0[num_requests];
+  uint64_t ts1[num_requests];
+  uint64_t ts2[num_requests];
+  uint64_t ts3[num_requests];
+
+  uint64_t bfPrep;
+  uint64_t bfSubmit;
+  uint64_t bfWait;
+  uint64_t afterWait;
+
   CpaDcInstanceCapabilities cap = {0};
   CpaInstanceHandle dcInstHandle;
   Cpa32U buffMetaSize = 0;
@@ -2587,7 +2601,6 @@ int main(){
   Cpa8U *pSrcBuffer = NULL;
   Cpa32U dstFbSize = 0;
   Cpa8U *pDstBuffer = NULL;
-
 
 
   CpaDcDpOpData *pOpData = NULL;
@@ -2702,38 +2715,44 @@ int main(){
   status = PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaDcDpOpData), 8);
 
   /* desc prep */
-  memset(pOpData, 0, sizeof(CpaDcDpOpData));
-  pOpData->bufferLenToCompress = bufSize;
-  pOpData->bufferLenForData = dstBufferSize;
-  pOpData->dcInstance = dcInstHandle;
-  pOpData->pSessionHandle = sessionHdl;
-  pOpData->srcBuffer =
-      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListSrc,
-                        dcInstHandle,
-                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
-  pOpData->srcBufferLen = CPA_DP_BUFLIST;
-  pOpData->destBuffer =
-      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListDst,
-                        dcInstHandle,
-                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
-  pOpData->destBufferLen = CPA_DP_BUFLIST;
-  pOpData->sessDirection = CPA_DC_DIR_COMPRESS;
-  INIT_DC_DP_CNV_OPDATA(pOpData);
-  pOpData->thisPhys =
-      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
-                        dcInstHandle,
-                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
-  pOpData->pCallbackTag = (void *)0;
+  for( int i=0; i<num_requests; i++){
+    memset(pOpData, 0, sizeof(CpaDcDpOpData));
+    bfPrep = sampleCoderdtsc();
+    pOpData->bufferLenToCompress = bufSize;
+    pOpData->bufferLenForData = dstBufferSize;
+    pOpData->dcInstance = dcInstHandle;
+    pOpData->pSessionHandle = sessionHdl;
+    pOpData->srcBuffer =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListSrc,
+                          dcInstHandle,
+                          CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+    pOpData->srcBufferLen = CPA_DP_BUFLIST;
+    pOpData->destBuffer =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListDst,
+                          dcInstHandle,
+                          CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+    pOpData->destBufferLen = CPA_DP_BUFLIST;
+    pOpData->sessDirection = CPA_DC_DIR_COMPRESS;
+    INIT_DC_DP_CNV_OPDATA(pOpData);
+    pOpData->thisPhys =
+        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
+                          dcInstHandle,
+                          CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+    pOpData->pCallbackTag = (void *)0;
 
-  /* submit desc */
-  status = cpaDcDpEnqueueOp(pOpData, CPA_TRUE);
 
-  // wait for desc
-   do
+    /* submit desc */
+    bfSubmit = sampleCoderdtsc();
+    status = cpaDcDpEnqueueOp(pOpData, CPA_TRUE);
+
+    // wait for desc
+    bfWait = sampleCoderdtsc();
+    do
     {
         status = icp_sal_DcPollDpInstance(dcInstHandle, 1);
     } while (((CPA_STATUS_SUCCESS == status) || (CPA_STATUS_RETRY == status)) &&
             (pOpData->pCallbackTag == (void *)0));
+    afterWait = sampleCoderdtsc();
 
     if (pOpData->responseStatus != CPA_STATUS_SUCCESS)
     {
@@ -2742,6 +2761,19 @@ int main(){
             pOpData->responseStatus);
         status = CPA_STATUS_FAIL;
     }
+    ts0[i] = bfPrep;
+    ts1[i] = bfSubmit;
+    ts2[i] = bfWait;
+    ts3[i] = afterWait;
+  }
+
+  avg_samples_from_arrays(run_times, avg, ts1, ts0, num_requests);
+  PRINT("Desc Prep: %ld\n", avg);
+  avg_samples_from_arrays(run_times, avg, ts2, ts1, num_requests);
+  PRINT("Desc Submit: %ld\n", avg);
+  avg_samples_from_arrays(run_times, avg, ts3, ts2, num_requests);
+  PRINT("Desc Wait: %ld\n", avg);
+
 
 
 exit:
