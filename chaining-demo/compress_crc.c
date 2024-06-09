@@ -2607,7 +2607,7 @@ int main(){
 
   Cpa32U bufSize = 1024;
   Cpa32U dstBufferSize = bufSize;
-  Cpa32U numBuffers = 4;
+  Cpa32U numBuffers = 32;
 
   status = cpaDcGetNumInstances(&numInstances);
   PRINT_DBG("Num Instances: %d\n", numInstances);
