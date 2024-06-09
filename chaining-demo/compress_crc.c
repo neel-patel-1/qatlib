@@ -40,6 +40,8 @@
 #include <sys/user.h>
 #include "fcontext.h"
 
+#include "cpa_dc_dp.h"
+
 int gDebugParam = 1;
 
 uint8_t **mini_bufs;
@@ -2556,6 +2558,11 @@ int access_pattern_dsa_output_location(){
   acctest_free(dsa);
 }
 
+static void mDcDpCallback(CpaDcDpOpData *pOpData)
+{
+    pOpData->pCallbackTag = (void *)1;
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -2616,6 +2623,9 @@ int main(){
                     2 * bufSize;
       }
       status = cpaDcSetAddressTranslation(dcInstHandle, sampleVirtToPhys);
+      status =
+        cpaDcStartInstance(dcInstHandle, numInterBuffLists, bufferInterArray);
+      status = cpaDcDpRegCbFunc(dcInstHandle, mDcDpCallback);
     }
   }
 
