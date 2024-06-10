@@ -2777,20 +2777,8 @@ CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle ses
 
 }
 
-
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  // for(uint32_t i=256; i<=65536; i*=2){
-  //   PRINT("Buffer_Size: %d\n", i);
-  //     dpCompLatency(dcInstHandles, sessionHandles,i);
-
-  // }
-  int num_requests = 1000;
+int dsa_cpy_test(){
+    int num_requests = 1000;
   uint64_t ts0s[num_requests], ts1s[num_requests], ts2s[num_requests], ts3s[num_requests];
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
@@ -2867,6 +2855,23 @@ PRINT("Desc_Wait: %ld\n", avg);
 
 
   acctest_free_task(dsa);
+}
+
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  // for(uint32_t i=256; i<=65536; i*=2){
+  //   PRINT("Buffer_Size: %d\n", i);
+  //     dpCompLatency(dcInstHandles, sessionHandles,i);
+
+  // }
+
+  dsa_cpy_test();
 
 
 
