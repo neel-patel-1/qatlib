@@ -2815,7 +2815,8 @@ int main(){
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
   if (rc < 0)
     return -ENOMEM;
-
+    for(int i=0; i<num_requests; i++)
+{
   src = malloc(size);
   dst = malloc(size);
   for(int i=0; i<size; i++){
@@ -2829,13 +2830,13 @@ int main(){
   prepare_memcpy_task(tsk, dsa, src, size, dst);
   ts1 = sampleCoderdtsc();
 
-  ts2 = sampleCoderdtsc();
   acctest_desc_submit(dsa, tsk->desc);
-  ts3 = sampleCoderdtsc();
+  ts2 = sampleCoderdtsc();
 
   while(tsk->comp->status == 0){
     _mm_pause();
   }
+  ts3 = sampleCoderdtsc();
 
   /* validate */
   for(int i=0; i<size; i++){
@@ -2844,8 +2845,23 @@ int main(){
       return -EINVAL;
     }
   }
-  free(src);
+    free(src);
   free(dst);
+  ts0s[i] = ts0;
+  ts1s[i] = ts1;
+  ts2s[i] = ts2;
+  ts3s[i] = ts3;
+}
+uint64_t avg = 0;
+uint64_t run_times[num_requests];
+avg_samples_from_arrays(run_times, avg, ts1s, ts0s, num_requests);
+PRINT("Desc_Prep: %ld\n", avg);
+avg_samples_from_arrays(run_times, avg, ts2s, ts1s, num_requests);
+PRINT("Desc_Submit: %ld\n", avg);
+avg_samples_from_arrays(run_times, avg, ts3s, ts2s, num_requests);
+PRINT("Desc_Wait: %ld\n", avg);
+
+
   acctest_free_task(dsa);
 
 
