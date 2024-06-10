@@ -2785,12 +2785,27 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  for(uint32_t i=256; i<=65536; i*=2){
-    PRINT("Buffer_Size: %d\n", i);
-      dpCompLatency(dcInstHandles, sessionHandles,i);
+  // for(uint32_t i=256; i<=65536; i*=2){
+  //   PRINT("Buffer_Size: %d\n", i);
+  //     dpCompLatency(dcInstHandles, sessionHandles,i);
 
+  // }
+  struct acctest_context *dsa = NULL;
+  int tflags = TEST_FLAGS_BOF;
+  int wq_id = 0;
+  int dev_id = 2;
+  int opcode = DSA_OPCODE_COPY_CRC;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+  dsa = acctest_init(tflags);
+  dsa->dev_type = ACCFG_DEVICE_DSA;
+  if(dsa == NULL){
+    PRINT_ERR("Failed to initialize acctest context\n");
+    return -ENOMEM;
   }
-
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
 
 
 exit:
