@@ -2564,21 +2564,21 @@ static void mDcDpCallback(CpaDcDpOpData *pOpData)
     pOpData->pCallbackTag = (void *)1;
 }
 
-CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle sessionHandles){
+CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle sessionHandles, Cpa32U bufSize){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
     int num_requests = 1000;
   uint64_t avg;
   uint64_t run_times[num_requests];
 
   uint8_t *dataBuffer = NULL;
-  dataBuffer = (uint8_t *)malloc(1024);
+  dataBuffer = (uint8_t *)malloc(bufSize);
   FILE *fp = fopen("/lib/firmware/calgary", "r");
   if (fp == NULL)
   {
     PRINT_ERR("Failed to open file\n");
     return CPA_STATUS_FAIL;
   }
-  fread(dataBuffer, 1024, 1, fp);
+  fread(dataBuffer, bufSize, 1, fp);
   fclose(fp);
 
   uint64_t ts0[num_requests];
@@ -2612,7 +2612,6 @@ CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle ses
 
   CpaDcDpOpData *pOpData = NULL;
 
-  Cpa32U bufSize = 1024;
   Cpa32U dstBufferSize = bufSize;
   Cpa32U numBuffers = 1;
 
@@ -2699,9 +2698,7 @@ CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle ses
       return CPA_STATUS_FAIL;
     }
     pBufferListSrc->flatBuffers[idx].bufferPhysAddr =
-      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer,
-        dcInstHandle,
-        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+      sampleVirtToPhys((SAMPLE_CODE_UINT *)(uintptr_t)pSrcBuffer);
     pBufferListSrc->flatBuffers[idx].dataLenInBytes = bufSize / numBuffers;
   }
   status = cpaDcDeflateCompressBound(
@@ -2716,9 +2713,8 @@ CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle ses
   pBufferListDst->numBuffers = numBuffers;
   pBufferListDst->flatBuffers[idx].dataLenInBytes = dstFbSize;
   pBufferListDst->flatBuffers[idx].bufferPhysAddr =
-      virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pDstBuffer,
-                        dcInstHandle,
-                        CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+      sampleVirtToPhys((SAMPLE_CODE_UINT *)(uintptr_t)pDstBuffer
+                        );
 
   status = PHYS_CONTIG_ALLOC_ALIGNED(&pOpData, sizeof(CpaDcDpOpData), 8);
 
@@ -2731,21 +2727,18 @@ CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle ses
     pOpData->dcInstance = dcInstHandle;
     pOpData->pSessionHandle = sessionHdl;
     pOpData->srcBuffer =
-        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListSrc,
-                          dcInstHandle,
-                          CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+        sampleVirtToPhys((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListSrc
+                          );
     pOpData->srcBufferLen = CPA_DP_BUFLIST;
     pOpData->destBuffer =
-        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListDst,
-                          dcInstHandle,
-                          CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+        sampleVirtToPhys((SAMPLE_CODE_UINT *)(uintptr_t)pBufferListDst
+                          );
     pOpData->destBufferLen = CPA_DP_BUFLIST;
     pOpData->sessDirection = CPA_DC_DIR_COMPRESS;
     INIT_DC_DP_CNV_OPDATA(pOpData);
     pOpData->thisPhys =
-        virtAddrToDevAddr((SAMPLE_CODE_UINT *)(uintptr_t)pOpData,
-                          dcInstHandle,
-                          CPA_ACC_SVC_TYPE_DATA_COMPRESSION);
+        sampleVirtToPhys((SAMPLE_CODE_UINT *)(uintptr_t)pOpData
+                          );
     pOpData->pCallbackTag = (void *)0;
 
 
@@ -2776,11 +2769,11 @@ CpaStatus dpCompLatency(CpaInstanceHandle *dcInstHandles, CpaDcSessionHandle ses
   }
 
   avg_samples_from_arrays(run_times, avg, ts1, ts0, num_requests);
-  PRINT("Desc Prep: %ld\n", avg);
+  PRINT("Desc_Prep: %ld\n", avg);
   avg_samples_from_arrays(run_times, avg, ts2, ts1, num_requests);
-  PRINT("Desc Submit: %ld\n", avg);
+  PRINT("Desc_Submit: %ld\n", avg);
   avg_samples_from_arrays(run_times, avg, ts3, ts2, num_requests);
-  PRINT("Desc Wait: %ld\n", avg);
+  PRINT("Desc_Wait: %ld\n", avg);
 
 }
 
@@ -2792,7 +2785,12 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  dpCompLatency(dcInstHandles, sessionHandles);
+  for(uint32_t i=256; i<=65536; i*=2){
+    PRINT("Buffer_Size: %d\n", i);
+      dpCompLatency(dcInstHandles, sessionHandles,i);
+
+  }
+
 
 
 exit:
