@@ -2802,7 +2802,6 @@ int main(){
 
   uint8_t *src;
   uint8_t *dst;
-  uint32_t size = 16 * 1024;
 
   uint64_t ts0, ts1, ts2, ts3;
 
@@ -2815,6 +2814,10 @@ int main(){
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
   if (rc < 0)
     return -ENOMEM;
+    for(int j=256; j<=65536; j*=2){
+      PRINT("Buffer_Size: %d\n", j);
+        uint32_t size = j;
+
     for(int i=0; i<num_requests; i++)
 {
   src = malloc(size);
@@ -2860,6 +2863,7 @@ avg_samples_from_arrays(run_times, avg, ts2s, ts1s, num_requests);
 PRINT("Desc_Submit: %ld\n", avg);
 avg_samples_from_arrays(run_times, avg, ts3s, ts2s, num_requests);
 PRINT("Desc_Wait: %ld\n", avg);
+    }
 
 
   acctest_free_task(dsa);
