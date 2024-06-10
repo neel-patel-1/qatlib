@@ -2794,9 +2794,16 @@ int main(){
   int tflags = TEST_FLAGS_BOF;
   int wq_id = 0;
   int dev_id = 2;
-  int opcode = DSA_OPCODE_COPY_CRC;
+  int opcode = DSA_OPCODE_MEMMOVE;
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
+
+  uint8_t *src;
+  uint8_t *dst;
+  uint32_t size = 16 * 1024;
+
+  uint64_t ts0, ts1, ts2, ts3;
+
   dsa = acctest_init(tflags);
   dsa->dev_type = ACCFG_DEVICE_DSA;
   if(dsa == NULL){
@@ -2806,6 +2813,37 @@ int main(){
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
   if (rc < 0)
     return -ENOMEM;
+
+  src = malloc(size);
+  dst = malloc(size);
+  for(int i=0; i<size; i++){
+    src[i] = i;
+    dst[i] = 0;
+  }
+
+  struct task *tsk = acctest_alloc_task(dsa);
+
+  ts0 = sampleCoderdtsc();
+  prepare_memcpy_task(tsk, dsa, src, size, dst);
+  ts1 = sampleCoderdtsc();
+
+  ts2 = sampleCoderdtsc();
+  acctest_desc_submit(dsa, tsk->desc);
+  ts3 = sampleCoderdtsc();
+
+  while(tsk->comp->status == 0){
+    _mm_pause();
+  }
+
+  /* validate */
+  for(int i=0; i<size; i++){
+    if(src[i] != dst[i]){
+      PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", src[i], dst[i]);
+      return -EINVAL;
+    }
+  }
+
+
 
 
 exit:
