@@ -2790,6 +2790,8 @@ int main(){
   //     dpCompLatency(dcInstHandles, sessionHandles,i);
 
   // }
+  int num_requests = 1000;
+  uint64_t ts0s[num_requests], ts1s[num_requests], ts2s[num_requests], ts3s[num_requests];
   struct acctest_context *dsa = NULL;
   int tflags = TEST_FLAGS_BOF;
   int wq_id = 0;
@@ -2842,6 +2844,9 @@ int main(){
       return -EINVAL;
     }
   }
+  free(src);
+  free(dst);
+  acctest_free_task(dsa);
 
 
 
