@@ -2231,22 +2231,22 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     if(r_arg->preftch_ax_out){
-      for(int i=0; i<16*1024; i++){
-        __builtin_prefetch(((const void *)(&src[i])));
+      for(int i=0; i<memSize; i++){
+        // __builtin_prefetch(((const void *)(&src[i])));
         __builtin_prefetch(((const void *)(&dst[i])));
       }
     }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
     switch(r_arg->pat){
-      case LINEAR:
-        for(int i=0; i<memSize; i+=64){
-          chase_pointers_global = ((uint8_t *)dst)[i];
-          if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
-            PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[i], src[i]);
-            // return -EINVAL;
-          }
+      case LINEAR: /* Delta: A_n = A_n-1 + d*/
+        uint8_t *dst_ptr = (uint8_t *)dst;
+        volatile uint8_t a;
+        int i;
+        for(i=0; i<(memSize); i+=64){
+          a = dst_ptr[i];
         }
+        chase_pointers_global = a;
         break;
       case RANDOM:
         chase_pointers(dst, numAccesses);
