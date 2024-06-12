@@ -2588,7 +2588,7 @@ int main(){
   int xfer_size = 16 * 1024;
   enum acc_pattern pat = LINEAR;
 
-  for(enum acc_pattern pat=LINEAR; pat<=GATHER; pat++){
+  for(enum acc_pattern pat=RANDOM; pat<=RANDOM; pat++){
 
     PRINT("Pattern %s\n", pattern_str(pat));
     int do_prefetch = 0;
