@@ -2814,6 +2814,10 @@ int dsa_cpy_test(){
     src[i] = i;
     dst[i] = 0;
   }
+  for(int i=0; i<size; i+=64){
+    _mm_clflush(&src[i]);
+    _mm_clflush(&dst[i]);
+  }
 
   struct task *tsk = acctest_alloc_task(dsa);
 
