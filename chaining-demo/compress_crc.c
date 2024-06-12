@@ -1883,6 +1883,20 @@ void **create_linear_chain(int size){
   return memory;
 
 }
+
+void random_permutation(uint64_t *array, int size){
+  srand(time(NULL));
+
+  for (int i = size - 1; i > 0; i--) {
+      // Get a random index from 0 to i
+      int j = rand() % (i + 1);
+
+      // Swap array[i] with the element at random index
+      uint64_t temp = array[i];
+      array[i] = array[j];
+      array[j] = temp;
+  }
+}
 void **create_random_chain(int size){
   uint64_t len = size / sizeof(void *);
 
@@ -1909,27 +1923,19 @@ void **create_random_chain(int size){
 
 
 }
-void **create_random_chain_starting_at(int size, void **st_addr){
-  uint64_t len = size / sizeof(void *);
-  void ** memory = (void *)malloc(sizeof(void *) *len);
+void **create_random_chain_starting_at(int size, void **st_addr){ /* only touches each cacheline*/
+  uint64_t len = size / sizeof(void *) / 8;
+  void ** memory = (void *)malloc(size);
   uint64_t  *indices = malloc(sizeof(uint64_t) * len);
   for (int i = 0; i < len; i++) {
     indices[i] = i;
   }
-  for (int i = 0; i < len-1; ++i) {
-    uint64_t rand = uniform_distribution(i, len);
-    uint64_t j = rand;
-    //(rand() % (len - i)) ;
-    if( i == j) continue;
-    uint64_t tmp = indices[i];
-    indices[i] = indices[j];
-    indices[j] = tmp;
-  }
+  random_permutation(indices, len); /* have a random permutation of cache lines to pick*/
 
   for (int i = 1; i < len; ++i) {
-    memory[indices[i-1]] = (void *) &st_addr[indices[i]];
+    memory[indices[i-1] * 8] = (void *) &st_addr[indices[i] * 8];
   }
-  memory[indices[len - 1]] = (void *) &st_addr[indices[0]];
+  memory[indices[len - 1] * 8] = (void *) &st_addr[indices[0] * 8];
   return memory;
 
 }
@@ -2509,6 +2515,11 @@ int main(){
   int opcode = DSA_OPCODE_MEMMOVE;
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
+
+  void **st_addr = create_random_chain_starting_at(256, NULL);
+  create_random_chain_starting_at(256, st_addr);
+  debug_chain(st_addr);
+  return;
 
   int num_offload_requests = 1;
   dsa = acctest_init(tflags);
