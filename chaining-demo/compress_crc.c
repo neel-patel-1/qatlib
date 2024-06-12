@@ -2818,15 +2818,7 @@ int dsa_cpy_test(){
   struct task *tsk = acctest_alloc_task(dsa);
 
   ts0 = sampleCoderdtsc();
-  prepare_memcpy_task(tsk, dsa, src, size, dst);
-  ts1 = sampleCoderdtsc();
-
-  acctest_desc_submit(dsa, tsk->desc);
-  ts2 = sampleCoderdtsc();
-
-  while(tsk->comp->status == 0){
-    _mm_pause();
-  }
+  memcpy(dst, src, size);
   ts3 = sampleCoderdtsc();
 
   /* validate */
@@ -2845,12 +2837,9 @@ int dsa_cpy_test(){
 }
 uint64_t avg = 0;
 uint64_t run_times[num_requests];
-avg_samples_from_arrays(run_times, avg, ts1s, ts0s, num_requests);
-PRINT("Desc_Prep: %ld\n", avg);
-avg_samples_from_arrays(run_times, avg, ts2s, ts1s, num_requests);
-PRINT("Desc_Submit: %ld\n", avg);
-avg_samples_from_arrays(run_times, avg, ts3s, ts2s, num_requests);
-PRINT("Desc_Wait: %ld\n", avg);
+
+avg_samples_from_arrays(run_times, avg, ts3s, ts0s, num_requests);
+PRINT("CPUMemcpy: %ld\n", avg);
     }
 
 
