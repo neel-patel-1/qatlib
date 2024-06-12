@@ -2549,7 +2549,7 @@ int main(){
               PRINT("FillerPollute: %d ", filler_pollute);
               PRINT("CacheControl: %d ", cctrl);
 
-              ax_output_pat_interference(LINEAR, xfer_size, do_prefetch, 0, filler_pollute, tflags);
+              ax_output_pat_interference(pat, xfer_size, do_prefetch, 0, filler_pollute, tflags);
           }
         }
       }
