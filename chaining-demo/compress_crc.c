@@ -2516,12 +2516,6 @@ int main(){
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
 
-  void **dst_addr = malloc(256);
-  void **st_addr = create_random_chain_starting_at(256, dst_addr);
-  memcpy(dst_addr, st_addr, 256);
-  debug_chain(dst_addr);
-  return;
-
   int num_offload_requests = 1;
   dsa = acctest_init(tflags);
 
