@@ -2154,8 +2154,10 @@ void filler_request_ts(fcontext_transfer_t arg) {
 
     /* filler would not keep accessing after the preemption signal */
     if(f_arg->pollute_llc_way){
+      volatile uint8_t a;
       for(int i=0; i<fill_buf_size; i+=64){
-        ACCESS_ONCE(fill_buf[i]);
+        fill_buf[i] = i;
+        a = fill_buf[i];
       }
     }
 
@@ -2500,13 +2502,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
 }
 
-int main(){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
+int access_location_pattern(){
   int tflags = TEST_FLAGS_BOF;
 	int wq_id = 0;
 	int dev_id = 2;
@@ -2559,6 +2555,42 @@ int main(){
       }
     }
   }
+  PRINT("\n");
+
+
+  acctest_free_task(dsa);
+  acctest_free(dsa);
+}
+
+int main(){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  int tflags = TEST_FLAGS_BOF;
+	int wq_id = 0;
+	int dev_id = 2;
+  int opcode = DSA_OPCODE_MEMMOVE;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+
+  int num_offload_requests = 1;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+  int xfer_size = 16 * 1024;
+  int do_prefetch = 0;
+  int do_flush = 1;
+  int filler_pollute = 0;
+  enum acc_pattern pat = LINEAR;
+  ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+
   PRINT("\n");
 
 
