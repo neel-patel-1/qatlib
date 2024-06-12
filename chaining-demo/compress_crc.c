@@ -2238,10 +2238,10 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     }
     ts13[idx] = sampleCoderdtsc();
     /* perform accesses */
+    uint8_t *dst_ptr = (uint8_t *)dst;
+    volatile uint8_t a;
     switch(r_arg->pat){
       case LINEAR: /* Delta: A_n = A_n-1 + d*/
-        uint8_t *dst_ptr = (uint8_t *)dst;
-        volatile uint8_t a;
         int i;
         for(i=0; i<(memSize); i+=64){
           a = dst_ptr[i];
@@ -2252,13 +2252,12 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
         chase_pointers(dst, numAccesses);
         break;
       case GATHER:
+        volatile uint8_t a;
+        uint8_t *dst_ptr = (uint8_t *)dst;
         for(int i=0; i<numAccesses; i++){
-          chase_pointers_global = ((uint8_t *)dst)[indices[i]];
-          if(((uint8_t *)dst)[indices[i]] != ((uint8_t *)src)[indices[i]]){
-            PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[indices[i]], src[indices[i]]);
-            return -EINVAL;
-          }
+          a = dst_ptr[indices[i]];
         }
+        chase_pointers_global = a;
         break;
     }
     /* returning control to the scheduler */
