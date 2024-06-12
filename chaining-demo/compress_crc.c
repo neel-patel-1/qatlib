@@ -1924,7 +1924,7 @@ void **create_random_chain(int size){
 
 }
 void **create_random_chain_starting_at(int size, void **st_addr){ /* only touches each cacheline*/
-  uint64_t len = size / sizeof(void *) / 8;
+  uint64_t len = size / 64;
   void ** memory = (void *)malloc(size);
   uint64_t  *indices = malloc(sizeof(uint64_t) * len);
   for (int i = 0; i < len; i++) {
@@ -1935,7 +1935,7 @@ void **create_random_chain_starting_at(int size, void **st_addr){ /* only touche
   for (int i = 1; i < len; ++i) {
     memory[indices[i-1] * 8] = (void *) &st_addr[indices[i] * 8];
   }
-  memory[indices[len - 1] * 8] = (void *) &st_addr[indices[0] * 8];
+  memory[indices[len - 1] * 8] = (void *) &st_addr[indices[0] * 8 ];
   return memory;
 
 }
