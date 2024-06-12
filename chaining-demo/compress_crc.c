@@ -2587,7 +2587,7 @@ int main(){
   int xfer_size = 16 * 1024;
   int do_prefetch = 0;
   int do_flush = 0;
-  int filler_pollute = 0;
+  int filler_pollute = 1;
   tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
   enum acc_pattern pat = LINEAR;
   ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
