@@ -1965,19 +1965,14 @@ void debug_chain(void **memory){
 
 }
 
-int *create_gather_array(int size){
-  int * memory = (int *)malloc(sizeof(int) * size);
-  for (int i = 0; i < size; i++) {
+uint64_t *create_gather_array(int size){
+  uint64_t * memory = (uint64_t *)malloc(sizeof(uint64_t) * size);
+  for (uint64_t i = 0; i < size; i++) {
     memory[i] = i;
-  }
+  } /* 0, ... size -1 */
   /* swap elements of gather array */
-  for (int i = 0; i < size-1; ++i) {
-    int j = (rand() % (size - i)) + i;
-    if( i == j) continue;
-    int tmp = memory[i];
-    memory[i] = memory[j];
-    memory[j] = tmp;
-  }
+  random_permutation(memory, size);
+  /* randomized */
   return memory;
 
 }
@@ -2196,7 +2191,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     fcontext_t parent = arg.prev_context;
     void **dst = (void **)malloc(memSize);
     void **src;
-    int *indices;
+    uint64_t *indices;
     // if(r_arg->pat == RANDOM){
       src = (void **)create_random_chain_starting_at(memSize, dst);
     // } else {
@@ -2526,7 +2521,7 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   int xfer_size = 16 * 1024;
   for(int do_flush=0; do_flush<=0; do_flush++){
-    for (enum acc_pattern pat = LINEAR; pat <= GATHER; pat++){
+    for (enum acc_pattern pat = GATHER; pat <= GATHER; pat++){
       for(int cctrl = 0; cctrl <= 1; cctrl++){
         if(cctrl == 1){
           tflags = IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF;
