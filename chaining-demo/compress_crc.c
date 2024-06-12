@@ -2235,18 +2235,13 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* perform accesses */
     switch(r_arg->pat){
       case LINEAR:
-      int strid = 128;
-      int idx = 0;
-      for (int j=0; j<strid; j++){
-        for(int i=0; i<memSize; i+=strid){
-          idx = i + j;
-          chase_pointers_global = ((uint8_t *)dst)[idx];
-          if(((uint8_t *)dst)[idx] != ((uint8_t *)src)[i + j]){
+        for(int i=0; i<memSize; i+=64){
+          chase_pointers_global = ((uint8_t *)dst)[i];
+          if(((uint8_t *)dst)[i] != ((uint8_t *)src)[i]){
             PRINT_ERR("Payload mismatch: 0x%x 0x%x\n", dst[i], src[i]);
             // return -EINVAL;
           }
         }
-      }
         break;
       case RANDOM:
         chase_pointers(dst, numAccesses);
