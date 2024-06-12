@@ -2479,8 +2479,20 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
 
+  PRINT("ContextSwitchIntoRequest: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
+  PRINT("RequestCPUWork: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
+  PRINT("Prepare_Offload: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
+  PRINT("Submit_Offload: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts8, ts7, num_requests);
+  PRINT("ContextSwitchIntoFiller: %ld\n", avg); /* exec twice and time second to assume a recurring offloadable task*/
+
   avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
-  PRINT(" %ld \n", avg);
+  PRINT("Post-Offload-Work %ld \n", avg);
 
   free(t_args.ts0);
   free(t_args.ts1);
@@ -2584,50 +2596,16 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-
-  int xfer_size = 16 * 1024;
-  enum acc_pattern pat = LINEAR;
-
-  for(enum acc_pattern pat=RANDOM; pat<=RANDOM; pat++){
-
+  enum acc_pattern pat = GATHER;
+    int xfer_size = 48 * 1024;
     PRINT("Pattern %s\n", pattern_str(pat));
     int do_prefetch = 0;
-    int do_flush = 1;
+    int do_flush = 0;
     int filler_pollute = 0;
-    tflags = IDXD_OP_FLAG_BOF ;
-    PRINT("DRAM-Flush ");
-    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
-
-    do_prefetch = 0;
-    do_flush = 0;
-    filler_pollute = 0;
-    tflags = IDXD_OP_FLAG_BOF ;
-    PRINT("DRAM-Hint ");
-    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
-
-    do_prefetch = 0;
-    do_flush = 0;
-    filler_pollute = 1;
-    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC ;
-    PRINT("LLC-Polluted ");
-    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
-
-    do_prefetch = 0;
-    do_flush = 0;
-    filler_pollute = 0;
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-    PRINT("LLC ");
+    PRINT("100-Percent-Ax-Output\n");
     ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
-    do_prefetch = 1;
-    do_flush = 0;
-    filler_pollute = 0;
-    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-    PRINT("L1 ");
-    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
-
-    PRINT("\n");
-  }
 
   acctest_free_task(dsa);
   acctest_free(dsa);
