@@ -2588,43 +2588,46 @@ int main(){
   int xfer_size = 16 * 1024;
   enum acc_pattern pat = LINEAR;
 
-  int do_prefetch = 0;
-  int do_flush = 1;
-  int filler_pollute = 0;
-  tflags = IDXD_OP_FLAG_BOF ;
-  PRINT("DRAM-Flush: ");
-  ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+  for(enum acc_pattern pat=LINEAR; pat<=GATHER; pat++){
 
-  do_prefetch = 0;
-  do_flush = 0;
-  filler_pollute = 0;
-  tflags = IDXD_OP_FLAG_BOF ;
-  PRINT("DRAM-Hint: ");
-  ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+    PRINT("Pattern %s\n", pattern_str(pat));
+    int do_prefetch = 0;
+    int do_flush = 1;
+    int filler_pollute = 0;
+    tflags = IDXD_OP_FLAG_BOF ;
+    PRINT("DRAM-Flush ");
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
-  do_prefetch = 0;
-  do_flush = 0;
-  filler_pollute = 1;
-  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC ;
-  PRINT("LLC-Polluted: ");
-  ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+    do_prefetch = 0;
+    do_flush = 0;
+    filler_pollute = 0;
+    tflags = IDXD_OP_FLAG_BOF ;
+    PRINT("DRAM-Hint ");
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
-  do_prefetch = 0;
-  do_flush = 0;
-  filler_pollute = 0;
-  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-  PRINT("LLC: ");
-  ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+    do_prefetch = 0;
+    do_flush = 0;
+    filler_pollute = 1;
+    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC ;
+    PRINT("LLC-Polluted ");
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
-  do_prefetch = 1;
-  do_flush = 0;
-  filler_pollute = 0;
-  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-  PRINT("L1: ");
-  ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+    do_prefetch = 0;
+    do_flush = 0;
+    filler_pollute = 0;
+    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
+    PRINT("LLC ");
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
-  PRINT("\n");
+    do_prefetch = 1;
+    do_flush = 0;
+    filler_pollute = 0;
+    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
+    PRINT("L1 ");
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
+    PRINT("\n");
+  }
 
   acctest_free_task(dsa);
   acctest_free(dsa);
