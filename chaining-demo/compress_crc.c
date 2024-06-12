@@ -1966,12 +1966,16 @@ void debug_chain(void **memory){
 }
 
 uint64_t *create_gather_array(int size){
+  size = size / 64;
   uint64_t * memory = (uint64_t *)malloc(sizeof(uint64_t) * size);
   for (uint64_t i = 0; i < size; i++) {
     memory[i] = i;
   } /* 0, ... size -1 */
   /* swap elements of gather array */
   random_permutation(memory, size);
+  for(int i=0; i<size; i++){
+    memory[i] = memory[i] * 64;
+  }
   /* randomized */
   return memory;
 
@@ -2178,7 +2182,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts13 = r_arg->ts13;
     uint64_t *ts14 = r_arg->ts14;
     int memSize = r_arg->src_size ;
-    int numAccesses = memSize / sizeof(void *);
+    int numAccesses = memSize / 64;
     int flags = r_arg->test_flags;
 
 
@@ -2201,7 +2205,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     //   }
     // }
     if (r_arg->pat == GATHER)
-      indices = create_gather_array(numAccesses);
+      indices = create_gather_array(memSize);
 
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
@@ -2521,7 +2525,7 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   int xfer_size = 16 * 1024;
   for(int do_flush=0; do_flush<=0; do_flush++){
-    for (enum acc_pattern pat = GATHER; pat <= GATHER; pat++){
+    for (enum acc_pattern pat = LINEAR; pat <= GATHER; pat++){
       for(int cctrl = 0; cctrl <= 1; cctrl++){
         if(cctrl == 1){
           tflags = IDXD_OP_FLAG_CC | IDXD_OP_FLAG_BOF;
