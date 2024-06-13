@@ -2164,13 +2164,12 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     int numAccesses = memSize / 64;
     int flags = r_arg->test_flags;
 
+    int host_bytes = 48 * 1024 / 2;
+    int ax_bytes = 48 * 1024 / 2;
 
   /* made it to the offload context */
 
-
-
     fcontext_t parent = arg.prev_context;
-    fcontext_swap(parent, NULL);
     ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
     void **src = (void **)malloc(memSize);
     void **dst = (void **)malloc(memSize);
@@ -2198,14 +2197,15 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* made it back to the offload context to perform some post processing */
     ts12[idx] = sampleCoderdtsc();
 
-    if(r_arg->preftch_ax_out){
-      for(int i=0; i<memSize; i++){
-        // __builtin_prefetch(((const void *)(&src[i])));
-        __builtin_prefetch(((const void *)(&dst[i])));
-      }
-    }
-    ts13[idx] = sampleCoderdtsc();
     /* perform post-processing */
+
+    for(int i=0; i<ax_bytes; i+=64){
+      ((uint8_t*)(dst))[i] = 0;
+    }
+
+    for(int i=0; i<host_bytes; i+=64){
+      ((uint8_t*)(src))[i] = 0;
+    }
 
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
@@ -2405,10 +2405,8 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
     ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
     fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
-    off_req_xfer = fcontext_swap(child->context, &t_args);
     ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
-    off_req_ctx = off_req_xfer.prev_context;
-    off_req_xfer = fcontext_swap(off_req_ctx, &t_args);
+    off_req_xfer = fcontext_swap(child->context, &t_args);
     ts7[i] = sampleCoderdtsc(); /* req yielded*/
 
     fcontext_swap(filler->context, &t_args);
@@ -2447,7 +2445,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
   PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
+  avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
