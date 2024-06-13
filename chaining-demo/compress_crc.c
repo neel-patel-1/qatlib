@@ -2111,6 +2111,7 @@ typedef struct _time_preempt_args_t {
   int pollute_llc_way;
   enum acc_pattern pat;
   void **pChase;
+  int pChaseSize;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2130,6 +2131,9 @@ void filler_request_ts(fcontext_transfer_t arg) {
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
+    void **pChase = f_arg->pChase;
+    int pChaseSize = f_arg->pChaseSize;
+    chase_pointers(pChase, pChaseSize / 64);
 
     ts9[idx] = sampleCoderdtsc();
 
@@ -2385,6 +2389,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   t_args.test_flags = tflags;
   t_args.pollute_llc_way = filler_pollute;
   t_args.pChase = create_random_chain(chainSize);
+  t_args.pChaseSize = chainSize;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
