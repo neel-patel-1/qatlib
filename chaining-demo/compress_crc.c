@@ -2330,7 +2330,7 @@ int filler_thread_cycle_estimate_ts(){
 }
 
 int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefetch,
-  int do_flush, int filler_pollute,  int tflags ){
+  int do_flush, int filler_pollute,  int tflags, int filler_access_size ){
   int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
@@ -2372,9 +2372,8 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
-  #define L2SIZE 2 * 1024 * 1024
-  #define L3WAYSIZE 1966080
-  int chainSize = L3WAYSIZE;
+
+  int chainSize = filler_access_size;
 
   switch(pat){
     case LINEAR:
@@ -2515,7 +2514,7 @@ int access_location_pattern(){
               PRINT("FillerPollute: %d ", filler_pollute);
               PRINT("CacheControl: %d ", cctrl);
 
-              ax_output_pat_interference(pat, xfer_size, do_prefetch, 0, filler_pollute, tflags);
+              // ax_output_pat_interference(pat, xfer_size, do_prefetch, 0, filler_pollute, tflags);
           }
         }
       }
@@ -2557,7 +2556,15 @@ int main(){
     int do_flush = 0;
     int filler_pollute = 0;
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
+
+    bool post_proc_payload = false;
+    #define L1SIZE 48 * 1024
+    #define L2SIZE 2 * 1024 * 1024
+    #define L3WAYSIZE 1966080
+
+    int f_acc_size[3] = {L1SIZE, L2SIZE, L3WAYSIZE};
+    /* but how much damage can the filler even do if we preempt it*/
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags, f_acc_size[0]);
 
 
   acctest_free_task(dsa);
