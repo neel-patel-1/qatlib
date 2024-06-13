@@ -2369,8 +2369,9 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
-
-  int chainSize = 48*1024;
+  #define L2SIZE 2 * 1024 * 1024
+  #define L3WAYSIZE 1966080
+  int chainSize = L2SIZE;
 
   switch(pat){
     case LINEAR:
