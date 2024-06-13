@@ -2120,30 +2120,22 @@ typedef struct _time_preempt_args_t {
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
+
+    /* filler CPU work*/
     time_preempt_args_t *f_arg = (time_preempt_args_t *)(arg.data);
     int idx = f_arg->idx;
     uint64_t *ts8 = f_arg->ts8;
     uint64_t *ts9 = f_arg->ts9;
     uint64_t *ts10 = f_arg->ts10;
+    ts8[idx] = sampleCoderdtsc();
 
     struct task *tsk = f_arg->tsk;
     void *dst = (void *)tsk->desc->dst_addr;
     int size = tsk->desc->xfer_size;
-    #define L3_CACHE_SIZE 38797312ULL
-    #define SPR_NUM_WAYS 15ULL
-    #define SPR_LLC_WAY_SIZE (L3_CACHE_SIZE/SPR_NUM_WAYS)
-    int fill_buf_size = L3_CACHE_SIZE;
-    char *fill_buf = (char *)malloc(fill_buf_size);
-
-
-    ts8[idx] = sampleCoderdtsc();
-    /* filler CPU work*/
 
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
-
-
 
     ts9[idx] = sampleCoderdtsc();
 
@@ -2152,21 +2144,6 @@ void filler_request_ts(fcontext_transfer_t arg) {
       _mm_pause();
     }
 
-    /* filler would not keep accessing after the preemption signal */
-    if(f_arg->pollute_llc_way){
-      volatile uint8_t a;
-      for(int i=0; i<fill_buf_size; i+=64){
-        fill_buf[i] = i;
-        a = fill_buf[i];
-      }
-    }
-
-    /* filler knows offload has completed -- flush to check if we can make host acc take longer*/
-    if(f_arg->flush_ax_out){
-      for(int i=0; i<size; i+=64){
-        _mm_clflush(dst + i);
-      }
-    }
     /* Received the signal */
     ts10[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
@@ -2189,25 +2166,23 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
 
   /* made it to the offload context */
-    ts3[idx] = sampleCoderdtsc();
 
-    /* prefault the pages */
 
 
     fcontext_t parent = arg.prev_context;
+    fcontext_swap(parent, NULL);
+    ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
+
     void **dst = (void **)malloc(memSize);
     void **src;
     uint64_t *indices;
-    // if(r_arg->pat == RANDOM){
-      src = (void **)create_random_chain_starting_at(memSize, dst);
-    // } else {
-    //   src = malloc(memSize);
-    //   for(int i=0; i<memSize; i++){
-    //     src[i] = i;
-    //   }
-    // }
+
+    src = (void **)create_random_chain_starting_at(memSize, dst);
+
     if (r_arg->pat == GATHER)
       indices = create_gather_array(memSize);
+
+    /* prefault the pages */
 
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
@@ -2460,8 +2435,10 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
     ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
     fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
-    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
     off_req_xfer = fcontext_swap(child->context, &t_args);
+    ts2[i] = sampleCoderdtsc(); /* about to ctx switch ?*/
+    off_req_ctx = off_req_xfer.prev_context;
+    off_req_xfer = fcontext_swap(off_req_ctx, &t_args);
     ts7[i] = sampleCoderdtsc(); /* req yielded*/
 
     fcontext_swap(filler->context, &t_args);
@@ -2478,7 +2455,9 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
-
+  avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
+  PRINT("Create_a_request_processing_context: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
   PRINT("ContextSwitchIntoRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
   PRINT("RequestCPUWork: %ld\n", avg);
@@ -2489,11 +2468,21 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts8, ts7, num_requests);
-  PRINT("ContextSwitchIntoFiller: %ld\n", avg); /* exec twice and time second to assume a recurring offloadable task*/
-
+  PRINT("ContextSwitchIntoFiller: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts9, ts8, num_requests);
+  PRINT("FillerCPUWork: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts10, ts9, num_requests);
+  PRINT("RemainingAxWaitingCycles: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts11, ts10, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
+  PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
-  PRINT("Post-Offload-Work %ld \n", avg);
-
+  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
+  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
+  PRINT("Destroy_a_request_processing_context: %ld\n", avg);
   free(t_args.ts0);
   free(t_args.ts1);
   free(t_args.ts2);
