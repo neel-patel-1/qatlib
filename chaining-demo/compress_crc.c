@@ -2172,18 +2172,9 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     fcontext_t parent = arg.prev_context;
     fcontext_swap(parent, NULL);
     ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
-
+    void **src = (void **)malloc(memSize);
     void **dst = (void **)malloc(memSize);
-    void **src;
-    uint64_t *indices;
-
-    src = (void **)create_random_chain_starting_at(memSize, dst);
-
-    if (r_arg->pat == GATHER)
-      indices = create_gather_array(memSize);
-
     /* prefault the pages */
-
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
     }
@@ -2214,29 +2205,8 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
       }
     }
     ts13[idx] = sampleCoderdtsc();
-    /* perform accesses */
-    uint8_t *dst_ptr = (uint8_t *)dst;
-    volatile uint8_t a;
-    switch(r_arg->pat){
-      case LINEAR: /* Delta: A_n = A_n-1 + d*/
-        int i;
-        for(i=0; i<(memSize); i+=64){
-          a = dst_ptr[i];
-        }
-        chase_pointers_global = a;
-        break;
-      case RANDOM:
-        chase_pointers(dst, numAccesses);
-        break;
-      case GATHER:
-        volatile uint8_t a;
-        uint8_t *dst_ptr = (uint8_t *)dst;
-        for(int i=0; i<numAccesses; i++){
-          a = dst_ptr[indices[i]];
-        }
-        chase_pointers_global = a;
-        break;
-    }
+    /* perform post-processing */
+
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
