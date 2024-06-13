@@ -1905,15 +1905,7 @@ void **create_random_chain(int size){
   for (int i = 0; i < len; i++) {
     indices[i] = i;
   }
-  for (int i = 0; i < len-1; ++i) {
-    uint64_t rand = uniform_distribution(i, len);
-    uint64_t j = rand;
-    //(rand() % (len - i)) ;
-    if( i == j) continue;
-    uint64_t tmp = indices[i];
-    indices[i] = indices[j];
-    indices[j] = tmp;
-  }
+  random_permutation(indices, len);
 
   for (int i = 1; i < len; ++i) {
     memory[indices[i-1]] = (void *) &memory[indices[i]];
@@ -2090,6 +2082,7 @@ char *pattern_str(enum acc_pattern pat){
   }
 }
 /* TimeTheUspacePreempt.h*/
+
 typedef struct _time_preempt_args_t {
   uint64_t *ts0;
   uint64_t *ts1;
@@ -2117,6 +2110,7 @@ typedef struct _time_preempt_args_t {
   int test_flags;
   int pollute_llc_way;
   enum acc_pattern pat;
+  void **pChase;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2164,8 +2158,6 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     int numAccesses = memSize / 64;
     int flags = r_arg->test_flags;
 
-    int host_bytes = 48 * 1024 / 2;
-    int ax_bytes = 48 * 1024 / 2;
 
   /* made it to the offload context */
 
@@ -2180,7 +2172,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     struct task *tsk = acctest_alloc_task(dsa);
 
-
+    void **ifArray = create_random_chain(memSize);
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
@@ -2198,15 +2190,8 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     /* perform post-processing */
-
-    for(int i=0; i<ax_bytes; i+=64){
-      ((uint8_t*)(dst))[i] = 0;
-    }
-
-    for(int i=0; i<host_bytes; i+=64){
-      ((uint8_t*)(src))[i] = 0;
-    }
-
+    /* This array was cached fully */
+    chase_pointers(ifArray, numAccesses);
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
@@ -2381,6 +2366,8 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
 
+  int chainSize = 32*1024;
+
   switch(pat){
     case LINEAR:
       t_args.pat = LINEAR;
@@ -2397,6 +2384,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   t_args.flush_ax_out = do_flush;
   t_args.test_flags = tflags;
   t_args.pollute_llc_way = filler_pollute;
+  t_args.pChase = create_random_chain(chainSize);
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
@@ -2560,7 +2548,6 @@ int main(){
     int do_flush = 0;
     int filler_pollute = 0;
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-    PRINT("100-Percent-Ax-Output\n");
     ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags);
 
 
