@@ -2111,7 +2111,7 @@ typedef struct _time_preempt_args_t {
   int pollute_llc_way;
   enum acc_pattern pat;
   void **pChase;
-  int pChaseSize;
+  uint64_t pChaseSize;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2132,11 +2132,11 @@ void filler_request_ts(fcontext_transfer_t arg) {
     uint64_t ops = 0;
     struct completion_record *signal = f_arg->signal;
     void **pChase = f_arg->pChase;
-    int pChaseSize = f_arg->pChaseSize;
-    for(int i=0; i<pChaseSize; i++){
+    uint64_t pChaseSize = f_arg->pChaseSize;
+    for(uint64_t i=0; i<pChaseSize; i++){
       ((uint8_t*)(pChase))[i] = 0; /* hide with prefetcher */
     }
-    chase_pointers_global = ((uint8_t *)pChase)[pChaseSize-1];
+    chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
 
     ts9[idx] = sampleCoderdtsc();
 
@@ -2330,7 +2330,7 @@ int filler_thread_cycle_estimate_ts(){
 }
 
 int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefetch,
-  int do_flush, int filler_pollute,  int tflags, int filler_access_size ){
+  int do_flush, int filler_pollute,  int tflags, uint64_t filler_access_size ){
   int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
@@ -2373,7 +2373,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
 
-  int chainSize = filler_access_size;
+  uint64_t chainSize = filler_access_size;
 
   switch(pat){
     case LINEAR:
@@ -2562,7 +2562,7 @@ int main(){
     bool post_proc_payload = false;
     #define L1SIZE 48 * 1024
     #define L2SIZE 2 * 1024 * 1024
-    #define L3WAYSIZE 1966080
+    #define L3WAYSIZE 2621440ULL
 
     int f_acc_size[3] = {L1SIZE, L2SIZE, L3WAYSIZE};
     /* but how much damage can the filler even do if we preempt it*/
