@@ -2133,10 +2133,10 @@ void filler_request_ts(fcontext_transfer_t arg) {
     struct completion_record *signal = f_arg->signal;
     void **pChase = f_arg->pChase;
     int pChaseSize = f_arg->pChaseSize;
-    for(int i=0; i<size; i++){
-      ((uint8_t*)(pChase))[i] = 0;
+    for(int i=0; i<pChaseSize; i++){
+      ((uint8_t*)(pChase))[i] = 0; /* hide with prefetcher */
     }
-    chase_pointers_global = pChase[size-1];
+    chase_pointers_global = ((uint8_t *)pChase)[pChaseSize-1];
 
     ts9[idx] = sampleCoderdtsc();
 
@@ -2419,6 +2419,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
+  PRINT("ChainSize: %d\n", chainSize);
   avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
   PRINT("Create_a_request_processing_context: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
@@ -2442,7 +2443,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
   PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
-  PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+  PRINT("RequestOnCPUPostProcessingXXXXXXXXX: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
   PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
@@ -2464,6 +2465,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   free(t_args.ts14);
   free(t_args.ts15);
   free(t_args.ts16);
+  free(t_args.pChase);
 
 }
 
@@ -2564,8 +2566,10 @@ int main(){
 
     int f_acc_size[3] = {L1SIZE, L2SIZE, L3WAYSIZE};
     /* but how much damage can the filler even do if we preempt it*/
-    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags, f_acc_size[0]);
-
+    // if filler_check_preempt -- limits
+    for(int i=0; i<3; i++){
+      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags, f_acc_size[i]);
+    }
 
   acctest_free_task(dsa);
   acctest_free(dsa);
