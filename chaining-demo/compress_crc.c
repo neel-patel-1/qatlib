@@ -2164,17 +2164,25 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     int memSize = r_arg->src_size ;
     int numAccesses = memSize / 64;
     int flags = r_arg->test_flags;
+    int chase_on_dst = r_arg->pollute_llc_way;
 
 
   /* made it to the offload context */
 
+
     fcontext_t parent = arg.prev_context;
     ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
-    void **src = (void **)malloc(memSize);
+    void **src;
     void **dst = (void **)malloc(memSize);
     /* prefault the pages */
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
+    }
+
+    if(chase_on_dst){
+        src = create_random_chain_starting_at(memSize, dst);
+    } else {
+        src  = (void **)malloc(memSize);
     }
 
     struct task *tsk = acctest_alloc_task(dsa);
@@ -2197,8 +2205,14 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     /* perform post-processing */
-    /* This array was cached fully */
-    chase_pointers(ifArray, numAccesses);
+    if(chase_on_dst){ /*chase on dst*/
+      /* This array was cached fully */
+      chase_pointers(dst, numAccesses);
+    } else {
+      /* This array was produced by the accelerator */
+      chase_pointers(ifArray, numAccesses);
+    }
+
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
@@ -2330,7 +2344,7 @@ int filler_thread_cycle_estimate_ts(){
 }
 
 int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefetch,
-  int do_flush, int filler_pollute,  int tflags, uint64_t filler_access_size ){
+  int do_flush, int chase_on_dst,  int tflags, uint64_t filler_access_size ){
   int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
@@ -2390,7 +2404,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   t_args.preftch_ax_out = do_prefetch;
   t_args.flush_ax_out = do_flush;
   t_args.test_flags = tflags;
-  t_args.pollute_llc_way = filler_pollute;
+  t_args.pollute_llc_way = chase_on_dst;
   t_args.pChase = malloc(chainSize);
   t_args.pChaseSize = chainSize;
   for(int i=0; i<num_requests; i++){
@@ -2500,9 +2514,9 @@ int access_location_pattern(){
         } else{
           filler_pollute_max = 0;
         }
-        for(int filler_pollute = 0; filler_pollute <= filler_pollute_max; filler_pollute++){
+        for(int chase_on_dst = 0; chase_on_dst <= filler_pollute_max; chase_on_dst++){
           int do_prefetch_max;
-          if(filler_pollute == 0){
+          if(chase_on_dst == 0){
             do_prefetch_max = 1;
           } else{
             do_prefetch_max = 0;
@@ -2513,10 +2527,10 @@ int access_location_pattern(){
               PRINT("Pattern: %s ", pattern_str(pat));
               PRINT("Prefetch: %d ", do_prefetch);
               PRINT("Flush: %d ", do_flush);
-              PRINT("FillerPollute: %d ", filler_pollute);
+              PRINT("FillerPollute: %d ", chase_on_dst);
               PRINT("CacheControl: %d ", cctrl);
 
-              // ax_output_pat_interference(pat, xfer_size, do_prefetch, 0, filler_pollute, tflags);
+              // ax_output_pat_interference(pat, xfer_size, do_prefetch, 0, chase_on_dst, tflags);
           }
         }
       }
@@ -2556,7 +2570,7 @@ int main(){
     PRINT("Pattern %s\n", pattern_str(pat));
     int do_prefetch = 0;
     int do_flush = 0;
-    int filler_pollute = 0;
+    int chase_on_dst = 0; /* yielder reads dst */
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
 
     bool post_proc_payload = false;
@@ -2565,11 +2579,18 @@ int main(){
     #define L3WAYSIZE 2621440ULL
     #define L3FULLSIZE 39321600ULL
 
-    int f_acc_size[4] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+    // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+    int f_acc_size[1] = {L3WAYSIZE};
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
-    for(int i=0; i<4; i++){
-      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags, f_acc_size[i]);
+    // for(int i=0; i<4; i++){
+    for(int i=0; i<1; i++){
+      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
+    }
+
+    chase_on_dst = 1; /* chase on dst output*/
+    for(int i=0; i<1; i++){
+      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
     }
 
   acctest_free_task(dsa);
