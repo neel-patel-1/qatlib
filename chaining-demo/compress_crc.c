@@ -2175,24 +2175,24 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
     void **src;
     void **dst = (void **)malloc(memSize);
+    void **ifArray = create_random_chain(memSize);
     /* prefault the pages */
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
     }
-
-    if(chase_on_dst){
-        src = create_random_chain_starting_at(memSize, dst);
-    } else {
-        src  = (void **)malloc(memSize);
-    }
+    src = create_random_chain_starting_at(memSize, ifArray);
 
     struct task *tsk = acctest_alloc_task(dsa);
 
-    void **ifArray = create_random_chain(memSize);
     /*finished all app work */
     ts4[idx] = sampleCoderdtsc();
 
-    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags); // DRAM
+    if(chase_on_dst){
+      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | flags); // DRAM
+    } else {
+      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags); // DRAM
+    }
+
     r_arg->signal = tsk->comp;
     r_arg->tsk = tsk;
 
@@ -2206,13 +2206,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     /* perform post-processing */
-    if(chase_on_dst){ /*chase on dst*/
-      /* This array was cached fully */
-      chase_pointers(dst, numAccesses);
-    } else {
-      /* This array was produced by the accelerator */
-      chase_pointers(ifArray, numAccesses);
-    }
+    chase_pointers(ifArray, numAccesses);
 
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
