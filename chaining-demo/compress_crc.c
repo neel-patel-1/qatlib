@@ -2580,7 +2580,7 @@ int main(){
     #define L3FULLSIZE 39321600ULL
 
     // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    int f_acc_size[1] = {L3WAYSIZE};
+    int f_acc_size[1] = {L1SIZE};
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
     // for(int i=0; i<4; i++){
