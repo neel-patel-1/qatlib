@@ -2583,13 +2583,13 @@ int main(){
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
     // for(int i=0; i<4; i++){
-    for(int i=0; i<4; i++){
-      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
-    }
+    // for(int i=0; i<4; i++){
+    //   ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
+    // }
 
     chase_on_dst = 1; /* chase on dst output*/
-    for(int i=0; i<4; i++){
-      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
+    for(int i=L3WAYSIZE; i<=L3WAYSIZE*15; i+=L3WAYSIZE){
+      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, i);
     }
 
   acctest_free_task(dsa);
