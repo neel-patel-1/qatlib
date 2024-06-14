@@ -1898,9 +1898,9 @@ void random_permutation(uint64_t *array, int size){
   }
 }
 void **create_random_chain(int size){
-  uint64_t len = size / sizeof(void *);
+  uint64_t len = size / 64;
 
-  void ** memory = (void *)malloc(sizeof(void *) *len);
+  void ** memory = (void *)malloc(size);
   uint64_t  *indices = malloc(sizeof(uint64_t) * len);
   for (int i = 0; i < len; i++) {
     indices[i] = i;
@@ -1908,9 +1908,9 @@ void **create_random_chain(int size){
   random_permutation(indices, len);
 
   for (int i = 1; i < len; ++i) {
-    memory[indices[i-1]] = (void *) &memory[indices[i]];
+    memory[indices[i-1] * 8] = (void *) &memory[indices[i] * 8];
   }
-  memory[indices[len - 1]] = (void *) &memory[indices[0]];
+  memory[indices[len - 1] * 8] = (void *) &memory[indices[0] * 8 ];
   return memory;
 
 
@@ -1928,7 +1928,7 @@ void **create_random_chain_starting_at(int size, void **st_addr){ /* only touche
     memory[indices[i-1] * 8] = (void *) &st_addr[indices[i] * 8];
   }
   memory[indices[len - 1] * 8] = (void *) &st_addr[indices[0] * 8 ];
-  return memory;
+  return memory; /* Why x8 ?*/
 
 }
 bool chase_pointers(void **memory, int count){
@@ -2422,6 +2422,9 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
     fcontext_swap(filler->context, &t_args);
     ts11[i] = sampleCoderdtsc(); /* filler done*/
     off_req_ctx = off_req_xfer.prev_context;
+
+    /*Optionally prefetch synchronously */
+
     fcontext_swap(off_req_ctx, &t_args);
     ts15[i] = sampleCoderdtsc(); /* req done*/
 
@@ -2580,7 +2583,7 @@ int main(){
     #define L3FULLSIZE 39321600ULL
 
     // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    int f_acc_size[1] = {L1SIZE};
+    int f_acc_size[1] = {L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
     // for(int i=0; i<4; i++){
