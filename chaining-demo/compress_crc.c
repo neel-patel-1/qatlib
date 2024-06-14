@@ -2563,11 +2563,12 @@ int main(){
     #define L1SIZE 48 * 1024
     #define L2SIZE 2 * 1024 * 1024
     #define L3WAYSIZE 2621440ULL
+    #define L3FULLSIZE 39321600ULL
 
-    int f_acc_size[3] = {L1SIZE, L2SIZE, L3WAYSIZE};
+    int f_acc_size[4] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
-    for(int i=0; i<3; i++){
+    for(int i=0; i<4; i++){
       ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, filler_pollute, tflags, f_acc_size[i]);
     }
 
