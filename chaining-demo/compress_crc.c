@@ -2437,7 +2437,9 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
-  PRINT("FillerKBAccessed: %d ", chainSize/1024);
+  /* print bytes */
+  PRINT("FillerBytesAccessed: %d ", chainSize);
+  PRINT("RequestorBytesAccessed: %d ", xfer_size);
   // avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
   // PRINT("Create_a_request_processing_context: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
@@ -2448,8 +2450,8 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   // PRINT("Prepare_Offload: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
   // PRINT("Submit_Offload: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
-  PRINT("PrefetchingTime: %ld ", avg);
+  // avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
+  // PRINT("ContextSwitchIntoScheduler: %ld ", avg);
   // avg_samples_from_arrays(run_times,avg, ts8, ts7, num_requests);
   // PRINT("ContextSwitchIntoFiller: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts9, ts8, num_requests);
@@ -2461,7 +2463,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   // avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
   // PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
-  PRINT("RequestOnCPUPostProcessing: %ld ", avg);
+  PRINT("RequestOnCPUPostProcessing: %ld \n", avg);
   // avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
   // PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
@@ -2583,16 +2585,16 @@ int main(){
     #define L3FULLSIZE 39321600ULL
 
     // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    int f_acc_size[1] = {L3FULLSIZE};
+    int f_acc_size[4] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
     // for(int i=0; i<4; i++){
-    for(int i=0; i<1; i++){
+    for(int i=0; i<4; i++){
       ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
     }
 
     chase_on_dst = 1; /* chase on dst output*/
-    for(int i=0; i<1; i++){
+    for(int i=0; i<4; i++){
       ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
     }
 
