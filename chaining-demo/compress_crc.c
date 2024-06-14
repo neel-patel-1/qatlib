@@ -1907,6 +1907,7 @@ void **create_random_chain(int size){
   }
   random_permutation(indices, len);
 
+  /* the memaddr is 8 bytes -- only read each cache line once */
   for (int i = 1; i < len; ++i) {
     memory[indices[i-1] * 8] = (void *) &memory[indices[i] * 8];
   }
@@ -2133,7 +2134,7 @@ void filler_request_ts(fcontext_transfer_t arg) {
     struct completion_record *signal = f_arg->signal;
     void **pChase = f_arg->pChase;
     uint64_t pChaseSize = f_arg->pChaseSize;
-    for(uint64_t i=0; i<pChaseSize; i++){
+    for(uint64_t i=0; i<pChaseSize; i+=64){
       ((uint8_t*)(pChase))[i] = 0; /* hide with prefetcher */
     }
     chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
@@ -2436,35 +2437,35 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
-  PRINT("ChainSize: %d\n", chainSize);
-  avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
-  PRINT("Create_a_request_processing_context: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
-  PRINT("ContextSwitchIntoRequest: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
-  PRINT("RequestCPUWork: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
-  PRINT("Prepare_Offload: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
-  PRINT("Submit_Offload: %ld\n", avg);
+  PRINT("FillerKBAccessed: %d ", chainSize/1024);
+  // avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
+  // PRINT("Create_a_request_processing_context: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
+  // PRINT("ContextSwitchIntoRequest: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
+  // PRINT("RequestCPUWork: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
+  // PRINT("Prepare_Offload: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
+  // PRINT("Submit_Offload: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
-  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts8, ts7, num_requests);
-  PRINT("ContextSwitchIntoFiller: %ld\n", avg);
+  PRINT("PrefetchingTime: %ld ", avg);
+  // avg_samples_from_arrays(run_times,avg, ts8, ts7, num_requests);
+  // PRINT("ContextSwitchIntoFiller: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts9, ts8, num_requests);
-  PRINT("FillerCPUWork: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts10, ts9, num_requests);
-  PRINT("RemainingAxWaitingCycles: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts11, ts10, num_requests);
-  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
-  PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
+  // PRINT("FillerCPUWork: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts10, ts9, num_requests);
+  // PRINT("RemainingAxWaitingCycles: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts11, ts10, num_requests);
+  // PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
+  // PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
   avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
-  PRINT("RequestOnCPUPostProcessingXXXXXXXXX: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
-  PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
-  PRINT("Destroy_a_request_processing_context: %ld\n", avg);
+  PRINT("RequestOnCPUPostProcessing: %ld ", avg);
+  // avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
+  // PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
+  // avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
+  // PRINT("Destroy_a_request_processing_context: %ld\n", avg);
   free(t_args.ts0);
   free(t_args.ts1);
   free(t_args.ts2);
@@ -2570,7 +2571,6 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   enum acc_pattern pat = GATHER;
     int xfer_size = 48 * 1024;
-    PRINT("Pattern %s\n", pattern_str(pat));
     int do_prefetch = 0;
     int do_flush = 0;
     int chase_on_dst = 0; /* yielder reads dst */
