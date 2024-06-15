@@ -2135,9 +2135,7 @@ void filler_request_ts(fcontext_transfer_t arg) {
     struct completion_record *signal = f_arg->signal;
     void **pChase = f_arg->pChase;
     uint64_t pChaseSize = f_arg->pChaseSize;
-    for(uint64_t i=0; i<pChaseSize; i+=64){
-      ((uint8_t*)(pChase))[i] = 0; /* hide with prefetcher */
-    }
+    chase_pointers(pChase, pChaseSize / 64);
     chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
 
     ts9[idx] = sampleCoderdtsc();
@@ -2404,7 +2402,7 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   t_args.flush_ax_out = do_flush;
   t_args.test_flags = tflags;
   t_args.pollute_llc_way = chase_on_dst;
-  t_args.pChase = malloc(chainSize);
+  t_args.pChase = create_random_chain(chainSize);
   t_args.pChaseSize = chainSize;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
