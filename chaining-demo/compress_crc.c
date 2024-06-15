@@ -2113,6 +2113,7 @@ typedef struct _time_preempt_args_t {
   enum acc_pattern pat;
   void **pChase;
   uint64_t pChaseSize;
+  uint8_t *dst;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2188,9 +2189,11 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts4[idx] = sampleCoderdtsc();
 
     if(chase_on_dst){
-      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | flags); // DRAM
+      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | flags);
+      r_arg->dst = (uint8_t *)ifArray;
     } else {
-      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags); // DRAM
+      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags);
+      r_arg->dst = (uint8_t *)dst;
     }
 
     r_arg->signal = tsk->comp;
@@ -2257,7 +2260,6 @@ int filler_thread_cycle_estimate_ts(){
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
   t_args.src_size = 16*1024;
-  t_args.preftch_ax_out = 0;
   t_args.flush_ax_out = 0;
   t_args.test_flags = IDXD_OP_FLAG_CC;
   t_args.pat = LINEAR;
@@ -2567,7 +2569,6 @@ int main(){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   enum acc_pattern pat = GATHER;
     int xfer_size = 48 * 1024;
-    int do_prefetch = 0;
     int do_flush = 0;
     int chase_on_dst = 0; /* yielder reads dst */
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
@@ -2582,12 +2583,13 @@ int main(){
     // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
-    // if filler_check_preempt -- limits
-    // for(int i=0; i<4; i++){
-    // for(int i=0; i<4; i++){
-    //   ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
-    // }
 
+    PRINT("L1_Access ");
+    bool do_prefetch = true;
+
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[0]);
+
+    do_prefetch = false;
     for(int i=0; i<5; i++){
       chase_on_dst = 0; /* chase on src output*/
       ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
