@@ -2205,6 +2205,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     int cLevel = r_arg->cLevel;
     bool specClevel = r_arg->specClevel;
     bool doFlush = r_arg->flush_ax_out;
+    enum acc_pattern pat = r_arg->pat;
 
 
   /* made it to the offload context */
@@ -2282,8 +2283,20 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     /* perform post-processing */
-    chase_pointers(ifArray, numAccesses);
+    switch(pat){
+      case LINEAR:
+        uint8_t *ifArrPtr = (uint8_t *)ifArray;
+        for(int i=0; i<memSize; i+=64){
+          ifArrPtr[i] = 0;
+        }
+        break;
+      case RANDOM:
+        chase_pointers(ifArray, numAccesses);
+        break;
+      default:
+        break;
 
+    }
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
@@ -2308,6 +2321,7 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
     int cLevel = r_arg->cLevel;
     bool specClevel = r_arg->specClevel;
     bool doFlush = r_arg->flush_ax_out;
+    enum acc_pattern pat = r_arg->pat;
 
 
   /* made it to the offload context */
@@ -2387,7 +2401,20 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
     ts12[idx] = sampleCoderdtsc();
 
     /* perform post-processing */
-    chase_pointers(ifArray, numAccesses);
+    switch(pat){
+      case LINEAR:
+        uint8_t *ifArrPtr = (uint8_t *)ifArray;
+        for(int i=0; i<memSize; i+=64){
+          ifArrPtr[i] = 0;
+        }
+        break;
+      case RANDOM:
+        chase_pointers(ifArray, numAccesses);
+        break;
+      default:
+        break;
+
+    }
 
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
@@ -2626,7 +2653,7 @@ int ax_output_pat_interference(
     if(scheduler_prefetch){
       // int num_sw_stride_fetches = xfer_size / 16;
       // int num_sw_stride_fetche_bytes = num_sw_stride_fetches * 64;
-      for(int i=0; i<xfer_size / 4; i+=64){
+      for(int i=0; i<xfer_size; i+=64){
         __builtin_prefetch((const void*) t_args.dst + i);
         // _mm_clflush((const void*) t_args.dst + i);
         // __builtin_prefetch(t_args.dst);
@@ -2791,7 +2818,6 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-      enum acc_pattern pat = GATHER;
     #define CACHE_LINE_SIZE 64
     #define L1SIZE 48 * 1024
     #define L2SIZE 2 * 1024 * 1024
@@ -2814,6 +2840,7 @@ int main(){
     int do_flush = 0;
     bool specClevel = false;
     int scheduler_prefetch = false;
+    enum acc_pattern pat = LINEAR;
 
     // PRINT("Blocking-ReuseDistance: 0 ");
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
