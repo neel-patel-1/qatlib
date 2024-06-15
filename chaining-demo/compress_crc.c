@@ -2624,7 +2624,9 @@ int ax_output_pat_interference(
     bMnp[i] = sampleCoderdtsc();
 
     if(scheduler_prefetch){
-      for(int i=0; i<xfer_size; i+=64){
+      int num_sw_stride_fetches = xfer_size / 32;
+      int num_sw_stride_fetche_bytes = num_sw_stride_fetches * 64;
+      for(int i=0; i<num_sw_stride_fetche_bytes; i+=64){
         __builtin_prefetch((const void*) t_args.dst + i);
         // _mm_clflush((const void*) t_args.dst + i);
         // __builtin_prefetch(t_args.dst);
@@ -2836,17 +2838,17 @@ int main(){
       chase_pointers(pChase, xfer_size / 64);
       end_times[i] = sampleCoderdtsc();
     }
-    avg_samples_from_arrays(run_times, avg, end_times, st_times, num_requests);
-    PRINT("L1-Baseline: %ld\n", avg);
+    // avg_samples_from_arrays(run_times, avg, end_times, st_times, num_requests);
+    // PRINT("L1-Baseline: %ld\n", avg);
 
     chase_on_dst = 1; /* yielder reads dst */
     scheduler_prefetch = false;
     specClevel = false;
-    for(int i=0; f_acc_size[i] >0 ; i++){
-      PRINT("AxOutput-LLCBaseline-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
-    }
+    // for(int i=0; f_acc_size[i] >0 ; i++){
+    //   PRINT("AxOutput-LLCBaseline-ReuseDistance: %d ", f_acc_size[i]);
+    //   ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+    //   chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
+    // }
 
     scheduler_prefetch = true;
     for(int i=0; f_acc_size[i] >0 ; i++){
