@@ -2190,11 +2190,10 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     if(chase_on_dst){
       prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | flags);
-      r_arg->dst = (uint8_t *)ifArray;
     } else {
       prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags);
-      r_arg->dst = (uint8_t *)dst;
     }
+    r_arg->dst = (uint8_t *)ifArray;
 
     r_arg->signal = tsk->comp;
     r_arg->tsk = tsk;
@@ -2428,11 +2427,16 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
 
     if(do_prefetch){
       for(int i=0; i<xfer_size; i+=64){
-        // __builtin_prefetch((const void*) t_args.dst + i);
-        _mm_clflush((const void*) t_args.dst + i);
+        __builtin_prefetch((const void*) t_args.dst + i);
+        // _mm_clflush((const void*) t_args.dst + i);
         // __builtin_prefetch(t_args.dst);
       }
+    } else if (do_flush){
+      for(int i=0; i<xfer_size; i+=64){
+        _mm_clflush((const void*) t_args.dst + i);
+      }
     }
+    bMnp2[i] = sampleCoderdtsc();
 
     fcontext_swap(off_req_ctx, &t_args);
     ts15[i] = sampleCoderdtsc(); /* req done*/
@@ -2580,7 +2584,7 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
   enum acc_pattern pat = GATHER;
-    int xfer_size = 48 * 1024;
+    int xfer_size = 32 * 1024;
     int do_flush = 0;
     int chase_on_dst = 0; /* yielder reads dst */
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
@@ -2604,10 +2608,16 @@ int main(){
     do_prefetch = false;
     for(int i=0; i<5; i++){
       chase_on_dst = 0; /* chase on src output*/
+      PRINT("VulnerableBuffer ");
       ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
       chase_on_dst = 1; /* chase on dst output*/
+      PRINT("AX_OUTPUT ");
       ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
     }
+
+    PRINT("DRAM_ACCESS ");
+    do_flush = 1;
+    ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[0]);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
