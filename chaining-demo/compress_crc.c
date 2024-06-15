@@ -2796,6 +2796,23 @@ int access_location_pattern(){
   acctest_free(dsa);
 }
 
+static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
+  switch(pat){
+    case LINEAR:
+      for(int i=0; i<size; i+=64){
+        ((uint8_t*)dst)[i] = 0;
+      }
+      break;
+    case RANDOM:
+      chase_pointers(dst, size / 64);
+      break;
+    case GATHER:
+      break;
+    default:
+      break;
+  }
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -2818,45 +2835,60 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-    #define CACHE_LINE_SIZE 64
-    #define L1SIZE 48 * 1024
-    #define L2SIZE 2 * 1024 * 1024
-    #define L3WAYSIZE 2621440ULL
-    #define L3FULLSIZE 39321600ULL
 
-    // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    /* but how much damage can the filler even do if we preempt it*/
+  int num_requests = 1000;
+  #define CACHE_LINE_SIZE 64
+  #define L1SIZE 48 * 1024
+  #define L2SIZE 2 * 1024 * 1024
+  #define L3WAYSIZE 2621440ULL
+  #define L3FULLSIZE 39321600ULL
 
-
-    // for(int cLevel = 0; cLevel <= 2; cLevel++){
-    int cLevel = 0;
-
-    int xfer_size = 1024 * 1024;
-    int chase_on_dst = 0; /* yielder reads dst */
-    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-
-    int reuse_distance = L1SIZE;
-    int do_flush = 0;
-    bool specClevel = false;
-    int scheduler_prefetch = false;
-    enum acc_pattern pat = LINEAR;
-
-    // PRINT("Blocking-ReuseDistance: 0 ");
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-    //   chase_on_dst, tflags, NULL, cLevel, specClevel, false, true);
-
-    // for(int i=0; f_acc_size[i] >0 ; i++){
-    //   PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
-    //   ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-    //   chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
-    // }
-
-    /* pointer chase in l1 baseline */
+  // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+  int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+  /* but how much damage can the filler even do if we preempt it*/
 
 
-    scheduler_prefetch = true;
+  // for(int cLevel = 0; cLevel <= 2; cLevel++){
+  int cLevel = 0;
+
+  int xfer_size = 1024 * 1024;
+  int chase_on_dst = 0; /* yielder reads dst */
+  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
+
+  int reuse_distance = L1SIZE;
+  int do_flush = 0;
+  bool specClevel = false;
+  int scheduler_prefetch = false;
+
+
+  enum acc_pattern pat = RANDOM;
+  scheduler_prefetch = true;
+  for(enum acc_pattern pat = LINEAR; pat < GATHER; pat++){
     for(int i=0; f_acc_size[i] >0 ; i++){
+
+      /* Baseline access */
+      PRINT("Baseline: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
+      uint64_t start_times[num_requests],
+        end_times[num_requests],
+        run_times[num_requests],
+        avg;
+      void ** dst = malloc(f_acc_size[i]);
+      void ** src = create_random_chain_starting_at(f_acc_size[i], dst);
+      memcpy(dst, src, f_acc_size[i]);
+      for(int j=0; j<num_requests; j++){
+        uint64_t start, end;
+        start = sampleCoderdtsc();
+        do_access_pattern(pat, dst, f_acc_size[i]);
+        end = sampleCoderdtsc();
+        start_times[j] = start;
+        end_times[j] = end;
+      }
+      avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
+      PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+      free(dst);
+      free(src);
+
+      /* prefetched */
       PRINT("AxOutput-Prefetch: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
       ax_output_pat_interference(pat, f_acc_size[i], true, do_flush,
       chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
@@ -2864,6 +2896,7 @@ int main(){
       ax_output_pat_interference(pat, f_acc_size[i], false, do_flush,
       chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
     }
+  }
     // PRINT("ReuseDistance: %d ", reuse_distance);
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
 
