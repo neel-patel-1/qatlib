@@ -2826,20 +2826,7 @@ int main(){
     // }
 
     /* pointer chase in l1 baseline */
-    PRINT("L1-Baseline %d ", 0);
-    int num_requests = 1000;
-    uint64_t st_times[num_requests], end_times[num_requests], run_times[num_requests],  avg;
-    void **pChase = malloc(xfer_size);
-    void **src = create_random_chain_starting_at(xfer_size, pChase);
-    memcpy((uint8_t *)pChase, (uint8_t *)src, xfer_size);
 
-    for(int i=0; i<num_requests; i++){
-      st_times[i] = sampleCoderdtsc();
-      chase_pointers(pChase, xfer_size / 64);
-      end_times[i] = sampleCoderdtsc();
-    }
-    // avg_samples_from_arrays(run_times, avg, end_times, st_times, num_requests);
-    // PRINT("L1-Baseline: %ld\n", avg);
 
     chase_on_dst = 1; /* yielder reads dst */
     scheduler_prefetch = false;
