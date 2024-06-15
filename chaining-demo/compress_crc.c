@@ -2115,6 +2115,7 @@ typedef struct _time_preempt_args_t {
   uint64_t pChaseSize;
   uint8_t *dst;
   int cLevel;
+  bool specClevel;
   enum acc_pattern filler_access_pattern;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
@@ -2181,6 +2182,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     int flags = r_arg->test_flags;
     int chase_on_dst = r_arg->pollute_llc_way;
     int cLevel = r_arg->cLevel;
+    bool specClevel = r_arg->specClevel;
 
 
   /* made it to the offload context */
@@ -2221,7 +2223,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* made it back to the offload context to perform some post processing */
 
     /* Preform buffer movement as dictated */
-    if(cLevel != -1){
+    if(specClevel != false){
       if(cLevel < 0){
         for(int i=0; i<memSize; i+=64){
           _mm_clflush((const void *)ifArray + i);
@@ -2261,7 +2263,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 }
 
 int filler_thread_cycle_estimate_ts(){
-  int num_requests = 1000;
+  int num_requests = 100000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2391,7 +2393,8 @@ int ax_output_pat_interference(
   int chase_on_dst,
   int tflags,
   uint64_t filler_access_size,
-  int cLevel)
+  int cLevel,
+  bool specClevel)
 {
   int num_requests = 1000;
   time_preempt_args_t t_args;
@@ -2459,6 +2462,7 @@ int ax_output_pat_interference(
   t_args.pChase = create_random_chain(chainSize);
   t_args.pChaseSize = chainSize;
   t_args.cLevel = cLevel;
+  t_args.specClevel =specClevel;
   t_args.filler_access_pattern = RANDOM;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
@@ -2663,23 +2667,63 @@ int main(){
     // for(int cLevel = 0; cLevel <= 2; cLevel++){
     int chase_on_dst = 0; /* yielder reads dst */
     int cLevel = 0;
+    bool specClevel = true;
+
+    // PRINT("L1 " );
+    // ax_output_pat_interference(pat,
+    //   xfer_size,
+    //   scheduler_prefetch,
+    //   do_flush,
+    //   chase_on_dst,
+    //   tflags,
+    //   CACHE_LINE_SIZE,
+    //   cLevel,
+    //   specClevel);
+
+
+
+    // PRINT("Scheduler_Prefetch " );
+    // scheduler_prefetch = true;
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+    PRINT("Flush_ChaseOnDst L1" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
+    PRINT("Flush_ChaseOnDst L2" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 1, true);
+    PRINT("Flush_ChaseOnDst L3" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 2, true);
+    PRINT("\n");
+
+    do_flush = 0;
+    PRINT("ChaseOnDst L1" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 0, true);
+    PRINT("ChaseOnDst L2" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 1, true);
+    PRINT("ChaseOnDst L3" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 2, true);
+
+    // PRINT("\n");
+    // PRINT
+
+
+    return;
+
     for(int cLevel = 0; cLevel <=2; cLevel++){
       PRINT("Precached MMHINT_T%d ", -cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel, specClevel);
     }
     for(int cLevel = 0; cLevel >= -3; cLevel--){
       PRINT("Precached_Flush MMHINT_T%d ", -cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel,  specClevel);
     }
     chase_on_dst = 1;
     for(int cLevel = 0; cLevel <= 2; cLevel++){
       PRINT("AxOutput MMHINT_T%d ", cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel,  specClevel);
     }
 
     for(int cLevel = 0; cLevel >= -3; cLevel--){
       PRINT("AxOutput_Flush MMHINT_T%d ", -cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel,  specClevel);
     }
 
   acctest_free_task(dsa);
