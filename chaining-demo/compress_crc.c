@@ -2380,6 +2380,9 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
   uint64_t *ts15 = t_args.ts15;
   uint64_t *ts16 = t_args.ts16;
 
+  uint64_t *bMnp = malloc(sizeof(uint64_t) * num_requests);
+  uint64_t *bMnp2 = malloc(sizeof(uint64_t) * num_requests);
+
 
   fcontext_transfer_t off_req_xfer;
   fcontext_t off_req_ctx;
@@ -2421,6 +2424,15 @@ int ax_output_pat_interference(enum acc_pattern pat, int xfer_size, int do_prefe
     off_req_ctx = off_req_xfer.prev_context;
 
     /*Optionally prefetch synchronously */
+    bMnp[i] = sampleCoderdtsc();
+
+    if(do_prefetch){
+      for(int i=0; i<xfer_size; i+=64){
+        // __builtin_prefetch((const void*) t_args.dst + i);
+        _mm_clflush((const void*) t_args.dst + i);
+        // __builtin_prefetch(t_args.dst);
+      }
+    }
 
     fcontext_swap(off_req_ctx, &t_args);
     ts15[i] = sampleCoderdtsc(); /* req done*/
