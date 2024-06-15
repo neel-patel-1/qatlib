@@ -2681,27 +2681,22 @@ int main(){
 
     // PRINT("Scheduler_Prefetch " );
     // scheduler_prefetch = true;
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+    for(int xfer_size = 2*1024; xfer_size <= 4096; xfer_size+=256 ){
     PRINT("Flush_ChaseOnDst L1" );
     ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
+    PRINT("ChaseOnDst L1" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 0, true);
     PRINT("Flush_ChaseOnDst L2" );
     ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 1, true);
+    PRINT("ChaseOnDst L2" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 1, true);
     PRINT("Flush_ChaseOnDst L3" );
     ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 2, true);
-    PRINT("\n");
-
-    do_flush = 0;
-    PRINT("ChaseOnDst L1" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    PRINT("ChaseOnDst L2" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 1, true);
     PRINT("ChaseOnDst L3" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 2, true);
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 2, true);
 
     PRINT("\n");
-    // PRINT
-    PRINT("ChaseOnDst CC" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, NULL, false);
+    }
 
 
     return;
