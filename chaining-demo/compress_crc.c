@@ -2115,6 +2115,7 @@ typedef struct _time_preempt_args_t {
   uint64_t pChaseSize;
   uint8_t *dst;
   int cLevel;
+  enum acc_pattern filler_access_pattern;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2133,10 +2134,23 @@ void filler_request_ts(fcontext_transfer_t arg) {
 
     fcontext_t parent = arg.prev_context;
     uint64_t ops = 0;
+    enum acc_pattern filler_access_pattern = f_arg->filler_access_pattern;
     struct completion_record *signal = f_arg->signal;
     void **pChase = f_arg->pChase;
     uint64_t pChaseSize = f_arg->pChaseSize;
-    chase_pointers(pChase, pChaseSize / 64);
+    switch(filler_access_pattern){
+      case LINEAR:
+        for(int i=0; i<pChaseSize; i+=64){
+          pChase[i] = 0;
+        }
+        chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
+        break;
+      case RANDOM:
+        chase_pointers(pChase, pChaseSize / 64);
+        break;
+      default:
+        break;
+    }
     chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
 
     ts9[idx] = sampleCoderdtsc();
@@ -2445,6 +2459,7 @@ int ax_output_pat_interference(
   t_args.pChase = create_random_chain(chainSize);
   t_args.pChaseSize = chainSize;
   t_args.cLevel = cLevel;
+  t_args.filler_access_pattern = RANDOM;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
@@ -2491,6 +2506,9 @@ int ax_output_pat_interference(
   /* print bytes */
   avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld ", avg);
+  avg_samples_from_arrays(run_times,avg, bMnp2, bMnp, num_requests);
+  PRINT("AddedPrefetchingTime: %ld ", avg);
+
   PRINT("FillerBytesAccessed: %d ", chainSize);
   PRINT("RequestorBytesAccessed: %d ", xfer_size);
   // avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
@@ -2627,7 +2645,6 @@ int main(){
   enum acc_pattern pat = GATHER;
     int xfer_size = 32 * 1024;
     int do_flush = 0;
-    int chase_on_dst = 0; /* yielder reads dst */
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
 
     bool post_proc_payload = false;
@@ -2643,11 +2660,13 @@ int main(){
 
     int scheduler_prefetch = false;
 
-    for(int cLevel = 0; cLevel <= 2; cLevel++){
-      PRINT("Precached MMHINT_T%d ", cLevel);
+    // for(int cLevel = 0; cLevel <= 2; cLevel++){
+    int chase_on_dst = 0; /* yielder reads dst */
+    int cLevel = 0;
+    for(int cLevel = 0; cLevel <=2; cLevel++){
+      PRINT("Precached MMHINT_T%d ", -cLevel);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
     }
-
     for(int cLevel = 0; cLevel >= -3; cLevel--){
       PRINT("Precached_Flush MMHINT_T%d ", -cLevel);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
