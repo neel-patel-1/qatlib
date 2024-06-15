@@ -2855,20 +2855,14 @@ int main(){
     /* pointer chase in l1 baseline */
 
 
-    chase_on_dst = 1; /* yielder reads dst */
-    scheduler_prefetch = false;
-    specClevel = false;
-    // for(int i=0; f_acc_size[i] >0 ; i++){
-    //   PRINT("AxOutput-LLCBaseline-ReuseDistance: %d ", f_acc_size[i]);
-    //   ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-    //   chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
-    // }
-
     scheduler_prefetch = true;
     for(int i=0; f_acc_size[i] >0 ; i++){
-      PRINT("AxOutput-L1Prefetch-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
+      PRINT("AxOutput-Prefetch: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
+      ax_output_pat_interference(pat, f_acc_size[i], true, do_flush,
+      chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
+      PRINT("AxOutput-LLC: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
+      ax_output_pat_interference(pat, f_acc_size[i], false, do_flush,
+      chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
     }
     // PRINT("ReuseDistance: %d ", reuse_distance);
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
