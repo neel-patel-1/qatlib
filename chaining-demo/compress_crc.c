@@ -2663,12 +2663,24 @@ int main(){
     int chase_on_dst = 0; /* yielder reads dst */
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
 
-    int reuse_distance = L3FULLSIZE;
+    int reuse_distance = L1SIZE;
     int do_flush = 0;
     bool specClevel = false;
 
-    PRINT("ReuseDistance: %d ", reuse_distance);
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
+
+    for(int i=0; f_acc_size[i] >0 ; i++){
+      PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel);
+    }
+
+    chase_on_dst = 1; /* yielder reads dst */
+
+    for(int i=0; f_acc_size[i] >0 ; i++){
+      PRINT("AxOutput-ReuseDistance: %d ", f_acc_size[i]);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel);
+    }
+    // PRINT("ReuseDistance: %d ", reuse_distance);
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
 
     // PRINT("Flush_ChaseOnDst L1" );
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
