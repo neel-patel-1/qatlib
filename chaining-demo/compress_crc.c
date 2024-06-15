@@ -2117,6 +2117,7 @@ typedef struct _time_preempt_args_t {
   int cLevel;
   bool specClevel;
   enum acc_pattern filler_access_pattern;
+  bool pollute_concurrent;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2139,26 +2140,46 @@ void filler_request_ts(fcontext_transfer_t arg) {
     struct completion_record *signal = f_arg->signal;
     void **pChase = f_arg->pChase;
     uint64_t pChaseSize = f_arg->pChaseSize;
-    switch(filler_access_pattern){
-      case LINEAR:
-        for(int i=0; i<pChaseSize; i+=64){
-          pChase[i] = 0;
-        }
-        chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
-        break;
-      case RANDOM:
-        chase_pointers(pChase, pChaseSize / 64);
-        break;
-      default:
-        break;
+
+    bool pollute_concurrent = f_arg->pollute_concurrent;
+
+    if(pollute_concurrent){
+      switch(filler_access_pattern){
+        case LINEAR:
+          for(int i=0; i<pChaseSize; i+=64){
+            pChase[i] = 0;
+          }
+          chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
+          break;
+        case RANDOM:
+          chase_pointers(pChase, pChaseSize / 64);
+          break;
+        default:
+          break;
+      }
     }
-    chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
 
     ts9[idx] = sampleCoderdtsc();
 
 
     while(signal->status == 0){
       _mm_pause();
+    }
+
+    if(!pollute_concurrent){
+      switch(filler_access_pattern){
+        case LINEAR:
+          for(int i=0; i<pChaseSize; i+=64){
+            pChase[i] = 0;
+          }
+          chase_pointers_global = ((uint8_t *)pChase)[(int)(pChaseSize-1)];
+          break;
+        case RANDOM:
+          chase_pointers(pChase, pChaseSize / 64);
+          break;
+        default:
+          break;
+      }
     }
 
     /* Received the signal */
@@ -2395,7 +2416,8 @@ int ax_output_pat_interference(
   int tflags,
   uint64_t filler_access_size,
   int cLevel,
-  bool specClevel)
+  bool specClevel,
+  bool pollute_concurrent)
 {
   int num_requests = 100;
   time_preempt_args_t t_args;
@@ -2464,6 +2486,7 @@ int ax_output_pat_interference(
   t_args.pChaseSize = chainSize;
   t_args.cLevel = cLevel;
   t_args.specClevel =specClevel;
+  t_args.pollute_concurrent = pollute_concurrent;
   t_args.filler_access_pattern = RANDOM;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
@@ -2670,14 +2693,14 @@ int main(){
 
     for(int i=0; f_acc_size[i] >0 ; i++){
       PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false);
     }
 
     chase_on_dst = 1; /* yielder reads dst */
 
     for(int i=0; f_acc_size[i] >0 ; i++){
       PRINT("AxOutput-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false);
     }
     // PRINT("ReuseDistance: %d ", reuse_distance);
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
@@ -2699,25 +2722,6 @@ int main(){
 
 
     return;
-
-    for(int cLevel = 0; cLevel <=2; cLevel++){
-      PRINT("Precached MMHINT_T%d ", -cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel, specClevel);
-    }
-    for(int cLevel = 0; cLevel >= -3; cLevel--){
-      PRINT("Precached_Flush MMHINT_T%d ", -cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel,  specClevel);
-    }
-    chase_on_dst = 1;
-    for(int cLevel = 0; cLevel <= 2; cLevel++){
-      PRINT("AxOutput MMHINT_T%d ", cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel,  specClevel);
-    }
-
-    for(int cLevel = 0; cLevel >= -3; cLevel--){
-      PRINT("AxOutput_Flush MMHINT_T%d ", -cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel,  specClevel);
-    }
 
   acctest_free_task(dsa);
   acctest_free(dsa);
