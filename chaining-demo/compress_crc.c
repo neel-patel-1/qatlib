@@ -2183,6 +2183,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     int chase_on_dst = r_arg->pollute_llc_way;
     int cLevel = r_arg->cLevel;
     bool specClevel = r_arg->specClevel;
+    bool doFlush = r_arg->flush_ax_out;
 
 
   /* made it to the offload context */
@@ -2224,7 +2225,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     /* Preform buffer movement as dictated */
     if(specClevel != false){
-      if(cLevel < 0){
+      if(doFlush == true ){
         for(int i=0; i<memSize; i+=64){
           _mm_clflush((const void *)ifArray + i);
         }
@@ -2489,10 +2490,6 @@ int ax_output_pat_interference(
         // _mm_clflush((const void*) t_args.dst + i);
         // __builtin_prefetch(t_args.dst);
       }
-    } else if (do_flush){
-      for(int i=0; i<xfer_size; i+=64){
-        _mm_clflush((const void*) t_args.dst + i);
-      }
     }
     bMnp2[i] = sampleCoderdtsc();
 
@@ -2701,8 +2698,10 @@ int main(){
     PRINT("ChaseOnDst L3" );
     ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, 2, true);
 
-    // PRINT("\n");
+    PRINT("\n");
     // PRINT
+    PRINT("ChaseOnDst CC" );
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, 1, tflags, CACHE_LINE_SIZE, NULL, false);
 
 
     return;
