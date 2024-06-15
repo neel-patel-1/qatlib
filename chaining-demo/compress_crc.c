@@ -2800,7 +2800,6 @@ int main(){
     int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
 
-    int scheduler_prefetch = false;
 
     // for(int cLevel = 0; cLevel <= 2; cLevel++){
     int cLevel = 0;
@@ -2812,6 +2811,7 @@ int main(){
     int reuse_distance = L1SIZE;
     int do_flush = 0;
     bool specClevel = false;
+    int scheduler_prefetch = false;
 
     // PRINT("Blocking-ReuseDistance: 0 ");
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
@@ -2823,16 +2823,34 @@ int main(){
     //   chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
     // }
 
-    chase_on_dst = 1; /* yielder reads dst */
+    /* pointer chase in l1 baseline */
+    PRINT("L1-Baseline %d ", 0);
+    int num_requests = 1000;
+    uint64_t st_times[num_requests], end_times[num_requests], run_times[num_requests],  avg;
+    void **pChase = malloc(xfer_size);
+    void **src = create_random_chain_starting_at(xfer_size, pChase);
+    memcpy((uint8_t *)pChase, (uint8_t *)src, xfer_size);
 
+    for(int i=0; i<num_requests; i++){
+      st_times[i] = sampleCoderdtsc();
+      chase_pointers(pChase, xfer_size / 64);
+      end_times[i] = sampleCoderdtsc();
+    }
+    avg_samples_from_arrays(run_times, avg, end_times, st_times, num_requests);
+    PRINT("L1-Baseline: %ld\n", avg);
+
+    chase_on_dst = 1; /* yielder reads dst */
+    scheduler_prefetch = false;
+    specClevel = false;
     for(int i=0; f_acc_size[i] >0 ; i++){
-      PRINT("AxOutput-FillerAxSeparate-ReuseDistance: %d ", f_acc_size[i]);
+      PRINT("AxOutput-LLCBaseline-ReuseDistance: %d ", f_acc_size[i]);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
+      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
     }
 
+    scheduler_prefetch = true;
     for(int i=0; f_acc_size[i] >0 ; i++){
-      PRINT("AxOutput-FillerAxOverlap-ReuseDistance: %d ", f_acc_size[i]);
+      PRINT("AxOutput-L1Prefetch-ReuseDistance: %d ", f_acc_size[i]);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
       chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
     }
