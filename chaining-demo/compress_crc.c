@@ -2290,6 +2290,111 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
 }
 
+void block_offload_request_ts (fcontext_transfer_t arg) {
+    time_preempt_args_t *r_arg = (time_preempt_args_t *)(arg.data);
+    int idx = r_arg->idx;
+    uint64_t *ts2 = r_arg->ts2;
+    uint64_t *ts3 = r_arg->ts3;
+    uint64_t *ts4 = r_arg->ts4;
+    uint64_t *ts5 = r_arg->ts5;
+    uint64_t *ts6 = r_arg->ts6;
+    uint64_t *ts12 = r_arg->ts12;
+    uint64_t *ts13 = r_arg->ts13;
+    uint64_t *ts14 = r_arg->ts14;
+    int memSize = r_arg->src_size ;
+    int numAccesses = memSize / 64;
+    int flags = r_arg->test_flags;
+    int chase_on_dst = r_arg->pollute_llc_way;
+    int cLevel = r_arg->cLevel;
+    bool specClevel = r_arg->specClevel;
+    bool doFlush = r_arg->flush_ax_out;
+
+
+  /* made it to the offload context */
+
+
+    fcontext_t parent = arg.prev_context;
+    ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
+    void **src;
+    void **dst = (void **)malloc(memSize);
+    void **ifArray = malloc(memSize);
+    /* prefault the pages */
+    for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
+      ((uint8_t*)(dst))[i] = 0;
+    }
+    src = create_random_chain_starting_at(memSize, ifArray);
+
+    struct task *tsk = acctest_alloc_task(dsa);
+
+    /*finished all app work */
+    ts4[idx] = sampleCoderdtsc();
+
+    if(chase_on_dst){
+      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | flags);
+    } else {
+      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags);
+      if(!chase_on_dst){
+        memcpy((uint8_t *)ifArray, (uint8_t *)src, memSize);
+      }
+    }
+    r_arg->dst = (uint8_t *)ifArray;
+
+    r_arg->signal = tsk->comp;
+    r_arg->tsk = tsk;
+
+
+
+    /* about to submit */
+    ts5[idx] = sampleCoderdtsc();
+
+    acctest_desc_submit(dsa, tsk->desc);
+    while(tsk->comp->status == 0){
+      _mm_pause();
+    }
+    ts6[idx] = sampleCoderdtsc();
+    /* made it back to the offload context to perform some post processing */
+
+    /* Preform buffer movement as dictated */
+    if(specClevel != false){
+      if(doFlush == true ){
+        for(int i=0; i<memSize; i+=64){
+          _mm_clflush((const void *)ifArray + i);
+        }
+        cLevel = cLevel * -1;
+      }
+
+      switch(cLevel){
+        case 0:
+          for(int i=0; i<memSize; i+=64){
+            _mm_prefetch((const void *)ifArray + i, _MM_HINT_T0);
+          }
+          break;
+        case 1:
+          for(int i=0; i<memSize; i+=64){
+            _mm_prefetch((const void *)ifArray + i, _MM_HINT_T1);
+          }
+          break;
+        case 2:
+          for(int i=0; i<memSize; i+=64){
+            _mm_prefetch((const void *)ifArray + i, _MM_HINT_T2);
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    ts12[idx] = sampleCoderdtsc();
+
+    /* perform post-processing */
+    chase_pointers(ifArray, numAccesses);
+
+    /* returning control to the scheduler */
+    ts14[idx] = sampleCoderdtsc();
+    fcontext_swap(parent, NULL);
+
+}
+
 int filler_thread_cycle_estimate_ts(){
   int num_requests = 100000;
   time_preempt_args_t t_args;
@@ -2423,7 +2528,8 @@ int ax_output_pat_interference(
   uint64_t filler_access_size,
   int cLevel,
   bool specClevel,
-  bool pollute_concurrent)
+  bool pollute_concurrent,
+  bool blocking)
 {
   int num_requests = 100;
   time_preempt_args_t t_args;
@@ -2498,7 +2604,11 @@ int ax_output_pat_interference(
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
     ts0[i] = sampleCoderdtsc();
-    fcontext_state_t *child = fcontext_create(yield_offload_request_ts);
+    fcontext_state_t *child;
+
+    if(!blocking){
+
+    child = fcontext_create(yield_offload_request_ts);
     ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
     fcontext_state_t *filler = fcontext_create(filler_request_ts);
 
@@ -2528,6 +2638,13 @@ int ax_output_pat_interference(
     fcontext_destroy(filler);
     ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
     fcontext_destroy(child);
+    } else {
+      child = fcontext_create(block_offload_request_ts);
+      fcontext_swap(child->context, &t_args);
+      fcontext_destroy(child);
+    }
+
+
     fcontext_destroy_proxy(self);
   }
 
@@ -2696,17 +2813,22 @@ int main(){
     int do_flush = 0;
     bool specClevel = false;
 
+    PRINT("Blocking-ReuseDistance: 0 ");
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, NULL, cLevel, specClevel, false, true);
 
     for(int i=0; f_acc_size[i] >0 ; i++){
       PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
     }
 
     chase_on_dst = 1; /* yielder reads dst */
 
     for(int i=0; f_acc_size[i] >0 ; i++){
       PRINT("AxOutput-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
     }
     // PRINT("ReuseDistance: %d ", reuse_distance);
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
