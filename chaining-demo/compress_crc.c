@@ -2681,7 +2681,8 @@ int main(){
 
     // PRINT("Scheduler_Prefetch " );
     // scheduler_prefetch = true;
-    for(int xfer_size = 2*1024; xfer_size <= 4096; xfer_size+=256 ){
+    // for(int xfer_size = 2*1024; xfer_size <= 4096; xfer_size+=256 ){
+    for(int xfer_size = 1024; xfer_size <= 16*1024; xfer_size*=2 ){
     PRINT("Flush_ChaseOnDst L1" );
     ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
     PRINT("ChaseOnDst L1" );
