@@ -2208,9 +2208,9 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     /* Preform buffer movement as dictated */
     if(cLevel != -1){
-      for(int i=0; i<memSize; i+=64){
-        _mm_clflush((const void *)ifArray + i);
-      }
+      // for(int i=0; i<memSize; i+=64){
+      //   _mm_clflush((const void *)ifArray + i);
+      // }
       switch(cLevel){
         case 0:
           for(int i=0; i<memSize; i+=64){
@@ -2638,15 +2638,11 @@ int main(){
     int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
 
-    int cLevel = 5;
     int scheduler_prefetch = false;
-    PRINT("L2_Access ");
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[0], cLevel);
-
-
-    PRINT("DRAM_ACCESS ");
-    do_flush = 1;
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[0]);
+    for(int cLevel = 0; cLevel <= 2; cLevel++){
+      PRINT("L%d_Access ", cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[cLevel], cLevel);
+    }
 
   acctest_free_task(dsa);
   acctest_free(dsa);
