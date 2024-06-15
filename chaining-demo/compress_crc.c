@@ -2397,7 +2397,7 @@ int ax_output_pat_interference(
   int cLevel,
   bool specClevel)
 {
-  int num_requests = 1000;
+  int num_requests = 100;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2643,12 +2643,7 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-  enum acc_pattern pat = GATHER;
-    int xfer_size = 32 * 1024;
-    int do_flush = 0;
-    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-
-    bool post_proc_payload = false;
+      enum acc_pattern pat = GATHER;
     #define CACHE_LINE_SIZE 64
     #define L1SIZE 48 * 1024
     #define L2SIZE 2 * 1024 * 1024
@@ -2662,42 +2657,33 @@ int main(){
     int scheduler_prefetch = false;
 
     // for(int cLevel = 0; cLevel <= 2; cLevel++){
-    int chase_on_dst = 0; /* yielder reads dst */
     int cLevel = 0;
-    bool specClevel = true;
 
-    // PRINT("L1 " );
-    // ax_output_pat_interference(pat,
-    //   xfer_size,
-    //   scheduler_prefetch,
-    //   do_flush,
-    //   chase_on_dst,
-    //   tflags,
-    //   CACHE_LINE_SIZE,
-    //   cLevel,
-    //   specClevel);
+    int xfer_size = 1024 * 1024;
+    int chase_on_dst = 0; /* yielder reads dst */
+    tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
 
+    int reuse_distance = L3FULLSIZE;
+    int do_flush = 0;
+    bool specClevel = false;
 
+    PRINT("ReuseDistance: %d ", reuse_distance);
+    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
 
-    // PRINT("Scheduler_Prefetch " );
-    // scheduler_prefetch = true;
-    // for(int xfer_size = 2*1024; xfer_size <= 4096; xfer_size+=256 ){
-    for(int xfer_size = 1024; xfer_size <= 16*1024; xfer_size*=2 ){
-    PRINT("Flush_ChaseOnDst L1" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    PRINT("ChaseOnDst L1" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    PRINT("Flush_ChaseOnDst L2" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 1, true);
-    PRINT("ChaseOnDst L2" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 1, true);
-    PRINT("Flush_ChaseOnDst L3" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 2, true);
-    PRINT("ChaseOnDst L3" );
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 2, true);
+    // PRINT("Flush_ChaseOnDst L1" );
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
+    // PRINT("ChaseOnDst L1" );
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 0, true);
+    // PRINT("Flush_ChaseOnDst L2" );
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 1, true);
+    // PRINT("ChaseOnDst L2" );
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 1, true);
+    // PRINT("Flush_ChaseOnDst L3" );
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 2, true);
+    // PRINT("ChaseOnDst L3" );
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 2, true);
 
-    PRINT("\n");
-    }
+    // PRINT("\n");
 
 
     return;
