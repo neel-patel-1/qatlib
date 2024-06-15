@@ -2573,13 +2573,14 @@ int main(){
     tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
 
     bool post_proc_payload = false;
+    #define CACHE_LINE_SIZE 64
     #define L1SIZE 48 * 1024
     #define L2SIZE 2 * 1024 * 1024
     #define L3WAYSIZE 2621440ULL
     #define L3FULLSIZE 39321600ULL
 
     // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    int f_acc_size[4] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+    int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
     // if filler_check_preempt -- limits
     // for(int i=0; i<4; i++){
@@ -2587,9 +2588,11 @@ int main(){
     //   ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
     // }
 
-    chase_on_dst = 1; /* chase on dst output*/
-    for(int i=L3WAYSIZE; i<=L3WAYSIZE*15; i+=L3WAYSIZE){
-      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, i);
+    for(int i=0; i<5; i++){
+      chase_on_dst = 0; /* chase on src output*/
+      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
+      chase_on_dst = 1; /* chase on dst output*/
+      ax_output_pat_interference(pat, xfer_size, do_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[i]);
     }
 
   acctest_free_task(dsa);
