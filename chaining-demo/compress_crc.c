@@ -2489,6 +2489,8 @@ int ax_output_pat_interference(
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
   /* print bytes */
+  avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
+  PRINT("RequestOnCPUPostProcessing: %ld ", avg);
   PRINT("FillerBytesAccessed: %d ", chainSize);
   PRINT("RequestorBytesAccessed: %d ", xfer_size);
   // avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
@@ -2513,12 +2515,12 @@ int ax_output_pat_interference(
   // PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts12, ts11, num_requests);
   // PRINT("ContextSwitchToResumeRequest: %ld\n", avg);
-  avg_samples_from_arrays(run_times,avg, ts14, ts12, num_requests);
-  PRINT("RequestOnCPUPostProcessing: %ld \n", avg);
+
   // avg_samples_from_arrays(run_times,avg, ts15, ts14, num_requests);
   // PRINT("ContextSwitchIntoScheduler: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts16, ts15, num_requests);
   // PRINT("Destroy_a_request_processing_context: %ld\n", avg);
+  PRINT("\n");
   free(t_args.ts0);
   free(t_args.ts1);
   free(t_args.ts2);
@@ -2640,15 +2642,25 @@ int main(){
     /* but how much damage can the filler even do if we preempt it*/
 
     int scheduler_prefetch = false;
-    chase_on_dst = 1;
+
     for(int cLevel = 0; cLevel <= 2; cLevel++){
-      PRINT("_MMHINT_T%d ", cLevel);
+      PRINT("Precached MMHINT_T%d ", cLevel);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
     }
 
     for(int cLevel = 0; cLevel >= -3; cLevel--){
-      PRINT("_MMHINT_T%d ", cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, L1SIZE, cLevel);
+      PRINT("Precached_Flush MMHINT_T%d ", -cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+    }
+    chase_on_dst = 1;
+    for(int cLevel = 0; cLevel <= 2; cLevel++){
+      PRINT("AxOutput MMHINT_T%d ", cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+    }
+
+    for(int cLevel = 0; cLevel >= -3; cLevel--){
+      PRINT("AxOutput_Flush MMHINT_T%d ", -cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
     }
 
   acctest_free_task(dsa);
