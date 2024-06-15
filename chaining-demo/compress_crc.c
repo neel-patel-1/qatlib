@@ -2626,7 +2626,7 @@ int ax_output_pat_interference(
     if(scheduler_prefetch){
       // int num_sw_stride_fetches = xfer_size / 16;
       // int num_sw_stride_fetche_bytes = num_sw_stride_fetches * 64;
-      for(int i=0; i<xfer_size / 2; i+=64){
+      for(int i=0; i<xfer_size / 4; i+=64){
         __builtin_prefetch((const void*) t_args.dst + i);
         // _mm_clflush((const void*) t_args.dst + i);
         // __builtin_prefetch(t_args.dst);
