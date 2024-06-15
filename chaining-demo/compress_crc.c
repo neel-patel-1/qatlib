@@ -2640,6 +2640,7 @@ int main(){
     /* but how much damage can the filler even do if we preempt it*/
 
     int scheduler_prefetch = false;
+    chase_on_dst = 1;
     for(int cLevel = 0; cLevel <= 2; cLevel++){
       PRINT("_MMHINT_T%d ", cLevel);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
