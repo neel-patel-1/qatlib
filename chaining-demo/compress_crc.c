@@ -2813,22 +2813,28 @@ int main(){
     int do_flush = 0;
     bool specClevel = false;
 
-    PRINT("Blocking-ReuseDistance: 0 ");
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, NULL, cLevel, specClevel, false, true);
+    // PRINT("Blocking-ReuseDistance: 0 ");
+    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+    //   chase_on_dst, tflags, NULL, cLevel, specClevel, false, true);
 
-    for(int i=0; f_acc_size[i] >0 ; i++){
-      PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
-    }
+    // for(int i=0; f_acc_size[i] >0 ; i++){
+    //   PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
+    //   ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+    //   chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
+    // }
 
     chase_on_dst = 1; /* yielder reads dst */
 
     for(int i=0; f_acc_size[i] >0 ; i++){
-      PRINT("AxOutput-ReuseDistance: %d ", f_acc_size[i]);
+      PRINT("AxOutput-FillerAxSeparate-ReuseDistance: %d ", f_acc_size[i]);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
       chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
+    }
+
+    for(int i=0; f_acc_size[i] >0 ; i++){
+      PRINT("AxOutput-FillerAxOverlap-ReuseDistance: %d ", f_acc_size[i]);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, true, false);
     }
     // PRINT("ReuseDistance: %d ", reuse_distance);
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
