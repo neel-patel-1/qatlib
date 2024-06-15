@@ -2208,9 +2208,13 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
 
     /* Preform buffer movement as dictated */
     if(cLevel != -1){
-      // for(int i=0; i<memSize; i+=64){
-      //   _mm_clflush((const void *)ifArray + i);
-      // }
+      if(cLevel < 0){
+        for(int i=0; i<memSize; i+=64){
+          _mm_clflush((const void *)ifArray + i);
+        }
+        cLevel = cLevel * -1;
+      }
+
       switch(cLevel){
         case 0:
           for(int i=0; i<memSize; i+=64){
@@ -2228,9 +2232,6 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
           }
           break;
         default:
-          for(int i=0; i<memSize; i+=64){
-            __builtin_prefetch((const void *)ifArray + i);
-          }
           break;
       }
     }
@@ -2640,8 +2641,13 @@ int main(){
 
     int scheduler_prefetch = false;
     for(int cLevel = 0; cLevel <= 2; cLevel++){
-      PRINT("L%d_Access ", cLevel);
-      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, f_acc_size[cLevel], cLevel);
+      PRINT("_MMHINT_T%d ", cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, CACHE_LINE_SIZE, cLevel);
+    }
+
+    for(int cLevel = 0; cLevel >= -3; cLevel--){
+      PRINT("_MMHINT_T%d ", cLevel);
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, L1SIZE, cLevel);
     }
 
   acctest_free_task(dsa);
