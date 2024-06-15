@@ -2214,7 +2214,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     ts3[idx] = sampleCoderdtsc(); /* second time to reduce ctx overhead*/
     void **src;
     void **dst = (void **)malloc(memSize);
-    void **ifArray = create_random_chain(memSize);
+    void **ifArray = malloc(memSize);
     /* prefault the pages */
     for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
       ((uint8_t*)(dst))[i] = 0;
@@ -2230,11 +2230,16 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
       prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | flags);
     } else {
       prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)dst, IDXD_OP_FLAG_BOF | flags);
+      if(!chase_on_dst){
+        memcpy((uint8_t *)ifArray, (uint8_t *)src, memSize);
+      }
     }
     r_arg->dst = (uint8_t *)ifArray;
 
     r_arg->signal = tsk->comp;
     r_arg->tsk = tsk;
+
+
 
     /* about to submit */
     ts5[idx] = sampleCoderdtsc();
@@ -2273,6 +2278,7 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
           break;
       }
     }
+
     ts12[idx] = sampleCoderdtsc();
 
     /* perform post-processing */
