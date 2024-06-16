@@ -2875,26 +2875,26 @@ int main(){
     for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
 
       /* Baseline access */
-      // PRINT("Baseline: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
-      // uint64_t start_times[num_requests],
-      //   end_times[num_requests],
-      //   run_times[num_requests],
-      //   avg;
-      // void ** dst = malloc(f_acc_size[i]);
-      // void ** src = create_random_chain_starting_at(f_acc_size[i], dst);
-      // memcpy(dst, src, f_acc_size[i]);
-      // for(int j=0; j<num_requests; j++){
-      //   uint64_t start, end;
-      //   start = sampleCoderdtsc();
-      //   do_access_pattern(pat, dst, f_acc_size[i]);
-      //   end = sampleCoderdtsc();
-      //   start_times[j] = start;
-      //   end_times[j] = end;
-      // }
-      // avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
-      // PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
-      // free(dst);
-      // free(src);
+      PRINT("Baseline: %d Pattern: %s ",i, pattern_str(pat));
+      uint64_t start_times[num_requests],
+        end_times[num_requests],
+        run_times[num_requests],
+        avg;
+      void ** dst = malloc(f_acc_size[i]);
+      void ** src = create_random_chain_starting_at(i, dst);
+      memcpy(dst, src,i);
+      for(int j=0; j<num_requests; j++){
+        uint64_t start, end;
+        start = sampleCoderdtsc();
+        do_access_pattern(pat, dst,i);
+        end = sampleCoderdtsc();
+        start_times[j] = start;
+        end_times[j] = end;
+      }
+      avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
+      PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+      free(dst);
+      free(src);
 
       /* prefetched */
       PRINT("AxOutput-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
