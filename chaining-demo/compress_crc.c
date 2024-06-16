@@ -2566,7 +2566,7 @@ int ax_output_pat_interference(
   bool pollute_concurrent,
   bool blocking)
 {
-  int num_requests = 1000;
+  int num_requests = 100;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2688,7 +2688,7 @@ int ax_output_pat_interference(
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
   /* print bytes */
-  avg_samples_from_arrays(run_times,avg, ts14, ts13, num_requests);
+  avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld ", avg);
   avg_samples_from_arrays(run_times,avg, bMnp2, bMnp, num_requests);
   PRINT("AddedPrefetchingTime: %ld ", avg);
@@ -2844,7 +2844,7 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  int num_requests = 10000;
+  int num_requests = 100;
   #define CACHE_LINE_SIZE 64
   #define L1SIZE 48 * 1024
   #define L2SIZE 2 * 1024 * 1024
@@ -2852,7 +2852,7 @@ int main(){
   #define L3FULLSIZE 39321600ULL
 
   // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-  int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+  int f_acc_size[5] = {2 * 1024, L1SIZE, L2SIZE, L3FULLSIZE};
   /* but how much damage can the filler even do if we preempt it*/
 
 
