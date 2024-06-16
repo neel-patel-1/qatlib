@@ -2871,7 +2871,7 @@ int main(){
 
   enum acc_pattern pat = RANDOM;
   scheduler_prefetch = true;
-  for(enum acc_pattern pat = RANDOM; pat <=RANDOM; pat++){
+  for(enum acc_pattern pat = LINEAR; pat <=LINEAR; pat++){
     for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
 
       /* Baseline access */
@@ -2880,7 +2880,7 @@ int main(){
         end_times[num_requests],
         run_times[num_requests],
         avg;
-      void ** dst = malloc(f_acc_size[i]);
+      void ** dst = malloc(i);
       void ** src = create_random_chain_starting_at(i, dst);
       memcpy(dst, src,i);
       for(int j=0; j<num_requests; j++){
