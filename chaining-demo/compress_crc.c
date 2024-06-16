@@ -2566,7 +2566,7 @@ int ax_output_pat_interference(
   bool pollute_concurrent,
   bool blocking)
 {
-  int num_requests = 100;
+  int num_requests = 1000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2844,7 +2844,7 @@ int main(){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  int num_requests = 100;
+  int num_requests = 1000;
   #define CACHE_LINE_SIZE 64
   #define L1SIZE 48 * 1024
   #define L2SIZE 2 * 1024 * 1024
@@ -2871,37 +2871,37 @@ int main(){
 
   enum acc_pattern pat = RANDOM;
   scheduler_prefetch = true;
-  for(enum acc_pattern pat = LINEAR; pat < GATHER; pat++){
-    for(int i=0; f_acc_size[i] >0 ; i++){
+  for(enum acc_pattern pat = RANDOM; pat <=RANDOM; pat++){
+    for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
 
       /* Baseline access */
-      PRINT("Baseline: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
-      uint64_t start_times[num_requests],
-        end_times[num_requests],
-        run_times[num_requests],
-        avg;
-      void ** dst = malloc(f_acc_size[i]);
-      void ** src = create_random_chain_starting_at(f_acc_size[i], dst);
-      memcpy(dst, src, f_acc_size[i]);
-      for(int j=0; j<num_requests; j++){
-        uint64_t start, end;
-        start = sampleCoderdtsc();
-        do_access_pattern(pat, dst, f_acc_size[i]);
-        end = sampleCoderdtsc();
-        start_times[j] = start;
-        end_times[j] = end;
-      }
-      avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
-      PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
-      free(dst);
-      free(src);
+      // PRINT("Baseline: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
+      // uint64_t start_times[num_requests],
+      //   end_times[num_requests],
+      //   run_times[num_requests],
+      //   avg;
+      // void ** dst = malloc(f_acc_size[i]);
+      // void ** src = create_random_chain_starting_at(f_acc_size[i], dst);
+      // memcpy(dst, src, f_acc_size[i]);
+      // for(int j=0; j<num_requests; j++){
+      //   uint64_t start, end;
+      //   start = sampleCoderdtsc();
+      //   do_access_pattern(pat, dst, f_acc_size[i]);
+      //   end = sampleCoderdtsc();
+      //   start_times[j] = start;
+      //   end_times[j] = end;
+      // }
+      // avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
+      // PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+      // free(dst);
+      // free(src);
 
       /* prefetched */
-      PRINT("AxOutput-Prefetch: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
-      ax_output_pat_interference(pat, f_acc_size[i], true, do_flush,
+      PRINT("AxOutput-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
+      ax_output_pat_interference(pat, i, true, do_flush,
       chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
-      PRINT("AxOutput-LLC: %d Pattern: %s ", f_acc_size[i], pattern_str(pat));
-      ax_output_pat_interference(pat, f_acc_size[i], false, do_flush,
+      PRINT("AxOutput-LLC: %d Pattern: %s ", i, pattern_str(pat));
+      ax_output_pat_interference(pat, i, false, do_flush,
       chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
     }
   }
