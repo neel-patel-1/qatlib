@@ -2871,7 +2871,7 @@ int main(){
 
   enum acc_pattern pat = RANDOM;
   scheduler_prefetch = true;
-  for(enum acc_pattern pat = LINEAR; pat <=LINEAR; pat++){
+  for(enum acc_pattern pat = LINEAR; pat <=RANDOM; pat++){
     for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
 
       /* Baseline access */
