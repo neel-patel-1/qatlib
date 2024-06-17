@@ -1,19 +1,24 @@
 #!/bin/bash
 
 
-file=prefetch_overhead${pattern}.log
+file=prefetch_overhead.log
 make -j
 sudo taskset -c 30  ./compress_crc   | tee $file
 
-
-pattern=LINEAR
-grep $pattern $file | grep -e Baseline | awk '{printf("%s %s\n", $2, $6); }' | tee baseline_rand${pattern}.log
-grep $pattern $file | grep -e AxOutput-LLC | awk '{printf( "%s  \n", $8 + $6 ); }' | tee ctx_switch${pattern}.log
-grep $pattern $file | grep -e AxOutput-Prefetch | awk '{printf( "%s %s \n", $8 , $6 ); }' | tee preftch_random${pattern}.log
-paste baseline_rand${pattern}.log ctx_switch${pattern}.log preftch_random${pattern}.log | column -s $'\t' -t > parsed.txt
-
-pattern=RANDOM
-grep $pattern $file | grep -e Baseline | awk '{printf("%s %s\n", $2, $6); }' | tee baseline_rand${pattern}.log
-grep $pattern $file | grep -e AxOutput-LLC | awk '{printf( "%s  \n", $8 + $6 ); }' | tee ctx_switch${pattern}.log
-grep $pattern $file | grep -e AxOutput-Prefetch | awk '{printf( "%s %s \n", $8 , $6 ); }' | tee preftch_random${pattern}.log
-paste baseline_rand${pattern}.log ctx_switch${pattern}.log preftch_random${pattern}.log | column -s $'\t' -t >> parsed.txt
+PATTERNS=(RANDOM LINEAR)
+CONFIGS=(CPU-Baseline Blocking AxOutput-LLC AxOutput-Prefetch)
+echo | tee parsed.txt
+for pattern in ${PATTERNS[@]}; do
+    echo $pattern | tee -a parsed.txt
+    for config in ${CONFIGS[@]}; do
+      for i in $(seq 1 3); do
+        echo -n "$config " | tee -a parsed.txt
+      done
+    done
+    echo | tee -a parsed.txt
+    for config in ${CONFIGS[@]}; do
+        grep $pattern $file | grep -e $config | awk '{printf("%s %s %s\n", $2, $6, $8); }' | tee ${config}_${pattern}.log
+    done
+    # paste Baseline_${pattern}.log AxOutput-LLC_${pattern}.log AxOutput-Prefetch_${pattern}.log | column -s $'\t' -t >> parsed.txt
+    paste $(for config in ${CONFIGS[@]}; do echo ${config}_${pattern}.log; done) | column -s $'\t' -t >> parsed.txt
+done

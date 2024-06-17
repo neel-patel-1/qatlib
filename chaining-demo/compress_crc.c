@@ -2606,6 +2606,8 @@ int ax_output_pat_interference(
 
   uint64_t *bMnp = malloc(sizeof(uint64_t) * num_requests);
   uint64_t *bMnp2 = malloc(sizeof(uint64_t) * num_requests);
+  memset(bMnp, 0, sizeof(uint64_t) * num_requests);
+  memset(bMnp2, 0, sizeof(uint64_t) * num_requests);
 
 
   fcontext_transfer_t off_req_xfer;
@@ -2873,9 +2875,10 @@ int main(){
   scheduler_prefetch = true;
   for(enum acc_pattern pat = LINEAR; pat <=RANDOM; pat++){
     for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
+    // for(int i=4*1024; i<=4*1024 ; i*=2){
 
       /* Baseline access */
-      PRINT("Baseline: %d Pattern: %s ",i, pattern_str(pat));
+      PRINT("CPU-Baseline: %d Pattern: %s ",i, pattern_str(pat));
       uint64_t start_times[num_requests],
         end_times[num_requests],
         run_times[num_requests],
@@ -2892,9 +2895,19 @@ int main(){
         end_times[j] = end;
       }
       avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
-      PRINT("RequestOnCPUPostProcessing: %ld\n", avg);
+      PRINT("RequestOnCPUPostProcessing: %ld ", avg);
+      PRINT("AddedPrefetchingTime: %ld ", 0);
+
+      PRINT("FillerBytesAccessed: %d ", f_acc_size[0]);
+      PRINT("RequestorBytesAccessed: %d ", i);
+      PRINT("\n");
+
       free(dst);
       free(src);
+
+      PRINT("Blocking-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
+      ax_output_pat_interference(pat, i, NULL, NULL,
+        chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, NULL, true);
 
       /* prefetched */
       PRINT("AxOutput-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
