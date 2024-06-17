@@ -2797,7 +2797,7 @@ int main(){
     #define L3FULLSIZE 39321600ULL
 
     // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-    int f_acc_size[5] = {CACHE_LINE_SIZE, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
+    int f_acc_size[5] = {16 * 1024, L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
     /* but how much damage can the filler even do if we preempt it*/
 
     int scheduler_prefetch = false;
@@ -2813,10 +2813,14 @@ int main(){
     int do_flush = 0;
     bool specClevel = false;
 
-    PRINT("Blocking-ReuseDistance: 0 ");
-    ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, NULL, cLevel, specClevel, false, true);
+    for(int xfer_size = 256 * 1024; xfer_size <= 2 * 1024 * 1024; xfer_size *=2){
 
+    for(int i=0; f_acc_size[i] >0 ; i++){
+      PRINT("Blocking-ReuseDistance: 0 ");
+      ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
+        chase_on_dst, tflags, NULL, cLevel, specClevel, false, true);
+    }
+    chase_on_dst = 0; /* yielder reads dst */
     for(int i=0; f_acc_size[i] >0 ; i++){
       PRINT("Precached-ReuseDistance: %d ", f_acc_size[i]);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
@@ -2829,6 +2833,7 @@ int main(){
       PRINT("AxOutput-ReuseDistance: %d ", f_acc_size[i]);
       ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
       chase_on_dst, tflags, f_acc_size[i], cLevel, specClevel, false, false);
+    }
     }
     // PRINT("ReuseDistance: %d ", reuse_distance);
     // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
