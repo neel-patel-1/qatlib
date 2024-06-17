@@ -2862,8 +2862,6 @@ int main(){
   int cLevel = 0;
 
   int xfer_size = 1024 * 1024;
-  int chase_on_dst = 0; /* yielder reads dst */
-  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
 
   int reuse_distance = L1SIZE;
   int do_flush = 0;
@@ -2871,7 +2869,36 @@ int main(){
   int scheduler_prefetch = false;
 
 
-  enum acc_pattern pat = RANDOM;
+  int post_proc_sizes[2] = {L1SIZE, L2SIZE};
+  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
+  int chase_on_dst = 0; /* yielder reads dst */
+
+  /* Post Processed Payload Size Impacts the benefits of sw prefetching */
+  /*
+  How much data should the filler be allowed to evict ? -
+    (1) have the filler check the signal while making memory accesses to implement a tight preemption interval
+      - share a buffer counter indicating how many bytes have been accessed
+      - show how many bytes a filler can access for different offload sizes
+  */
+ enum acc_pattern pat = RANDOM;
+ for(enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
+  for(int i=0; i<2; i++){
+    int post_ = post_proc_sizes[i];
+    int filler_ = L2SIZE;
+      scheduler_prefetch = false;
+      PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
+
+      PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
+      scheduler_prefetch = true;
+      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
+
+    }
+ }
+  return 0;
+
   scheduler_prefetch = true;
   for(enum acc_pattern pat = LINEAR; pat <=RANDOM; pat++){
     for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
