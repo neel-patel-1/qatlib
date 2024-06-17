@@ -2888,6 +2888,11 @@ int main(){
       PRINT("Blocking-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, NULL, NULL,
         chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true);
+
+      PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, NULL, NULL,
+        chase_on_dst, tflags, filler_, 0, true, NULL, true);
+
       scheduler_prefetch = false;
       PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
