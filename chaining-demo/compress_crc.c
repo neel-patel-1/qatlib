@@ -2330,9 +2330,10 @@ int ax_output_pat_interference(
   int cLevel,
   bool specClevel,
   bool pollute_concurrent,
-  bool blocking)
+  bool blocking,
+  int num_iterations)
 {
-  int num_requests = 1000;
+  int num_requests = num_iterations;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2648,25 +2649,33 @@ int main(){
   /* Strided should match Random eviction capability */
 enum acc_pattern pat = RANDOM;
   // for(enum acc_pattern pat = LINEAR; pat <=RANDOM; pat++){
-    for(int k=0; k<1; k++){
-      for(int i=0; i<numSizes-1 ; i++){
+    for(int k=0; k<numSizes ; k++){
+      for(int i=0; i<numSizes ; i++){
         chase_on_dst = 0;
-        PRINT("Blocking-Vulnerable: %d Pattern: %s ", f_acc_size[k], pattern_str(pat));
-        ax_output_pat_interference(pat, f_acc_size[k], NULL, NULL,
-          chase_on_dst, tflags,RANDOM, f_acc_size[i], cLevel, specClevel, NULL, true);
+        int filler_buff_size = f_acc_size[i];
+        int post_proc_buf_size = f_acc_size[k];
+        int num_requests = 1000;
+        if(post_proc_buf_size <= L2SIZE && filler_buff_size <= L2SIZE){
+          num_requests = 10000;
+        } else {
+          num_requests = 1000;
+        }
+        PRINT("Blocking-Vulnerable: %d Pattern: %s ",post_proc_buf_size, pattern_str(pat));
+        ax_output_pat_interference(pat,post_proc_buf_size, NULL, NULL,
+          chase_on_dst, tflags,RANDOM, filler_buff_size, cLevel, specClevel, NULL, true, num_requests);
 
-        PRINT("CtxSwitch-Vulnerable: %d Pattern: %s ", f_acc_size[k], pattern_str(pat));
-        ax_output_pat_interference(pat, f_acc_size[k], false, do_flush,
-        chase_on_dst, tflags,RANDOM, f_acc_size[i], cLevel, specClevel, true, false);
+        PRINT("CtxSwitch-Vulnerable: %d Pattern: %s ",post_proc_buf_size, pattern_str(pat));
+        ax_output_pat_interference(pat,post_proc_buf_size, false, do_flush,
+        chase_on_dst, tflags,RANDOM, filler_buff_size, cLevel, specClevel, true, false, num_requests);
 
         chase_on_dst = 1;
-        PRINT("Blocking-AxOutput: %d Pattern: %s ", f_acc_size[k], pattern_str(pat));
-        ax_output_pat_interference(pat, f_acc_size[k], NULL, NULL,
-          chase_on_dst, tflags,RANDOM, f_acc_size[i], cLevel, specClevel, NULL, true);
+        PRINT("Blocking-AxOutput: %d Pattern: %s ",post_proc_buf_size, pattern_str(pat));
+        ax_output_pat_interference(pat,post_proc_buf_size, NULL, NULL,
+          chase_on_dst, tflags,RANDOM, filler_buff_size, cLevel, specClevel, NULL, true, num_requests);
 
-        PRINT("CtxSwitch-AxOutput: %d Pattern: %s ", f_acc_size[k], pattern_str(pat));
-        ax_output_pat_interference(pat, f_acc_size[k], false, do_flush,
-        chase_on_dst, tflags,RANDOM, f_acc_size[i], cLevel, specClevel, true, false);
+        PRINT("CtxSwitch-AxOutput: %d Pattern: %s ",post_proc_buf_size, pattern_str(pat));
+        ax_output_pat_interference(pat,post_proc_buf_size, false, do_flush,
+        chase_on_dst, tflags,RANDOM, filler_buff_size, cLevel, specClevel, true, false, num_requests);
       }
     }
   // }
