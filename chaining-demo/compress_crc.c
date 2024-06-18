@@ -2830,15 +2830,16 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  uint32_t tflags = 0 ;
+  uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
 	int wq_id = 0;
 	int dev_id = 2;
-  int opcode = DSA_OPCODE_NOOP;
+  int opcode = DSA_OPCODE_MEMMOVE;
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
 
   int num_offload_requests = 1;
+  int len = 4096;
   dsa = acctest_init(tflags);
 
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
@@ -2851,11 +2852,18 @@ int main(){
   if(!desc || !comp){
     return -ENOMEM;
   }
+  char *src = aligned_alloc(4 * 1024, len);
+  char *dst = aligned_alloc(4 * 1024, len);
+  /* prefault */
+  for(int i=0; i<4*1024; i++){
+    src[i] = 0;
+    dst[i] = 0;
+  }
 
   memset(desc, 0, sizeof(struct hw_desc));
   memset(comp, 0, sizeof(struct completion_record));
 
-  acctest_prep_desc_common(desc, opcode, NULL, NULL, 0, dflags);
+  acctest_prep_desc_common(desc, opcode, dst, src, len, dflags);
   desc->flags |= tflags;
 
   desc->completion_addr = (uint64_t)comp;
