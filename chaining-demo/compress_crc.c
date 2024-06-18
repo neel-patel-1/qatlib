@@ -2823,12 +2823,57 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
   }
 }
 
+
+/* synthetic worker overhead. h*/
+typedef struct _synth_request_args_t {
+  uint64_t spin_cycles;
+
+} req_args_t;
+
+void yield_request_ctx(fcontext_transfer_t arg){
+  /* spin for duration in argument */
+  req_args_t *r_arg = (req_args_t *)(arg.data);
+  uint64_t start = sampleCoderdtsc();
+  uint64_t end = start + r_arg->spin_cycles;
+  while(sampleCoderdtsc() < end){
+    _mm_pause();
+  }
+  fcontext_swap(arg.prev_context, NULL);
+
+}
+
+/* How many requests can the worker process in the baseline? */
+int worker_throughput(){
+  uint64_t start = sampleCoderdtsc();
+
+  req_args_t r_args;
+  uint32_t wait_usecs = 10;
+
+  fcontext_state_t *self = fcontext_create_proxy();
+  fcontext_state_t *head = fcontext_create(yield_request_ctx);
+
+
+  r_args.spin_cycles = wait_usecs * 2100;
+  fcontext_swap(head->context, &r_args);
+
+
+
+
+  uint64_t end = sampleCoderdtsc();
+  fcontext_destroy(head);
+  fcontext_destroy_proxy(self);
+  PRINT("WorkerThroughput: %ld\n", end - start);
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  worker_throughput();
+  return 0;
 
   uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
