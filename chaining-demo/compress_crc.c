@@ -2823,7 +2823,81 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
   }
 }
 
+/* subord test */
+typedef struct subord_preftch_args{
+  void *preftch_buf;
+  int preftch_size;
+  pthread_barrier_t *barrier;
+  _Atomic int *signal;
+} subord_args;
+void * subord_prefetch(void *arg){
+  subord_args *s_args = (subord_args *)arg;
+  void *preftch_buf = s_args->preftch_buf;
+  int preftch_size = s_args->preftch_size;
+  while(*(s_args->signal) == 0){
+    /* keep prefetching until signal is sent*/
+    for(int i=0; i<preftch_size; i+=64){
+      __builtin_prefetch((const void*) preftch_buf + i);
+    }
+  }
+  pthread_barrier_wait(s_args->barrier);
+}
+typedef struct main_td_args{
+  void *preftch_buf;
+  int preftch_size;
+  pthread_barrier_t *barrier;
+} main_args;
+
+void *main_td_func(void *arg){
+  main_args *m_args = (main_args *)arg;
+  void *preftch_buf = m_args->preftch_buf;
+  int preftch_size = m_args->preftch_size;
+  pthread_barrier_t *barrier = m_args->barrier;
+  uint64_t start, end;
+  pthread_barrier_wait(barrier);
+
+  start = sampleCoderdtsc();
+  for(int i=0; i<preftch_size; i+=64){
+    /* How do we treat the buffer as cacheable and ensure accesses?*/
+    *((char *)(preftch_buf + i)) = 0;
+  }
+  end = sampleCoderdtsc();
+
+}
+
 int main(){
+  int subord = 70;
+  int main = 30;
+  int bufSize = 16 * 1024;
+  _Atomic int signal = 0;
+
+  pthread_barrier_t barrier;
+  pthread_barrier_init(&barrier, NULL, 2);
+
+  /* create buf and subord args */
+  subord_args s_args;
+  s_args.preftch_size = bufSize;
+  s_args.preftch_buf = create_random_chain(s_args.preftch_size);
+  s_args.barrier = &barrier;
+  s_args.signal = &signal;
+  pthread_t subord_thread;
+  createThreadPinned(&subord_thread, subord_prefetch, &s_args, subord);
+
+  /* create main td and args */
+  main_args m_args;
+  m_args.preftch_size = bufSize;
+  m_args.preftch_buf = create_random_chain(m_args.preftch_size);
+  m_args.barrier = &barrier;
+  pthread_t main_thread;
+  createThreadPinned(&main_thread, subord_prefetch, &m_args, main);
+
+
+  /* join */
+  pthread_join(main_thread, NULL);
+  signal = 1;
+  pthread_join(subord_thread, NULL);
+
+
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
