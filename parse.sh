@@ -6,7 +6,7 @@ make -j
 sudo taskset -c 30  ./compress_crc   | tee $file
 
 PATTERNS=(RANDOM LINEAR)
-CONFIGS=(CPU-Baseline Blocking AxOutput-LLC AxOutput-Prefetch)
+CONFIGS=(Blocking-NoPrefetch AxBuffer-NoPrefetch AxBuffer-Prefetched)
 echo | tee parsed.txt
 for pattern in ${PATTERNS[@]}; do
     echo $pattern | tee -a parsed.txt

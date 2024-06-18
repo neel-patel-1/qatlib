@@ -2871,7 +2871,7 @@ int main(){
 
   int post_proc_sizes[2] = {L1SIZE, L2SIZE};
   tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-  int chase_on_dst = 0; /* yielder reads dst */
+  int chase_on_dst = 1; /* yielder reads dst */
 
   /* Post Processed Payload Size Impacts the benefits of sw prefetching */
   /*
@@ -2889,11 +2889,11 @@ int main(){
       ax_output_pat_interference(pat, post_, NULL, NULL,
         chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true);
       scheduler_prefetch = false;
-      PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
+      PRINT("AxBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
       chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
 
-      PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
+      PRINT("AxBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
       scheduler_prefetch = true;
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
         chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
