@@ -2830,10 +2830,11 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  int tflags = TEST_FLAGS_BOF;
+  uint32_t tflags = 0 ;
+  uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
 	int wq_id = 0;
 	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
+  int opcode = DSA_OPCODE_NOOP;
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
 
@@ -2844,7 +2845,40 @@ int main(){
   if (rc < 0)
     return -ENOMEM;
 
-  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+  struct hw_desc *desc = malloc(sizeof(struct hw_desc));
+  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
+
+  if(!desc || !comp){
+    return -ENOMEM;
+  }
+
+  memset(desc, 0, sizeof(struct hw_desc));
+  memset(comp, 0, sizeof(struct completion_record));
+
+  acctest_prep_desc_common(desc, opcode, NULL, NULL, 0, dflags);
+  desc->flags |= tflags;
+
+  desc->completion_addr = (uint64_t)comp;
+  comp->status = 0;
+
+  while (enqcmd(dsa->wq_reg, (void *)desc)){
+    _mm_pause();}
+
+  while (comp->status == 0){
+    _mm_pause();
+  }
+
+  rc = comp->status;
+  if(rc != DSA_COMP_SUCCESS){
+    PRINT_ERR("Offload Failed: 0x%x\n", rc);
+  }
+
+  return 0;
+
+  /* We need tasks to submit and yield */
+  /* we use noop */
+
+
 
   int num_requests = 1000;
   #define CACHE_LINE_SIZE 64
