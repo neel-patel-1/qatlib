@@ -2827,16 +2827,66 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
 /* synthetic worker overhead. h*/
 typedef struct _synth_request_args_t {
   uint64_t spin_cycles;
-
+  uint64_t completion_addr;
 } req_args_t;
+
+static inline struct completion_record *memcpy_nonblocking(int len){
+  int opcode = DSA_OPCODE_MEMMOVE;
+  uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  struct hw_desc *desc = malloc(sizeof(struct hw_desc));
+  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
+  char *src = aligned_alloc(4 * 1024, len);
+  char *dst = aligned_alloc(4 * 1024, len);
+  /* prefault */
+  for(int i=0; i<len; i++){
+    src[i] = 0;
+    dst[i] = 0;
+  }
+  memset(desc, 0, sizeof(struct hw_desc));
+  memset(comp, 0, sizeof(struct completion_record));
+
+  acctest_prep_desc_common(desc, opcode, dst, src, len, dflags);
+  desc->flags |= tflags;
+
+  desc->completion_addr = (uint64_t)comp;
+  comp->status = 0;
+
+  if(!desc || !comp){
+    return -ENOMEM;
+  }
+  while (enqcmd(dsa->wq_reg, (void *)desc)){
+    _mm_pause();}
+
+  return comp;
+}
 
 void yield_request_ctx(fcontext_transfer_t arg){
   /* spin for duration in argument */
   req_args_t *r_arg = (req_args_t *)(arg.data);
   uint64_t start = sampleCoderdtsc();
   uint64_t end = start + r_arg->spin_cycles;
+  int len = 4096;
+  int rc;
+
+  PRINT("YieldRequestCtx: %ld %ld %ld\n", start, end, r_arg->spin_cycles);
+
+  uint64_t compAddr;
+  struct completion_record *comp;
+
   while(sampleCoderdtsc() < end){
     _mm_pause();
+  }
+
+  comp = memcpy_nonblocking(len);
+  compAddr = (uint64_t)comp;
+  r_arg->completion_addr = compAddr;
+
+  fcontext_swap(arg.prev_context, NULL);
+
+  rc = comp->status;
+  if(rc != DSA_COMP_SUCCESS){
+    PRINT_ERR("Offload Failed: 0x%x\n", rc);
   }
   fcontext_swap(arg.prev_context, NULL);
 
@@ -2846,17 +2896,30 @@ void yield_request_ctx(fcontext_transfer_t arg){
 int worker_throughput(){
   uint64_t start = sampleCoderdtsc();
 
-  req_args_t r_args;
-  uint32_t wait_usecs = 10;
-
+  uint64_t wait_usecs = 10;
   fcontext_state_t *self = fcontext_create_proxy();
   fcontext_state_t *head = fcontext_create(yield_request_ctx);
 
+  /*fst*/
+  fcontext_transfer_t ctx_xfer;
 
-  r_args.spin_cycles = wait_usecs * 2100;
-  fcontext_swap(head->context, &r_args);
+  /*snd*/
+  fcontext_t  *off_req_ctx = malloc(sizeof(fcontext_t));
+  req_args_t *r_args = malloc(sizeof(req_args_t));
 
 
+  r_args->spin_cycles = wait_usecs * 2100;
+  ctx_xfer = fcontext_swap(head->context, r_args);
+
+  struct completion_record *comp;
+  comp = (struct completion_record *)(r_args->completion_addr);
+
+  while(comp->status == 0){
+    _mm_pause();
+  }
+
+  /* from task queue */
+  fcontext_swap(ctx_xfer.prev_context, &r_args);
 
 
   uint64_t end = sampleCoderdtsc();
@@ -2872,54 +2935,24 @@ int main(){
   CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
   CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-  worker_throughput();
-  return 0;
-
-  uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+  uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
+
 	int wq_id = 0;
 	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
 
-  int num_offload_requests = 1;
-  int len = 4096;
+
   dsa = acctest_init(tflags);
 
   rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
   if (rc < 0)
     return -ENOMEM;
 
-  struct hw_desc *desc = malloc(sizeof(struct hw_desc));
-  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
 
-  if(!desc || !comp){
-    return -ENOMEM;
-  }
-  char *src = aligned_alloc(4 * 1024, len);
-  char *dst = aligned_alloc(4 * 1024, len);
-  /* prefault */
-  for(int i=0; i<4*1024; i++){
-    src[i] = 0;
-    dst[i] = 0;
-  }
-
-  memset(desc, 0, sizeof(struct hw_desc));
-  memset(comp, 0, sizeof(struct completion_record));
-
-  acctest_prep_desc_common(desc, opcode, dst, src, len, dflags);
-  desc->flags |= tflags;
-
-  desc->completion_addr = (uint64_t)comp;
-  comp->status = 0;
-
-  while (enqcmd(dsa->wq_reg, (void *)desc)){
-    _mm_pause();}
-
-  while (comp->status == 0){
-    _mm_pause();
-  }
+  worker_throughput();
+  return 0;
 
   rc = comp->status;
   if(rc != DSA_COMP_SUCCESS){
