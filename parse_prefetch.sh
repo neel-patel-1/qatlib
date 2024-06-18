@@ -6,7 +6,7 @@ make -j
 sudo taskset -c 30  ./compress_crc   | tee $file
 
 PATTERNS=(RANDOM LINEAR)
-CONFIGS=(Blocking-NoPrefetch AxBuffer-NoPrefetch AxBuffer-Prefetched)
+CONFIGS=(Blocking-Prefetch Blocking-NoPrefetch AxBuffer-NoPrefetch AxBuffer-Prefetched)
 echo | tee parsed.txt
 # for pattern in ${PATTERNS[@]}; do
 echo "config pattern hostbufsize prefetch_overhead req_process_cycles"

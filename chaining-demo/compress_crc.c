@@ -2885,13 +2885,19 @@ int main(){
   for(int i=0; i<2; i++){
     int post_ = post_proc_sizes[i];
     int filler_ = L2SIZE;
-      PRINT("Blocking-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true);
+
       scheduler_prefetch = false;
       PRINT("AxBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
       chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
+
+      PRINT("Blocking-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, NULL, NULL,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true);
+
+      PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, NULL, NULL,
+        chase_on_dst, tflags, filler_, 0, true, NULL, true);
 
       PRINT("AxBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
       scheduler_prefetch = true;
