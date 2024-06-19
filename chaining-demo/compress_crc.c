@@ -2975,14 +2975,17 @@ int worker_throughput(){
 }
 
 void worker(){
-
+  /* Issue*/
 }
 
 void dispatcher_cr_iterate_and_reenqueue(){
   /* */
   struct completion_record *comps;
   struct completion_record *next_expected_comp;
+
   fcontext_t *paused_jobs;
+  fcontext_t next_ctx;
+
   uint64_t st_useful;
   uint64_t end_useful;
   int num_comps_per_worker = 256;
@@ -2993,6 +2996,13 @@ void dispatcher_cr_iterate_and_reenqueue(){
 
   next_expected_comp = comps;
 
+  req_args_t *r_args = malloc(sizeof(req_args_t));
+  r_args->spin_cycles = 10 * 2100;
+  r_args->completion_addr = next_expected_comp;
+  next_ctx = fcontext_create(yield_request_ctx)->context;
+  paused_jobs[0] = fcontext_swap(next_ctx, r_args).prev_context;
+
+
   st_useful = sampleCoderdtsc();
   while(next_expected_comp->status == 0){
     _mm_pause();
@@ -3000,6 +3010,7 @@ void dispatcher_cr_iterate_and_reenqueue(){
   end_useful = sampleCoderdtsc();
 
   /*post process*/
+  next_expected_comp ++;
   PRINT("UsefulWork: %ld\n", end_useful - st_useful);
 
   /* if we minimize slos by stopping work every time a comp is received*/
@@ -3029,7 +3040,7 @@ int main(){
     return -ENOMEM;
 
 
-  worker_throughput();
+  dispatcher_cr_iterate_and_reenqueue();
   return 0;
 
   rc = comp->status;
