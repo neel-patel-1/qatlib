@@ -2839,26 +2839,25 @@ static inline struct completion_record *memcpy_nonblocking(int len, uint64_t com
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   struct hw_desc *desc = malloc(sizeof(struct hw_desc));
-  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
   char *src = aligned_alloc(4 * 1024, len);
   char *dst = aligned_alloc(4 * 1024, len);
+  if(!desc || !src || !dst){
+    return -ENOMEM;
+  }
   /* prefault */
   for(int i=0; i<len; i++){
     src[i] = 0;
     dst[i] = 0;
   }
   memset(desc, 0, sizeof(struct hw_desc));
-  memset(comp, 0, sizeof(struct completion_record));
+  memset((void *)compAddr, 0, sizeof(struct completion_record));
 
   acctest_prep_desc_common(desc, opcode, dst, src, len, dflags);
   desc->flags |= tflags;
+  desc->completion_addr = compAddr;
+  PRINT("0x%x\n", desc->completion_addr);
 
-  desc->completion_addr = (uint64_t)comp;
-  comp->status = 0;
 
-  if(!desc || !comp){
-    return -ENOMEM;
-  }
   while (enqcmd(dsa->wq_reg, (void *)desc)){
     _mm_pause();}
 
@@ -2875,7 +2874,6 @@ void yield_request_ctx(fcontext_transfer_t arg){
   int len = 32 * 1024;
   int rc;
 
-  PRINT("YieldRequestCtx: %ld %ld %ld\n", start, end, r_arg->spin_cycles);
 
   uint64_t compAddr;
   struct completion_record *comp;
@@ -2885,7 +2883,13 @@ void yield_request_ctx(fcontext_transfer_t arg){
   }
 
   compAddr = (uint64_t)r_arg->completion_addr;
+  PRINT("YieldRequestCtx: 0x%x %ld %ld %ld\n",  compAddr, start, end, r_arg->spin_cycles);
   memcpy_nonblocking(len, compAddr);
+  comp = (struct completion_record *)compAddr;
+  while(comp->status == 0){
+    _mm_pause();
+  }
+  PRINT("YieldRequestCtx: 0x%x %ld %ld %ld\n",  compAddr, start, end, r_arg->spin_cycles);
 
   fcontext_swap(arg.prev_context, NULL);
 
@@ -2897,85 +2901,6 @@ void yield_request_ctx(fcontext_transfer_t arg){
 
 }
 
-struct comp_list_node{
-  struct completion_record *comp;
-  struct comp_list_node *next;
-};
-
-typedef struct fcontext_node {
-  fcontext_t context;
-  struct fcontext_node *next;
-} ctx_node;
-
-typedef struct ready_tasks_list_t {
-  ctx_node *head;
-} ready_tasks_list;
-
-/* How many requests can the worker process in the baseline? */
-int worker_throughput(){
-  bool test_stop = false;
-  int iter = 0;
-  int num_iters = 1000;
-  uint64_t start = sampleCoderdtsc();
-
-  uint64_t wait_usecs = 10;
-
-  /* finite closed loop params */
-  int num_completions = 3;
-  int cur_completions = 0;
-
-  /*monitoring set*/
-  int num_crs = num_completions;
-  int next_free_cr = 0;
-  int first_cr_to_poll = 0; /*first iteration will check */
-  struct completion_record *mon_set = malloc(num_crs * sizeof(struct completion_record));
-
-
-  fcontext_state_t *self = fcontext_create_proxy();
-  fcontext_t next_ctx  = NULL;
-
-  /* event loop */
-  do
-  {
-    fcontext_transfer_t req_handle;
-    req_args_t *r_args = NULL;
-    if(next_ctx == NULL){ /* need a new request */
-      r_args = malloc(sizeof(req_args_t));
-      r_args->spin_cycles = wait_usecs * 2100;
-      r_args->completion_addr =&(mon_set[next_free_cr++]); /* get next free cr slot ()*/
-      next_ctx = fcontext_create(yield_request_ctx)->context;
-    }
-
-    req_handle = fcontext_swap(next_ctx, r_args);
-
-    if(r_args->completed == true){ /* this guy is fully complete */
-      cur_completions++; /* increment the cur_completions */
-    }
-
-    next_ctx = NULL;
-
-    /* poll the monset -- if we could have a ready set that automatically got set to one
-    and a task-list dequeue operation returned the task we desired according to the scheduling
-    policy*/
-    for(int i=first_cr_to_poll; i<next_free_cr - 1; i++){
-      if(mon_set[i].status != 0){
-        mon_set[i].status = 0; /* now the cr can be reused*/
-      } /* mon_set idx should map back to the contexts -- we have a table of context pointers, when i is set, we know that fcontext
-      table[i] 's context is ready to be rescheduled */
-    }
-
-    /* Check the Resumption queue */
-
-    /*if no resumpt tasks*/
-
-  } while(num_completions > cur_completions);
-
-
-
-  uint64_t end = sampleCoderdtsc();
-  fcontext_destroy_proxy(self);
-  PRINT("WorkerThroughput: %ld\n", end - start);
-}
 
 typedef struct worker_ax_overhead_generator_args {
   struct completion_record *cr_pool;
@@ -2998,18 +2923,43 @@ void worker(void *args){
 
   fcontext_state_t *self = fcontext_create_proxy();
 
+  for(int i=0; i<num_completions; i++){
+    /* get a new request */
+    req_args_t *r_args = malloc(sizeof(req_args_t));
+    r_args->completed = false;
+    r_args->spin_cycles = pre_cpu_cycles;
+    r_args->completion_addr = &(cr_pool[i]);
+    PRINT("0x%x\n", r_args->completion_addr);
+    fcontext_t next_ctx = fcontext_create(yield_request_ctx)->context;
+    ctx_pool[i] = fcontext_swap(next_ctx, r_args).prev_context; /* This needs to be accessible at the dedicated poller for placement in the resumption queue, the poller gives out contexts to workers */
+  }
+
   pthread_barrier_wait(g_args->barrier);
-
-  req_args_t r_args;
-  r_args.completed = false;
-  r_args.spin_cycles = pre_cpu_cycles;
-  r_args.completion_addr = &(cr_pool[0]);
-
-  fcontext_t next_ctx = fcontext_create(yield_request_ctx)->context;
-  ctx_pool[0] = fcontext_swap(next_ctx, &r_args).prev_context; /* This needs to be accessible at the dedicated poller for placement in the resumption queue, the poller gives out contexts to workers */
 
 }
 
+typedef struct fcontext_node {
+  fcontext_t context;
+  struct fcontext_node *next;
+} ctx_node;
+
+struct resumption_queue {
+  ctx_node *head;
+  ctx_node *tail;
+};
+
+static inline void resumption_queue_enqueue(struct resumption_queue *rq, fcontext_t ctx){
+  ctx_node *node = malloc(sizeof(ctx_node));
+  node->context = ctx;
+  node->next = NULL;
+  if(rq->head == NULL){
+    rq->head = node;
+    rq->tail = node;
+  } else {
+    rq->tail->next = node;
+    rq->tail = node;
+  }
+}
 
 void dispatcher_cr_iterate_and_reenqueue(){
   gen_args g_args;
@@ -3017,8 +2967,13 @@ void dispatcher_cr_iterate_and_reenqueue(){
   int num_requests = 1000;
   int pre_cpu_cycles = 2100;
   uint32_t xfer_size = 16 * 1024;
-  g_args.cr_pool = malloc(num_completions * sizeof(struct completion_record));
-  g_args.ctx_pool = malloc(num_completions * sizeof(fcontext_t));
+  struct completion_record *cr_pool = malloc(num_completions * sizeof(struct completion_record));
+  fcontext_t *ctx_pool = malloc(num_completions * sizeof(fcontext_t));
+  struct resumption_queue *resumption_q = malloc(sizeof(struct resumption_queue));
+  memset(resumption_q, 0, sizeof(struct resumption_queue));
+
+  g_args.cr_pool = cr_pool;
+  g_args.ctx_pool = ctx_pool;
   g_args.num_completions = num_completions;
   g_args.pre_cpu_cycles = pre_cpu_cycles;
   g_args.xfer_size = xfer_size;
@@ -3028,7 +2983,20 @@ void dispatcher_cr_iterate_and_reenqueue(){
   pthread_t worker_td;
   createThreadPinned(&worker_td, worker, &g_args, NULL);
 
-  pthread_barrier_wait(g_args.barrier);
+  pthread_barrier_wait(g_args.barrier); /* same as enforcing context pool access ordering */
+
+  for(int i=0; i<num_completions; i++){
+    PRINT("0x%d\n", (uint64_t )cr_pool );
+    while(cr_pool[i].status == 0){_mm_pause(); }
+    PRINT("i: %d\n", i);
+    resumption_queue_enqueue(resumption_q, ctx_pool[i]);
+
+  }
+  while(resumption_q->head != NULL){
+    fcontext_t ctx = resumption_q->head->context;
+    resumption_q->head = resumption_q->head->next;
+    fcontext_swap(ctx, NULL);
+  }
 
 
   pthread_join(worker_td, NULL);
