@@ -2888,15 +2888,14 @@ void yield_request_ctx(fcontext_transfer_t arg){
   }
 
   memcpy_nonblocking(len, comp);
-  while(comp->status == 0){
-    _mm_pause();
-  }
-
   fcontext_swap(arg.prev_context, NULL);
 
   rc = comp->status;
   if(rc != DSA_COMP_SUCCESS){
     PRINT_ERR("Offload Failed: 0x%x\n", rc);
+  } else {
+    r_arg->completed = true;
+    PRINT("Completed\n");
   }
   fcontext_swap(arg.prev_context, NULL);
 
@@ -2933,10 +2932,6 @@ void worker(void *args){
     r_args->len = xfer_size;
     fcontext_t next_ctx = fcontext_create(yield_request_ctx)->context;
     ctx_pool[i] = fcontext_swap(next_ctx, r_args).prev_context; /* This needs to be accessible at the dedicated poller for placement in the resumption queue, the poller gives out contexts to workers */
-    while(cr_pool[i].status == 0){
-      _mm_pause();
-    }
-    PRINT("i: %d\n", i);
   }
 
   pthread_barrier_wait(g_args->barrier);
@@ -2992,14 +2987,15 @@ void dispatcher_cr_iterate_and_reenqueue(){
   int i=0;
   // for(int i=0; i<num_completions; i++){
     while(cr_pool[i].status == 0){_mm_pause(); }
-    // resumption_queue_enqueue(resumption_q, ctx_pool[i]);
+    resumption_queue_enqueue(resumption_q, ctx_pool[i]);
 
   // // }
-  // while(resumption_q->head != NULL){
-  //   fcontext_t ctx = resumption_q->head->context;
-  //   resumption_q->head = resumption_q->head->next;
-  //   fcontext_swap(ctx, NULL);
-  // }
+  PRINT("Completing the paused jobs\n");
+  while(resumption_q->head != NULL){
+    fcontext_t ctx = resumption_q->head->context;
+    resumption_q->head = resumption_q->head->next;
+    fcontext_swap(ctx, NULL);
+  }
 
 
   pthread_join(worker_td, NULL);
