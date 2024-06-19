@@ -2895,7 +2895,6 @@ void yield_request_ctx(fcontext_transfer_t arg){
     PRINT_ERR("Offload Failed: 0x%x\n", rc);
   } else {
     r_arg->completed = true;
-    PRINT("Completed\n");
   }
 
   fcontext_swap(arg.prev_context, NULL);
@@ -2920,6 +2919,7 @@ void worker(void *args){
   struct completion_record *cr_pool = g_args->cr_pool;
   int pre_cpu_cycles = g_args->pre_cpu_cycles;
   uint32_t xfer_size = g_args->xfer_size;
+  req_args_t ** r_args_pool = malloc(num_completions * sizeof(req_args_t *));
 
   _Atomic bool *cleanup_finish_flag = g_args->cleanup_finish_flag;
 
@@ -2930,6 +2930,7 @@ void worker(void *args){
   for(int i=0; i<num_completions; i++){
     /* get a new request */
     req_args_t *r_args = malloc(sizeof(req_args_t));
+    r_args_pool[i] = r_args;
     r_args->completed = false;
     r_args->spin_cycles = pre_cpu_cycles;
     r_args->comp = &(cr_pool[i]);
@@ -2943,9 +2944,14 @@ void worker(void *args){
   while(*cleanup_finish_flag == false){ _mm_pause();}
 
   struct resumption_queue *resumption_q;
+  int successful_completions = 0;
   for(int i=0; i<num_completions; i++){
     fcontext_swap(ctx_pool[i], NULL);
+    if(r_args_pool[i]->completed){
+      successful_completions++;
+    }
   }
+  PRINT("SuccessfulCompletions: %d\n", successful_completions);
 
   // fcontext_destroy(ctx_pool[num_completions-1]);
   fcontext_destroy_proxy(self);
@@ -3020,7 +3026,7 @@ void dispatcher_cr_iterate_and_reenqueue(){
   st_t_enq = sampleCoderdtsc();
   for(i=0; i<num_completions; i++){
     while(cr_pool[i].status == 0){_mm_pause(); } /* last cr found -- start timing to touch all -- might need to check asm -- validate that all offload sizes give same time?*/
-    resumption_queue_enqueue(resumption_q, ctx_pool[i]);
+    // resumption_queue_enqueue(resumption_q, ctx_pool[i]);
   }
   end_t_enq = sampleCoderdtsc();
   PRINT("NumCRs: %ld EnqueueTime: %ld\n", num_completions, end_t_enq - st_t_enq);
