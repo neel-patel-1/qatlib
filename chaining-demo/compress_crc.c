@@ -2991,7 +2991,7 @@ void dispatcher_cr_iterate_and_reenqueue(){
 
   int i=0;
   // for(int i=0; i<num_completions; i++){
-    // while(cr_pool[i].status == 0){_mm_pause(); }
+    while(cr_pool[i].status == 0){_mm_pause(); }
     // resumption_queue_enqueue(resumption_q, ctx_pool[i]);
 
   // // }
