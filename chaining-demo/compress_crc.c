@@ -2898,8 +2898,7 @@ void yield_request_ctx(fcontext_transfer_t arg){
     PRINT("Completed\n");
   }
 
-  fcontext_state_t *self = fcontext_create_proxy(); /* (1) destroy self instead of swap back*/
-  fcontext_destroy(self->context);
+  fcontext_swap(arg.prev_context, NULL);
 
 }
 
@@ -2940,7 +2939,12 @@ void worker(void *args){
   }
 
   pthread_barrier_wait(g_args->barrier);
+  /* Here we would like to resume all of the remaining contexts -- dispatcher already did one*/
   while(*cleanup_finish_flag == false){ _mm_pause();}
+  for(int i=1; i<num_completions; i++){
+    fcontext_swap(ctx_pool[i], NULL);
+    // fcontext_destroy(ctx_pool[i]);
+  }
 
   fcontext_destroy_proxy(self);
 
@@ -2973,7 +2977,9 @@ static inline ctx_node *resumption_queue_dequeue(struct resumption_queue *rq){
   if(rq->head != NULL){
     ctx_node *node = rq->head;
     rq->head = rq->head->next;
-    free(node);
+    return node;
+  } else {
+    return NULL;
   }
 }
 
@@ -3010,17 +3016,21 @@ void dispatcher_cr_iterate_and_reenqueue(){
 
   st_t_enq = sampleCoderdtsc();
   for(i=0; i<num_completions; i++){
+    while(cr_pool[i].status == 0){_mm_pause(); } /* last cr found -- start timing to touch all -- might need to check asm -- validate that all offload sizes give same time?*/
     resumption_queue_enqueue(resumption_q, ctx_pool[i]);
   }
   end_t_enq = sampleCoderdtsc();
   PRINT("NumCRs: %ld EnqueueTime: %ld\n", num_completions, end_t_enq - st_t_enq);
 
   /* Keep the worker context alive long enough to validate all paused jobs*/
-  ctx_node *node;
-  while((node = resumption_queue_dequeue(resumption_q)) != NULL){
-    fcontext_swap(node->context, NULL);
-  }
+  ctx_node *node = resumption_q->head;
   *(g_args.cleanup_finish_flag) = true;
+  while((node = resumption_queue_dequeue(resumption_q)) != NULL){
+    PRINT("Resuming\n" );
+    fcontext_swap(node->context, NULL);
+    fcontext_destroy(node->context);
+    free(node);
+  }
 
   pthread_join(worker_td, NULL);
 
