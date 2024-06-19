@@ -2825,12 +2825,7 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
 
 
 /* synthetic worker overhead. h*/
-typedef struct _synth_request_args_t {
-  uint64_t spin_cycles;
-  uint64_t completion_addr;
-  int len;
-  bool completed;
-} req_args_t;
+
 
 /* Cr iterate setup: */
 /* First get a non-blocking cr wait from the cr_poller*/
@@ -2869,6 +2864,12 @@ static inline struct completion_record *memcpy_nonblocking(int len, struct compl
 }
 
 
+typedef struct _synth_request_args_t {
+  uint64_t spin_cycles;
+  struct completion_record *comp;
+  int len;
+  bool completed;
+} req_args_t;
 
 void yield_request_ctx(fcontext_transfer_t arg){
   /* spin for duration in argument */
@@ -2879,7 +2880,7 @@ void yield_request_ctx(fcontext_transfer_t arg){
   int rc;
 
 
-  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
+  struct completion_record *comp = r_arg->comp;
   memset(comp, 0, sizeof(struct completion_record));
 
   while(sampleCoderdtsc() < end){
@@ -2913,7 +2914,7 @@ typedef struct worker_ax_overhead_generator_args {
 
 void worker(void *args){
   gen_args *g_args = (gen_args *)args;
-  struct completion_record *cr_pool = g_args->cr_pool;
+  struct completion_record *cr_pool = aligned_alloc(dsa->compl_size, g_args->num_completions * sizeof(struct completion_record));
   fcontext_t *ctx_pool = g_args->ctx_pool;
   int num_completions = g_args->num_completions;
   int pre_cpu_cycles = g_args->pre_cpu_cycles;
@@ -2928,10 +2929,14 @@ void worker(void *args){
     req_args_t *r_args = malloc(sizeof(req_args_t));
     r_args->completed = false;
     r_args->spin_cycles = pre_cpu_cycles;
-    r_args->completion_addr = &(cr_pool[i]);
+    r_args->comp = &(cr_pool[i]);
     r_args->len = xfer_size;
     fcontext_t next_ctx = fcontext_create(yield_request_ctx)->context;
     ctx_pool[i] = fcontext_swap(next_ctx, r_args).prev_context; /* This needs to be accessible at the dedicated poller for placement in the resumption queue, the poller gives out contexts to workers */
+    while(cr_pool[i].status == 0){
+      _mm_pause();
+    }
+    PRINT("i: %d\n", i);
   }
 
   pthread_barrier_wait(g_args->barrier);
