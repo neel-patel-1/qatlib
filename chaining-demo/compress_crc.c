@@ -2861,6 +2861,11 @@ static inline struct completion_record *memcpy_nonblocking(int len){
   return comp;
 }
 
+struct comp_list_node{
+  struct completion_record *comp;
+  struct comp_list_node *next;
+};
+
 void yield_request_ctx(fcontext_transfer_t arg){
   /* spin for duration in argument */
   req_args_t *r_arg = (req_args_t *)(arg.data);
@@ -2894,36 +2899,55 @@ void yield_request_ctx(fcontext_transfer_t arg){
 
 /* How many requests can the worker process in the baseline? */
 int worker_throughput(){
+  bool test_stop = false;
+  int iter = 0;
+  int num_iters = 1000;
   uint64_t start = sampleCoderdtsc();
 
   uint64_t wait_usecs = 10;
-  fcontext_state_t *self = fcontext_create_proxy();
-  fcontext_state_t *head = fcontext_create(yield_request_ctx);
 
   /*fst*/
-  fcontext_transfer_t ctx_xfer;
 
   /*snd*/
-  fcontext_t  *off_req_ctx = malloc(sizeof(fcontext_t));
-  req_args_t *r_args = malloc(sizeof(req_args_t));
+
+  fcontext_state_t *self = fcontext_create_proxy();
+  fcontext_state_t *next_ctx_state = fcontext_create(yield_request_ctx);
+  fcontext_t next_ctx  = next_ctx_state->context;
+
+  /* event loop */
+  do
+  {
+    /* have our task, swap into it */
+    req_args_t *r_args = malloc(sizeof(req_args_t));
+    fcontext_transfer_t req_handle;
+    r_args->spin_cycles = wait_usecs * 2100;
+    req_handle = fcontext_swap(next_ctx, r_args);
+    struct completion_record *comp;
+    comp = (struct completion_record *)(r_args->completion_addr); /* add the comp to the mon set*/
+
+    /* Check the Resumption queue */
+
+    /*if no resumpt tasks*/
+
+    if(comp->status != 0){ /* if mon set empty */
+      next_ctx = req_handle.prev_context; /* enqueue the corresponding ctx into the task queue*/
+    } else {
+      /*closed loop, no tasks to resume or comps to re-enequeue, then make a new request*/
+      next_ctx_state = fcontext_create(yield_request_ctx);
+      next_ctx = next_ctx_state->context;
+    }
 
 
-  r_args->spin_cycles = wait_usecs * 2100;
-  ctx_xfer = fcontext_swap(head->context, r_args);
 
-  struct completion_record *comp;
-  comp = (struct completion_record *)(r_args->completion_addr);
 
-  while(comp->status == 0){
-    _mm_pause();
-  }
+    if(iter > num_iters){
+      test_stop = true;
+    }
+  } while(!test_stop);
 
-  /* from task queue */
-  fcontext_swap(ctx_xfer.prev_context, &r_args);
 
 
   uint64_t end = sampleCoderdtsc();
-  fcontext_destroy(head);
   fcontext_destroy_proxy(self);
   PRINT("WorkerThroughput: %ld\n", end - start);
 }
