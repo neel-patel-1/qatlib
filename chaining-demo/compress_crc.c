@@ -2831,6 +2831,9 @@ typedef struct _synth_request_args_t {
   bool completed;
 } req_args_t;
 
+/* Cr iterate setup: */
+/* First get a non-blocking cr wait from the cr_poller*/
+
 static inline struct completion_record *memcpy_nonblocking(int len, uint64_t compAddr){
   int opcode = DSA_OPCODE_MEMMOVE;
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
@@ -2869,7 +2872,7 @@ void yield_request_ctx(fcontext_transfer_t arg){
   req_args_t *r_arg = (req_args_t *)(arg.data);
   uint64_t start = sampleCoderdtsc();
   uint64_t end = start + r_arg->spin_cycles;
-  int len = 4096;
+  int len = 32 * 1024;
   int rc;
 
   PRINT("YieldRequestCtx: %ld %ld %ld\n", start, end, r_arg->spin_cycles);
@@ -2974,9 +2977,36 @@ int worker_throughput(){
   PRINT("WorkerThroughput: %ld\n", end - start);
 }
 
-void worker(){
-  /* Issue*/
+typedef struct worker_ax_overhead_generator_args {
+  struct completion_record *cr_pool;
+  fcontext_t *ctx_pool;
+  int pre_cpu_cycles;
+  uint32_t xfer_size;
+  int num_completions;
+} gen_args;
+
+void worker(void *args){
+  gen_args *g_args = (gen_args *)args;
+  struct completion_record *cr_pool = g_args->cr_pool;
+  fcontext_t *ctx_pool = g_args->ctx_pool;
+  int num_completions = g_args->num_completions;
+  int pre_cpu_cycles = g_args->pre_cpu_cycles;
+  uint32_t xfer_size = g_args->xfer_size;
+
+  fcontext_transfer_t req_handle;
+
+  fcontext_state_t *self = fcontext_create_proxy();
+
+  req_args_t r_args;
+  r_args.completed = false;
+  r_args.spin_cycles = pre_cpu_cycles;
+  r_args.completion_addr = &(cr_pool[0]);
+
+  fcontext_t next_ctx = fcontext_create(yield_request_ctx)->context;
+  ctx_pool[0] = fcontext_swap(next_ctx, &r_args).prev_context; /* This needs to be accessible at the dedicated poller for placement in the resumption queue, the poller gives out contexts to workers */
+
 }
+
 
 void dispatcher_cr_iterate_and_reenqueue(){
   /* */
@@ -3008,13 +3038,15 @@ void dispatcher_cr_iterate_and_reenqueue(){
     _mm_pause();
   }
   end_useful = sampleCoderdtsc();
+  fcontext_swap(paused_jobs[0], NULL);
 
   /*post process*/
   next_expected_comp ++;
   PRINT("UsefulWork: %ld\n", end_useful - st_useful);
 
-  /* if we minimize slos by stopping work every time a comp is received*/
-
+  /* if we minimize slos by stopping work every time a comp is received, useful work is small*/
+  /* We assume FCFS preservation. The dispatcher preempts a worker and reschedules paused ASAP  */
+  /* Each time a response is received, we */
 }
 
 int main(){
