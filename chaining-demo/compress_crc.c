@@ -2983,6 +2983,7 @@ typedef struct worker_ax_overhead_generator_args {
   int pre_cpu_cycles;
   uint32_t xfer_size;
   int num_completions;
+  pthread_barrier_t *barrier;
 } gen_args;
 
 void worker(void *args){
@@ -2997,6 +2998,8 @@ void worker(void *args){
 
   fcontext_state_t *self = fcontext_create_proxy();
 
+  pthread_barrier_wait(g_args->barrier);
+
   req_args_t r_args;
   r_args.completed = false;
   r_args.spin_cycles = pre_cpu_cycles;
@@ -3009,44 +3012,26 @@ void worker(void *args){
 
 
 void dispatcher_cr_iterate_and_reenqueue(){
-  /* */
-  struct completion_record *comps;
-  struct completion_record *next_expected_comp;
+  gen_args g_args;
+  int num_completions = 3;
+  int num_requests = 1000;
+  int pre_cpu_cycles = 2100;
+  uint32_t xfer_size = 16 * 1024;
+  g_args.cr_pool = malloc(num_completions * sizeof(struct completion_record));
+  g_args.ctx_pool = malloc(num_completions * sizeof(fcontext_t));
+  g_args.num_completions = num_completions;
+  g_args.pre_cpu_cycles = pre_cpu_cycles;
+  g_args.xfer_size = xfer_size;
+  g_args.barrier = malloc(sizeof(pthread_barrier_t));
+  pthread_barrier_init(g_args.barrier, NULL, 2);
 
-  fcontext_t *paused_jobs;
-  fcontext_t next_ctx;
+  pthread_t worker_td;
+  createThreadPinned(&worker_td, worker, &g_args, NULL);
 
-  uint64_t st_useful;
-  uint64_t end_useful;
-  int num_comps_per_worker = 256;
-  int paused_jobs_per_worker = num_comps_per_worker;
-
-  comps = malloc(sizeof(struct completion_record) * num_comps_per_worker);
-  paused_jobs = malloc(sizeof(fcontext_t) * paused_jobs_per_worker);
-
-  next_expected_comp = comps;
-
-  req_args_t *r_args = malloc(sizeof(req_args_t));
-  r_args->spin_cycles = 10 * 2100;
-  r_args->completion_addr = next_expected_comp;
-  next_ctx = fcontext_create(yield_request_ctx)->context;
-  paused_jobs[0] = fcontext_swap(next_ctx, r_args).prev_context;
+  pthread_barrier_wait(g_args.barrier);
 
 
-  st_useful = sampleCoderdtsc();
-  while(next_expected_comp->status == 0){
-    _mm_pause();
-  }
-  end_useful = sampleCoderdtsc();
-  fcontext_swap(paused_jobs[0], NULL);
-
-  /*post process*/
-  next_expected_comp ++;
-  PRINT("UsefulWork: %ld\n", end_useful - st_useful);
-
-  /* if we minimize slos by stopping work every time a comp is received, useful work is small*/
-  /* We assume FCFS preservation. The dispatcher preempts a worker and reschedules paused ASAP  */
-  /* Each time a response is received, we */
+  pthread_join(worker_td, NULL);
 }
 
 int main(){
