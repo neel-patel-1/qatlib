@@ -2974,6 +2974,38 @@ int worker_throughput(){
   PRINT("WorkerThroughput: %ld\n", end - start);
 }
 
+void worker(){
+
+}
+
+void dispatcher_cr_iterate_and_reenqueue(){
+  /* */
+  struct completion_record *comps;
+  struct completion_record *next_expected_comp;
+  fcontext_t *paused_jobs;
+  uint64_t st_useful;
+  uint64_t end_useful;
+  int num_comps_per_worker = 256;
+  int paused_jobs_per_worker = num_comps_per_worker;
+
+  comps = malloc(sizeof(struct completion_record) * num_comps_per_worker);
+  paused_jobs = malloc(sizeof(fcontext_t) * paused_jobs_per_worker);
+
+  next_expected_comp = comps;
+
+  st_useful = sampleCoderdtsc();
+  while(next_expected_comp->status == 0){
+    _mm_pause();
+  }
+  end_useful = sampleCoderdtsc();
+
+  /*post process*/
+  PRINT("UsefulWork: %ld\n", end_useful - st_useful);
+
+  /* if we minimize slos by stopping work every time a comp is received*/
+
+}
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
