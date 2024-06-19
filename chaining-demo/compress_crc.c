@@ -2961,6 +2961,14 @@ static inline void resumption_queue_enqueue(struct resumption_queue *rq, fcontex
   }
 }
 
+static inline ctx_node *resumption_queue_dequeue(struct resumption_queue *rq){
+  if(rq->head != NULL){
+    ctx_node *node = rq->head;
+    rq->head = rq->head->next;
+    free(node);
+  }
+}
+
 void dispatcher_cr_iterate_and_reenqueue(){
   gen_args g_args;
   int num_completions = 1;
