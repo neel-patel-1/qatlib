@@ -2941,12 +2941,15 @@ void worker(void *args){
   pthread_barrier_wait(g_args->barrier);
   /* Here we would like to resume all of the remaining contexts -- dispatcher already did one*/
   while(*cleanup_finish_flag == false){ _mm_pause();}
-  for(int i=1; i<num_completions; i++){
+
+  struct resumption_queue *resumption_q;
+  for(int i=0; i<num_completions; i++){
     fcontext_swap(ctx_pool[i], NULL);
-    // fcontext_destroy(ctx_pool[i]);
   }
 
+  // fcontext_destroy(ctx_pool[num_completions-1]);
   fcontext_destroy_proxy(self);
+
 
 }
 
@@ -2985,7 +2988,7 @@ static inline ctx_node *resumption_queue_dequeue(struct resumption_queue *rq){
 
 void dispatcher_cr_iterate_and_reenqueue(){
   gen_args g_args;
-  int num_completions = 10;
+  int num_completions = 100;
   int pre_cpu_cycles = 2100;
   uint32_t xfer_size = 16 * 1024;
   struct completion_record *cr_pool = aligned_alloc(dsa->compl_size, num_completions * sizeof(struct completion_record));
@@ -3025,12 +3028,12 @@ void dispatcher_cr_iterate_and_reenqueue(){
   /* Keep the worker context alive long enough to validate all paused jobs*/
   ctx_node *node = resumption_q->head;
   *(g_args.cleanup_finish_flag) = true;
-  while((node = resumption_queue_dequeue(resumption_q)) != NULL){
+  node = resumption_queue_dequeue(resumption_q);
     PRINT("Resuming\n" );
     fcontext_swap(node->context, NULL);
     fcontext_destroy(node->context);
     free(node);
-  }
+
 
   pthread_join(worker_td, NULL);
 
