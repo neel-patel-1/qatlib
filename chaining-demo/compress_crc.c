@@ -2897,7 +2897,9 @@ void yield_request_ctx(fcontext_transfer_t arg){
     r_arg->completed = true;
     PRINT("Completed\n");
   }
-  fcontext_swap(arg.prev_context, NULL);
+
+  fcontext_state_t *self = fcontext_create_proxy(); /* (1) destroy self instead of swap back*/
+  fcontext_destroy(self->context);
 
 }
 
@@ -2909,6 +2911,7 @@ typedef struct worker_ax_overhead_generator_args {
   uint32_t xfer_size;
   int num_completions;
   pthread_barrier_t *barrier;
+  _Atomic bool *cleanup_finish_flag;
 } gen_args;
 
 void worker(void *args){
@@ -2918,6 +2921,8 @@ void worker(void *args){
   struct completion_record *cr_pool = g_args->cr_pool;
   int pre_cpu_cycles = g_args->pre_cpu_cycles;
   uint32_t xfer_size = g_args->xfer_size;
+
+  _Atomic bool *cleanup_finish_flag = g_args->cleanup_finish_flag;
 
   fcontext_transfer_t req_handle;
 
@@ -2935,6 +2940,9 @@ void worker(void *args){
   }
 
   pthread_barrier_wait(g_args->barrier);
+  while(*cleanup_finish_flag == false){ _mm_pause();}
+
+  fcontext_destroy_proxy(self);
 
 }
 
@@ -2971,7 +2979,7 @@ static inline ctx_node *resumption_queue_dequeue(struct resumption_queue *rq){
 
 void dispatcher_cr_iterate_and_reenqueue(){
   gen_args g_args;
-  int num_completions = 1;
+  int num_completions = 10;
   int pre_cpu_cycles = 2100;
   uint32_t xfer_size = 16 * 1024;
   struct completion_record *cr_pool = aligned_alloc(dsa->compl_size, num_completions * sizeof(struct completion_record));
@@ -2985,6 +2993,8 @@ void dispatcher_cr_iterate_and_reenqueue(){
   g_args.pre_cpu_cycles = pre_cpu_cycles;
   g_args.xfer_size = xfer_size;
   g_args.barrier = malloc(sizeof(pthread_barrier_t));
+  g_args.cleanup_finish_flag = malloc(sizeof(_Atomic bool));
+  *(g_args.cleanup_finish_flag) = false;
   pthread_barrier_init(g_args.barrier, NULL, 2);
 
   pthread_t worker_td;
@@ -2993,20 +3003,28 @@ void dispatcher_cr_iterate_and_reenqueue(){
   pthread_barrier_wait(g_args.barrier); /* same as enforcing context pool access ordering */
 
   int i=0;
-  // for(int i=0; i<num_completions; i++){
-    while(cr_pool[i].status == 0){_mm_pause(); }
+
+  uint64_t st_t_enq, end_t_enq;
+
+  while(cr_pool[num_completions-1].status == 0){_mm_pause(); } /* last cr found -- start timing to touch all -- might need to check asm -- validate that all offload sizes give same time?*/
+
+  st_t_enq = sampleCoderdtsc();
+  for(i=0; i<num_completions; i++){
     resumption_queue_enqueue(resumption_q, ctx_pool[i]);
-
-  // // }
-  PRINT("Completing the paused jobs\n");
-  while(resumption_q->head != NULL){
-    fcontext_t ctx = resumption_q->head->context;
-    resumption_q->head = resumption_q->head->next;
-    fcontext_swap(ctx, NULL);
   }
+  end_t_enq = sampleCoderdtsc();
+  PRINT("NumCRs: %ld EnqueueTime: %ld\n", num_completions, end_t_enq - st_t_enq);
 
+  /* Keep the worker context alive long enough to validate all paused jobs*/
+  ctx_node *node;
+  while((node = resumption_queue_dequeue(resumption_q)) != NULL){
+    fcontext_swap(node->context, NULL);
+  }
+  *(g_args.cleanup_finish_flag) = true;
 
   pthread_join(worker_td, NULL);
+
+
 }
 
 int main(){
