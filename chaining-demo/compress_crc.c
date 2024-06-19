@@ -2828,9 +2828,10 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
 typedef struct _synth_request_args_t {
   uint64_t spin_cycles;
   uint64_t completion_addr;
+  bool completed;
 } req_args_t;
 
-static inline struct completion_record *memcpy_nonblocking(int len){
+static inline struct completion_record *memcpy_nonblocking(int len, uint64_t compAddr){
   int opcode = DSA_OPCODE_MEMMOVE;
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
@@ -2861,10 +2862,7 @@ static inline struct completion_record *memcpy_nonblocking(int len){
   return comp;
 }
 
-struct comp_list_node{
-  struct completion_record *comp;
-  struct comp_list_node *next;
-};
+
 
 void yield_request_ctx(fcontext_transfer_t arg){
   /* spin for duration in argument */
@@ -2883,9 +2881,8 @@ void yield_request_ctx(fcontext_transfer_t arg){
     _mm_pause();
   }
 
-  comp = memcpy_nonblocking(len);
-  compAddr = (uint64_t)comp;
-  r_arg->completion_addr = compAddr;
+  compAddr = (uint64_t)r_arg->completion_addr;
+  memcpy_nonblocking(len, compAddr);
 
   fcontext_swap(arg.prev_context, NULL);
 
@@ -2897,6 +2894,20 @@ void yield_request_ctx(fcontext_transfer_t arg){
 
 }
 
+struct comp_list_node{
+  struct completion_record *comp;
+  struct comp_list_node *next;
+};
+
+typedef struct fcontext_node {
+  fcontext_t context;
+  struct fcontext_node *next;
+} ctx_node;
+
+typedef struct ready_tasks_list_t {
+  ctx_node *head;
+} ready_tasks_list;
+
 /* How many requests can the worker process in the baseline? */
 int worker_throughput(){
   bool test_stop = false;
@@ -2906,44 +2917,55 @@ int worker_throughput(){
 
   uint64_t wait_usecs = 10;
 
-  /*fst*/
+  /* finite closed loop params */
+  int num_completions = 3;
+  int cur_completions = 0;
 
-  /*snd*/
+  /*monitoring set*/
+  int num_crs = num_completions;
+  int next_free_cr = 0;
+  int first_cr_to_poll = 0; /*first iteration will check */
+  struct completion_record *mon_set = malloc(num_crs * sizeof(struct completion_record));
+
 
   fcontext_state_t *self = fcontext_create_proxy();
-  fcontext_state_t *next_ctx_state = fcontext_create(yield_request_ctx);
-  fcontext_t next_ctx  = next_ctx_state->context;
+  fcontext_t next_ctx  = NULL;
 
   /* event loop */
   do
   {
-    /* have our task, swap into it */
-    req_args_t *r_args = malloc(sizeof(req_args_t));
     fcontext_transfer_t req_handle;
-    r_args->spin_cycles = wait_usecs * 2100;
+    req_args_t *r_args = NULL;
+    if(next_ctx == NULL){ /* need a new request */
+      r_args = malloc(sizeof(req_args_t));
+      r_args->spin_cycles = wait_usecs * 2100;
+      r_args->completion_addr =&(mon_set[next_free_cr++]); /* get next free cr slot ()*/
+      next_ctx = fcontext_create(yield_request_ctx)->context;
+    }
+
     req_handle = fcontext_swap(next_ctx, r_args);
-    struct completion_record *comp;
-    comp = (struct completion_record *)(r_args->completion_addr); /* add the comp to the mon set*/
+
+    if(r_args->completed == true){ /* this guy is fully complete */
+      cur_completions++; /* increment the cur_completions */
+    }
+
+    next_ctx = NULL;
+
+    /* poll the monset -- if we could have a ready set that automatically got set to one
+    and a task-list dequeue operation returned the task we desired according to the scheduling
+    policy*/
+    for(int i=first_cr_to_poll; i<next_free_cr - 1; i++){
+      if(mon_set[i].status != 0){
+        mon_set[i].status = 0; /* now the cr can be reused*/
+      } /* mon_set idx should map back to the contexts -- we have a table of context pointers, when i is set, we know that fcontext
+      table[i] 's context is ready to be rescheduled */
+    }
 
     /* Check the Resumption queue */
 
     /*if no resumpt tasks*/
 
-    if(comp->status != 0){ /* if mon set empty */
-      next_ctx = req_handle.prev_context; /* enqueue the corresponding ctx into the task queue*/
-    } else {
-      /*closed loop, no tasks to resume or comps to re-enequeue, then make a new request*/
-      next_ctx_state = fcontext_create(yield_request_ctx);
-      next_ctx = next_ctx_state->context;
-    }
-
-
-
-
-    if(iter > num_iters){
-      test_stop = true;
-    }
-  } while(!test_stop);
+  } while(num_completions > cur_completions);
 
 
 
