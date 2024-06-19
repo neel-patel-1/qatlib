@@ -2914,9 +2914,9 @@ typedef struct worker_ax_overhead_generator_args {
 
 void worker(void *args){
   gen_args *g_args = (gen_args *)args;
-  struct completion_record *cr_pool = aligned_alloc(dsa->compl_size, g_args->num_completions * sizeof(struct completion_record));
   fcontext_t *ctx_pool = g_args->ctx_pool;
   int num_completions = g_args->num_completions;
+  struct completion_record *cr_pool = g_args->cr_pool;
   int pre_cpu_cycles = g_args->pre_cpu_cycles;
   uint32_t xfer_size = g_args->xfer_size;
 
@@ -2971,7 +2971,7 @@ void dispatcher_cr_iterate_and_reenqueue(){
   int num_completions = 1;
   int pre_cpu_cycles = 2100;
   uint32_t xfer_size = 16 * 1024;
-  struct completion_record *cr_pool = malloc(num_completions * sizeof(struct completion_record));
+  struct completion_record *cr_pool = aligned_alloc(dsa->compl_size, num_completions * sizeof(struct completion_record));
   fcontext_t *ctx_pool = malloc(num_completions * sizeof(fcontext_t));
   struct resumption_queue *resumption_q = malloc(sizeof(struct resumption_queue));
   memset(resumption_q, 0, sizeof(struct resumption_queue));
