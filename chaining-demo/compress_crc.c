@@ -2835,12 +2835,11 @@ typedef struct _synth_request_args_t {
 /* Cr iterate setup: */
 /* First get a non-blocking cr wait from the cr_poller*/
 
-static inline struct completion_record *memcpy_nonblocking(int len, uint64_t compAddr){
+static inline struct completion_record *memcpy_nonblocking(int len, struct completion_record * comp){
   int opcode = DSA_OPCODE_MEMMOVE;
   uint32_t dflags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   uint32_t tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR;
   struct hw_desc *desc = malloc(sizeof(struct hw_desc));
-  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
   char *src = aligned_alloc(4 * 1024, len);
   char *dst = aligned_alloc(4 * 1024, len);
   if(!desc || !src || !dst){
@@ -2880,16 +2879,14 @@ void yield_request_ctx(fcontext_transfer_t arg){
   int rc;
 
 
-  uint64_t compAddr;
-  struct completion_record *comp;
+  struct completion_record *comp = aligned_alloc(dsa->compl_size, sizeof(struct completion_record));
+  memset(comp, 0, sizeof(struct completion_record));
 
   while(sampleCoderdtsc() < end){
     _mm_pause();
   }
 
-  compAddr = (uint64_t)r_arg->completion_addr;
-  memcpy_nonblocking(len, compAddr);
-  comp = (struct completion_record *)compAddr;
+  memcpy_nonblocking(len, comp);
   while(comp->status == 0){
     _mm_pause();
   }
@@ -2989,15 +2986,15 @@ void dispatcher_cr_iterate_and_reenqueue(){
 
   int i=0;
   // for(int i=0; i<num_completions; i++){
-    while(cr_pool[i].status == 0){_mm_pause(); }
-    resumption_queue_enqueue(resumption_q, ctx_pool[i]);
+    // while(cr_pool[i].status == 0){_mm_pause(); }
+    // resumption_queue_enqueue(resumption_q, ctx_pool[i]);
 
+  // // }
+  // while(resumption_q->head != NULL){
+  //   fcontext_t ctx = resumption_q->head->context;
+  //   resumption_q->head = resumption_q->head->next;
+  //   fcontext_swap(ctx, NULL);
   // }
-  while(resumption_q->head != NULL){
-    fcontext_t ctx = resumption_q->head->context;
-    resumption_q->head = resumption_q->head->next;
-    fcontext_swap(ctx, NULL);
-  }
 
 
   pthread_join(worker_td, NULL);
