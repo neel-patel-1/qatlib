@@ -3046,6 +3046,66 @@ void dispatcher_cr_iterate_and_reenqueue(){
 
 }
 
+/* task queue enqueue .h*/
+#define FRESH 0x0
+#define PAUSED 0x1
+#define MONITORED 0x2
+#define RESUMED 0x3
+
+
+struct request {
+  uint16_t state;
+  uint64_t spin_cycles;
+  int xfer_size;
+  struct request * next;
+}  __attribute__((packed, aligned(64)));
+
+typedef struct request_queue{
+  struct request *head;
+  struct request *tail;
+} task_queue_t;
+struct request_queue tskq;
+
+static inline void tskq_enqueue_head(struct request_queue * tq,
+  uint64_t spin_cycles, int xfer_size, uint16_t state)
+{
+        struct request * tsk = malloc(sizeof(struct request));
+        tsk->spin_cycles = spin_cycles;
+        tsk->state = state;
+        tsk->xfer_size = xfer_size;
+        if (tq->head != NULL) {
+            struct request * tmp = tq->head;
+            tq->head = tsk;
+            tsk->next = tmp;
+        } else {
+            tq->head = tsk;
+            tq->tail = tsk;
+            tsk->next = NULL;
+        }
+}
+
+static inline void tskq_enqueue_tail(struct request_queue * tq,
+  uint64_t spin_cycles, int xfer_size, uint16_t state)
+{
+        struct request * tsk = malloc(sizeof(struct request));
+        if (!tsk)
+                return;
+        tsk->spin_cycles = spin_cycles;
+        tsk->state = state;
+        tsk->xfer_size = xfer_size;
+
+        if (tq->head != NULL) {
+            tq->tail->next = tsk;
+            tq->tail = tsk;
+            tsk->next = NULL;
+        } else {
+            tq->head = tsk;
+            tq->tail = tsk;
+            tsk->next = NULL;
+        }
+}
+
+
 int main(){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -3061,10 +3121,12 @@ int main(){
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
 
+  /* Cr Wrkld Gen*/
+
   /* queue component test */
   /* shinjuku global queue for re-enqueue used for worker-local preempted requests */
 
-  /* Dispatcher-Monitor-And-RenQ*/ /* Paused -> Monitored -> Re-enqueued*/
+  /* (Dispatcher-Monitor-And-RenQ)*/ /* Paused -> Monitored -> Re-enqueued*/
   /* dispatcher will (1) check the wprler-local response queue for Ax-Paused Requests*/
 
   /* (2) Find the cr associated with the paused request */
@@ -3073,10 +3135,16 @@ int main(){
 
   /* (4) Renqueue the paused request in the */
 
-  /* Dispatcher-RenQ */
+  /* (Dispatcher-RenQ) */
   /* dispatcher will (1) check the worker-local response queue for Ax-Resumed Requests*/
 
   /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
+  tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
+
+
+  /* (Dispatcher-NonRunnableRenQ-And-DeferCheck)*/
+
+
 
   dsa = acctest_init(tflags);
 
