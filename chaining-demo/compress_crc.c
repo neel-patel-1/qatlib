@@ -3142,7 +3142,7 @@ int main(){
 
   /* Cr Wrkld Gen*/
   /* Generate a sequence of LLC-Crs in a known memory region */
-  int num_cr_pages = 100;
+  int num_cr_pages = 10;
   int num_requests = num_cr_pages * 4096 / dsa->compl_size;
 
   for(int i=0; i<num_iterations; i++){
