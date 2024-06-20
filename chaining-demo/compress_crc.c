@@ -3061,6 +3061,22 @@ int main(){
   int wq_type = ACCFG_WQ_SHARED;
   int rc;
 
+  /* queue component test */
+  /* shinjuku global queue for re-enqueue used for worker-local preempted requests */
+
+  /* Dispatcher-Monitor-And-RenQ*/ /* Paused -> Monitored -> Re-enqueued*/
+  /* dispatcher will (1) check the wprler-local response queue for Ax-Paused Requests*/
+
+  /* (2) Find the cr associated with the paused request */
+
+  /* (3) Monitor for the cr */
+
+  /* (4) Renqueue the paused request in the */
+
+  /* Dispatcher-RenQ */
+  /* dispatcher will (1) check the worker-local response queue for Ax-Resumed Requests*/
+
+  /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
 
   dsa = acctest_init(tflags);
 
