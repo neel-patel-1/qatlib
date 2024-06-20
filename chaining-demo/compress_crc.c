@@ -2583,7 +2583,7 @@ int ax_output_pat_interference(
   bool blocking,
   enum wait_style wait_style)
 {
-  int num_requests = 1000;
+  int num_requests = 10000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2841,7 +2841,7 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
   }
 }
 
-int main(){
+int main(int argc, char **argv){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
   stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
@@ -2898,26 +2898,42 @@ int main(){
       - share a buffer counter indicating how many bytes have been accessed
       - show how many bytes a filler can access for different offload sizes
   */
- enum acc_pattern pat = RANDOM;
+
+  int post_ = post_proc_sizes[1];
+  int filler_ = L2SIZE;
+  enum acc_pattern pat = RANDOM;
+
+ if (strcmp(argv[1], "prefetch") == 0){
+    printf("2MB_Host_Buffer_Prefetch\n");
+    scheduler_prefetch = true;
+      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+
+  }
+
+  if (strcmp(argv[1], "block") == 0){
+    printf("2MB_Host_Buffer_Block\n");
+    ax_output_pat_interference(pat, post_, NULL, NULL,
+        chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
+
+  }
+
+  //
  for(enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
   for(int i=0; i<2; i++){
-    int post_ = post_proc_sizes[i];
-    int filler_ = L2SIZE;
+
 
       // PRINT("Blocking-Umwait: %d pattern: %s ", post_, pattern_str(pat));
       // ax_output_pat_interference(pat, post_, NULL, NULL,
       //   chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, UMWAIT);
       // PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
-      // ax_output_pat_interference(pat, post_, NULL, NULL,
-      //   chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
+
       // scheduler_prefetch = false;
       // PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       // ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
       // chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
       // PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
-      scheduler_prefetch = true;
-      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+
 
       // PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
       // ax_output_pat_interference(pat, post_, NULL, NULL,
