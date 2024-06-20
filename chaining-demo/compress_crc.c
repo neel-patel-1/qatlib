@@ -3131,58 +3131,80 @@ int main(){
   if (rc < 0)
     return -ENOMEM;
 
+  int num_iterations = 1000;
+  uint64_t start_times[num_iterations];
+  uint64_t end_times[num_iterations];
+  uint64_t run_times[num_iterations];
+  memset(start_times, 0, sizeof(uint64_t) * num_iterations);
+  memset(end_times, 0, sizeof(uint64_t) * num_iterations);
+  memset(run_times, 0, sizeof(uint64_t) * num_iterations);
+  uint64_t avg = 0, start, end;
+
   /* Cr Wrkld Gen*/
   /* Generate a sequence of LLC-Crs in a known memory region */
   int num_requests = 10;
-  struct completion_record *cr_pool =
-    aligned_alloc(dsa->compl_size, num_requests * sizeof(struct completion_record));
-  struct hw_desc *descs = malloc(num_requests * sizeof(struct hw_desc));
-  char *src = aligned_alloc(4 * 1024, len);
-  char *dst = aligned_alloc(4 * 1024, len);
 
-  memset(src, 0, len);
-  memset(dst, 0, len);
-  memset(descs, 0, num_requests * sizeof(struct hw_desc));
-  memset(cr_pool, 0, num_requests * sizeof(struct completion_record));
+  for(int i=0; i<num_iterations; i++){
+    struct completion_record *cr_pool =
+      aligned_alloc(dsa->compl_size, num_requests * sizeof(struct completion_record));
+    struct hw_desc *descs = malloc(num_requests * sizeof(struct hw_desc));
+    char *src = aligned_alloc(4 * 1024, len);
+    char *dst = aligned_alloc(4 * 1024, len);
 
-  for(int i=0; i<num_requests; i++){
-    acctest_prep_desc_common(&descs[i], DSA_OPCODE_MEMMOVE, dst, src, len, dflags);
-    descs[i].flags |= tflags;
-    descs[i].completion_addr = (uint64_t)&cr_pool[i];
-    while (enqcmd(dsa->wq_reg, (void *)&descs[i])){
-      _mm_pause();}
+    memset(src, 0, len);
+    memset(dst, 0, len);
+    memset(descs, 0, num_requests * sizeof(struct hw_desc));
+    memset(cr_pool, 0, num_requests * sizeof(struct completion_record));
 
-  }
+    for(int i=0; i<num_requests; i++){
+      acctest_prep_desc_common(&descs[i], DSA_OPCODE_MEMMOVE, dst, src, len, dflags);
+      descs[i].flags |= tflags;
+      descs[i].completion_addr = (uint64_t)&cr_pool[i];
+      while (enqcmd(dsa->wq_reg, (void *)&descs[i])){
+        _mm_pause();}
 
-  /* queue component test */
-  /* shinjuku global queue for re-enqueue used for worker-local preempted requests */
-
-  /* (Dispatcher-Monitor-And-RenQ)*/ /* Paused -> Monitored -> Re-enqueued*/
-  /* dispatcher will (1) check the wprler-local response queue for Ax-Paused Requests*/
-
-  /* (2) Find the cr associated with the paused request */
-
-  /* (3) Monitor for the cr */
-
-  /* (4) Renqueue the paused request in the */
-
-  /* (Dispatcher-RenQ) */
-  /* dispatcher will (1) check the worker-local response queue for Ax-Resumed Requests*/
-
-  /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
-  while(cr_pool[num_requests-1].status == 0){_mm_pause(); } /* overhead to enqueue a batch of resumed tasks of size num_requests*/
-  for(int i=0; i<num_requests; i++){
-    if(cr_pool[i].status == 1){
-      tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
-    } else {
-      PRINT_ERR("Offload Failed: 0x%x\n", cr_pool[i].status);
-      return -1;
     }
+
+    /* queue component test */
+    /* shinjuku global queue for re-enqueue used for worker-local preempted requests */
+
+    /* (Dispatcher-Monitor-And-RenQ)*/ /* Paused -> Monitored -> Re-enqueued*/
+    /* dispatcher will (1) check the wprler-local response queue for Ax-Paused Requests*/
+
+    /* (2) Find the cr associated with the paused request */
+
+    /* (3) Monitor for the cr */
+
+    /* (4) Renqueue the paused request in the */
+
+    /* (Dispatcher-RenQ) */
+    /* dispatcher will (1) check the worker-local response queue for Ax-Resumed Requests*/
+
+    /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
+    start = sampleCoderdtsc();
+    while(cr_pool[num_requests-1].status == 0){_mm_pause(); } /* overhead to enqueue a batch of resumed tasks of size num_requests*/
+    for(int i=0; i<num_requests; i++){
+      if(cr_pool[i].status == 1){
+        tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
+      } else {
+        PRINT_ERR("Offload Failed: 0x%x\n", cr_pool[i].status);
+        return -1;
+      }
+    }
+    end = sampleCoderdtsc();
+    start_times[i] = start;
+    end_times[i] = end;
+
+
+    /* (Dispatcher-NonRunnableRenQ-And-DeferCheck)*/
+
+    free(src);
+    free(dst);
+    free(descs);
+    free(cr_pool);
   }
-
-
-  /* (Dispatcher-NonRunnableRenQ-And-DeferCheck)*/
-
+  avg_samples_from_arrays(run_times, avg, end_times, start_times, num_iterations);
+  PRINT("Requests: %ld EnqueueTimePerRequest: %ld\n", num_requests, avg);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
