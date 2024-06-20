@@ -3186,7 +3186,7 @@ int main(){
 
     start = sampleCoderdtsc();
       if(cr_pool[100].status == 1){
-        // tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
+        tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
       } else {
         PRINT_ERR("Offload Failed: 0x%x\n", cr_pool[i].status);
         return -1;
