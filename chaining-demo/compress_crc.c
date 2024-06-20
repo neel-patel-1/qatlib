@@ -3142,7 +3142,8 @@ int main(){
 
   /* Cr Wrkld Gen*/
   /* Generate a sequence of LLC-Crs in a known memory region */
-  int num_requests = 10;
+  int num_cr_pages = 100;
+  int num_requests = num_cr_pages * 4096 / dsa->compl_size;
 
   for(int i=0; i<num_iterations; i++){
     struct completion_record *cr_pool =
@@ -3204,7 +3205,7 @@ int main(){
     free(cr_pool);
   }
   avg_samples_from_arrays(run_times, avg, end_times, start_times, num_iterations);
-  PRINT("Requests: %ld EnqueueTimePerRequest: %ld\n", num_requests, avg);
+  PRINT("Requests: %ld EnqueueTime: %ld EnqueueTimePerRequest: %ld\n", num_requests, avg, avg/num_requests);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
