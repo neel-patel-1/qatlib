@@ -3183,10 +3183,10 @@ int main(){
 
     /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
     start = sampleCoderdtsc();
-    while(cr_pool[num_requests-1].status == 0){_mm_pause(); } /* overhead to enqueue a batch of resumed tasks of size num_requests*/
+    while(cr_pool[num_requests - 1].status == 0){_mm_pause(); } /* overhead to enqueue a batch of resumed tasks of size num_requests*/
     for(int i=0; i<num_requests; i++){
       if(cr_pool[i].status == 1){
-        tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
+        // tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
       } else {
         PRINT_ERR("Offload Failed: 0x%x\n", cr_pool[i].status);
         return -1;
