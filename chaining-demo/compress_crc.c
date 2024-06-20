@@ -2583,7 +2583,7 @@ int ax_output_pat_interference(
   bool blocking,
   enum wait_style wait_style)
 {
-  int num_requests = 1000;
+  int num_requests = 10000;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);

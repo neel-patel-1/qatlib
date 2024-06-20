@@ -2,6 +2,8 @@
 
 
 file=prefetch_patterns.log
+[ "$(sudo accel-config list | grep block | awk -F: '{print $2}' | tr -d , )" != 1 ] && echo "enable bof via \"sudo ./setup_dsa bof_swq_dev2.cfg\" " && exit -1
+
 make -j
 sudo taskset -c 30  ./compress_crc   | tee $file
 
