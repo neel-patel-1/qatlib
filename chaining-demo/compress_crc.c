@@ -3182,17 +3182,17 @@ int main(){
     /* dispatcher will (1) check the worker-local response queue for Ax-Resumed Requests*/
 
     /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
-    start = sampleCoderdtsc();
     while(cr_pool[num_requests - 1].status == 0){_mm_pause(); } /* overhead to enqueue a batch of resumed tasks of size num_requests*/
-    for(int i=0; i<num_requests; i++){
-      if(cr_pool[i].status == 1){
+
+    start = sampleCoderdtsc();
+      if(cr_pool[100].status == 1){
         // tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
       } else {
         PRINT_ERR("Offload Failed: 0x%x\n", cr_pool[i].status);
         return -1;
       }
-    }
     end = sampleCoderdtsc();
+
     start_times[i] = start;
     end_times[i] = end;
 
