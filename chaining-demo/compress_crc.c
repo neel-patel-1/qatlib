@@ -3057,8 +3057,12 @@ struct request {
   uint16_t state;
   uint64_t spin_cycles;
   int xfer_size;
+
+  struct completion_record *comp;
+  fcontext_t *ctx;
+
   struct request * next;
-}  __attribute__((packed, aligned(64)));
+};
 
 typedef struct request_queue{
   struct request *head;
@@ -3119,9 +3123,36 @@ int main(){
 	int wq_id = 0;
 	int dev_id = 2;
   int wq_type = ACCFG_WQ_SHARED;
+  int len = 4096;
   int rc;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
 
   /* Cr Wrkld Gen*/
+  /* Generate a sequence of LLC-Crs in a known memory region */
+  int num_requests = 10;
+  struct completion_record *cr_pool =
+    aligned_alloc(dsa->compl_size, num_requests * sizeof(struct completion_record));
+  struct hw_desc *descs = malloc(num_requests * sizeof(struct hw_desc));
+  char *src = aligned_alloc(4 * 1024, len);
+  char *dst = aligned_alloc(4 * 1024, len);
+
+  memset(src, 0, len);
+  memset(dst, 0, len);
+  memset(descs, 0, num_requests * sizeof(struct hw_desc));
+  memset(cr_pool, 0, num_requests * sizeof(struct completion_record));
+
+  for(int i=0; i<num_requests; i++){
+    acctest_prep_desc_common(&descs[i], DSA_OPCODE_MEMMOVE, dst, src, len, dflags);
+    descs[i].flags |= tflags;
+    descs[i].completion_addr = (uint64_t)&cr_pool[i];
+    while (enqcmd(dsa->wq_reg, (void *)&descs[i])){
+      _mm_pause();}
+
+  }
 
   /* queue component test */
   /* shinjuku global queue for re-enqueue used for worker-local preempted requests */
@@ -3139,170 +3170,22 @@ int main(){
   /* dispatcher will (1) check the worker-local response queue for Ax-Resumed Requests*/
 
   /* (2) Renqueue the Ax-Resumed Request in the global task queue*/
-  tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
+  while(cr_pool[num_requests-1].status == 0){_mm_pause(); } /* overhead to enqueue a batch of resumed tasks of size num_requests*/
+  for(int i=0; i<num_requests; i++){
+    if(cr_pool[i].status == 1){
+      tskq_enqueue_tail(&tskq, 2100, 16*1024, PAUSED);
+    } else {
+      PRINT_ERR("Offload Failed: 0x%x\n", cr_pool[i].status);
+      return -1;
+    }
+  }
 
 
   /* (Dispatcher-NonRunnableRenQ-And-DeferCheck)*/
 
 
-
-  dsa = acctest_init(tflags);
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
-
-
-  dispatcher_cr_iterate_and_reenqueue();
-  return 0;
-
-  rc = comp->status;
-  if(rc != DSA_COMP_SUCCESS){
-    PRINT_ERR("Offload Failed: 0x%x\n", rc);
-  }
-
-  return 0;
-
-  /* We need tasks to submit and yield */
-  /* we use noop */
-
-
-
-  int num_requests = 1000;
-  #define CACHE_LINE_SIZE 64
-  #define L1SIZE 48 * 1024
-  #define L2SIZE 2 * 1024 * 1024
-  #define L3WAYSIZE 2621440ULL
-  #define L3FULLSIZE 39321600ULL
-
-  // int f_acc_size[1] = {L1SIZE, L2SIZE, L3WAYSIZE, L3FULLSIZE};
-  int f_acc_size[5] = {2 * 1024, L1SIZE, L2SIZE, L3FULLSIZE};
-  /* but how much damage can the filler even do if we preempt it*/
-
-
-  // for(int cLevel = 0; cLevel <= 2; cLevel++){
-  int cLevel = 0;
-
-  int xfer_size = 1024 * 1024;
-
-  int reuse_distance = L1SIZE;
-  int do_flush = 0;
-  bool specClevel = false;
-  int scheduler_prefetch = false;
-
-
-  int post_proc_sizes[2] = {L1SIZE, L2SIZE};
-  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-  int chase_on_dst = 1; /* yielder reads dst */
-
-  /* Post Processed Payload Size Impacts the benefits of sw prefetching */
-  /*
-  How much data should the filler be allowed to evict ? -
-    (1) have the filler check the signal while making memory accesses to implement a tight preemption interval
-      - share a buffer counter indicating how many bytes have been accessed
-      - show how many bytes a filler can access for different offload sizes
-  */
- enum acc_pattern pat = RANDOM;
- for(enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
-  for(int i=0; i<2; i++){
-    int post_ = post_proc_sizes[i];
-    int filler_ = L2SIZE;
-
-      scheduler_prefetch = false;
-      PRINT("AxBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
-
-      PRINT("Blocking-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true);
-
-      PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, 0, true, NULL, true);
-
-      PRINT("AxBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
-      scheduler_prefetch = true;
-      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
-
-    }
- }
-  return 0;
-
-  scheduler_prefetch = true;
-  for(enum acc_pattern pat = LINEAR; pat <=RANDOM; pat++){
-    for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
-    // for(int i=4*1024; i<=4*1024 ; i*=2){
-
-      /* Baseline access */
-      PRINT("CPU-Baseline: %d Pattern: %s ",i, pattern_str(pat));
-      uint64_t start_times[num_requests],
-        end_times[num_requests],
-        run_times[num_requests],
-        avg;
-      void ** dst = malloc(i);
-      void ** src = create_random_chain_starting_at(i, dst);
-      memcpy(dst, src,i);
-      for(int j=0; j<num_requests; j++){
-        uint64_t start, end;
-        start = sampleCoderdtsc();
-        do_access_pattern(pat, dst,i);
-        end = sampleCoderdtsc();
-        start_times[j] = start;
-        end_times[j] = end;
-      }
-      avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
-      PRINT("RequestOnCPUPostProcessing: %ld ", avg);
-      PRINT("AddedPrefetchingTime: %ld ", 0);
-
-      PRINT("FillerBytesAccessed: %d ", f_acc_size[0]);
-      PRINT("RequestorBytesAccessed: %d ", i);
-      PRINT("\n");
-
-      free(dst);
-      free(src);
-
-      PRINT("Blocking-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
-      ax_output_pat_interference(pat, i, NULL, NULL,
-        chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, NULL, true);
-
-      /* prefetched */
-      PRINT("AxOutput-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
-      ax_output_pat_interference(pat, i, true, do_flush,
-      chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
-      PRINT("AxOutput-LLC: %d Pattern: %s ", i, pattern_str(pat));
-      ax_output_pat_interference(pat, i, false, do_flush,
-      chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
-    }
-  }
-    // PRINT("ReuseDistance: %d ", reuse_distance);
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
-
-    // PRINT("Flush_ChaseOnDst L1" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    // PRINT("ChaseOnDst L1" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    // PRINT("Flush_ChaseOnDst L2" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 1, true);
-    // PRINT("ChaseOnDst L2" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 1, true);
-    // PRINT("Flush_ChaseOnDst L3" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 2, true);
-    // PRINT("ChaseOnDst L3" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 2, true);
-
-    // PRINT("\n");
-
-
-    return;
-
   acctest_free_task(dsa);
   acctest_free(dsa);
-
-  /* scheduler thread waits for offload completion and switches tasks */
-  /* figure of merit is filler ops completed */
-  /* Want to measure the request throughput*/
 
 
 exit:
