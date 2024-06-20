@@ -2915,13 +2915,13 @@ int main(){
       // ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
       // chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
       // PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
-      // scheduler_prefetch = true;
-      // ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-      //   chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+      scheduler_prefetch = true;
+      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
 
       // PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
+      // ax_output_pat_interference(pat, post_, NULL, NULL,
+      //   chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
 
     }
  }
