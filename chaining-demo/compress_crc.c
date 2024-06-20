@@ -2287,6 +2287,9 @@ void yield_offload_request_ts (fcontext_transfer_t arg) {
     /* returning control to the scheduler */
     ts14[idx] = sampleCoderdtsc();
     fcontext_swap(parent, NULL);
+    free(ifArray);
+    free(dst);
+    free(src);
 
 }
 
@@ -2789,7 +2792,6 @@ int main(){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-      enum acc_pattern pat = GATHER;
     #define CACHE_LINE_SIZE 64
     #define L1SIZE 48 * 1024
     #define L2SIZE 2 * 1024 * 1024
@@ -2812,6 +2814,8 @@ int main(){
     int reuse_distance = L1SIZE;
     int do_flush = 0;
     bool specClevel = false;
+
+    enum acc_pattern pat = RANDOM;
 
     PRINT("Blocking-ReuseDistance: 0 ");
     ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush,
