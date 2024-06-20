@@ -2118,6 +2118,7 @@ typedef struct _time_preempt_args_t {
   bool specClevel;
   enum acc_pattern filler_access_pattern;
   bool pollute_concurrent;
+  enum wait_style block_wait_style;
 } time_preempt_args_t;
 void filler_request_ts(fcontext_transfer_t arg) {
     /* made it to the filler context */
@@ -2326,6 +2327,8 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
     bool specClevel = r_arg->specClevel;
     bool doFlush = r_arg->flush_ax_out;
     enum acc_pattern pat = r_arg->pat;
+    enum wait_style block_style = r_arg->block_wait_style;
+
 
 
   /* made it to the offload context */
@@ -2366,8 +2369,16 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
     ts5[idx] = sampleCoderdtsc();
 
     acctest_desc_submit(dsa, tsk->desc);
-    while(tsk->comp->status == 0){
-      _mm_pause();
+    switch(block_style){
+      case UMWAIT:
+        wait_umwait(tsk->comp);
+        break;
+      case PAUSE:
+        wait_pause(tsk->comp);
+        break;
+      case SPIN:
+        wait_spin(tsk->comp);
+        break;
     }
     ts6[idx] = sampleCoderdtsc();
     /* made it back to the offload context to perform some post processing */
@@ -2564,7 +2575,8 @@ int ax_output_pat_interference(
   int cLevel,
   bool specClevel,
   bool pollute_concurrent,
-  bool blocking)
+  bool blocking,
+  enum wait_style wait_style)
 {
   int num_requests = 1000;
   time_preempt_args_t t_args;
@@ -2637,6 +2649,7 @@ int ax_output_pat_interference(
   t_args.specClevel =specClevel;
   t_args.pollute_concurrent = pollute_concurrent;
   t_args.filler_access_pattern = RANDOM;
+  t_args.block_wait_style = wait_style;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
@@ -2885,86 +2898,24 @@ int main(){
   for(int i=0; i<2; i++){
     int post_ = post_proc_sizes[i];
     int filler_ = L2SIZE;
-      PRINT("Blocking-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
+      PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true);
+        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
+      PRINT("Blocking-Umwait: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, NULL, NULL,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, UMWAIT);
       scheduler_prefetch = false;
       PRINT("AxBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
-
+      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
       PRINT("AxBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
       scheduler_prefetch = true;
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false);
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
 
     }
  }
   return 0;
-
-  scheduler_prefetch = true;
-  for(enum acc_pattern pat = LINEAR; pat <=RANDOM; pat++){
-    for(int i=4*1024; i<=37 * 1024 * 1024 ; i*=2){
-    // for(int i=4*1024; i<=4*1024 ; i*=2){
-
-      /* Baseline access */
-      PRINT("CPU-Baseline: %d Pattern: %s ",i, pattern_str(pat));
-      uint64_t start_times[num_requests],
-        end_times[num_requests],
-        run_times[num_requests],
-        avg;
-      void ** dst = malloc(i);
-      void ** src = create_random_chain_starting_at(i, dst);
-      memcpy(dst, src,i);
-      for(int j=0; j<num_requests; j++){
-        uint64_t start, end;
-        start = sampleCoderdtsc();
-        do_access_pattern(pat, dst,i);
-        end = sampleCoderdtsc();
-        start_times[j] = start;
-        end_times[j] = end;
-      }
-      avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
-      PRINT("RequestOnCPUPostProcessing: %ld ", avg);
-      PRINT("AddedPrefetchingTime: %ld ", 0);
-
-      PRINT("FillerBytesAccessed: %d ", f_acc_size[0]);
-      PRINT("RequestorBytesAccessed: %d ", i);
-      PRINT("\n");
-
-      free(dst);
-      free(src);
-
-      PRINT("Blocking-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
-      ax_output_pat_interference(pat, i, NULL, NULL,
-        chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, NULL, true);
-
-      /* prefetched */
-      PRINT("AxOutput-Prefetch: %d Pattern: %s ", i, pattern_str(pat));
-      ax_output_pat_interference(pat, i, true, do_flush,
-      chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
-      PRINT("AxOutput-LLC: %d Pattern: %s ", i, pattern_str(pat));
-      ax_output_pat_interference(pat, i, false, do_flush,
-      chase_on_dst, tflags, f_acc_size[0], cLevel, specClevel, true, false);
-    }
-  }
-    // PRINT("ReuseDistance: %d ", reuse_distance);
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, do_flush, chase_on_dst, tflags, reuse_distance, cLevel, specClevel);
-
-    // PRINT("Flush_ChaseOnDst L1" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    // PRINT("ChaseOnDst L1" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 0, true);
-    // PRINT("Flush_ChaseOnDst L2" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 1, true);
-    // PRINT("ChaseOnDst L2" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 1, true);
-    // PRINT("Flush_ChaseOnDst L3" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 1, 1, tflags, CACHE_LINE_SIZE, 2, true);
-    // PRINT("ChaseOnDst L3" );
-    // ax_output_pat_interference(pat, xfer_size, scheduler_prefetch, 0, 1, tflags, CACHE_LINE_SIZE, 2, true);
-
-    // PRINT("\n");
 
 
     return;
