@@ -2906,12 +2906,6 @@ int main(){
       PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, NULL, NULL,
         chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
-      PRINT("Blocking-Umwait: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, UMWAIT);
-      PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
       scheduler_prefetch = false;
       PRINT("AxBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
