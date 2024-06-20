@@ -2363,6 +2363,11 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
     r_arg->signal = tsk->comp;
     r_arg->tsk = tsk;
 
+    uint8_t touch;
+    for(int i=0; i<memSize; i+=64){
+      touch = ((volatile uint8_t *)ifArray)[i];
+    }
+
 
 
     /* about to submit */
