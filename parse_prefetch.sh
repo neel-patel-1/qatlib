@@ -7,7 +7,7 @@ POST_SIZES=( $(( 48 * 1024 )) $(( 2 * 1024 * 1024 )) )
 PATS=( 0 1 )
 
 output=fig4.log
-iter=100
+iter=10000
 echo -n > $output
 for pat in ${PATS[@]}; do
   for size in "${POST_SIZES[@]}"; do
