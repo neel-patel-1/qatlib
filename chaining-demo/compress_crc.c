@@ -2866,6 +2866,54 @@ int main(int argc, char **argv){
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
   int num_requests = 1000;
+  uint64_t start, end, avg;
+  uint64_t start_times[num_requests], end_times[num_requests], run_times[num_requests];
+
+  /* Blocking , fill, then access */
+  int memSize = 32 * 1024;
+  int fillerSize = 2 * 1024 * 1024;
+  for(int i=0; i<num_requests; i++){
+    void **src;
+    void **dst = (void **)malloc(memSize);
+    void **ifArray = malloc(memSize);
+    void **pChase = create_random_chain(fillerSize);
+    struct task *tsk = acctest_alloc_task(dsa);
+
+    for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
+      ((uint8_t*)(dst))[i] = 0;
+    }
+    src = create_random_chain_starting_at(memSize, ifArray);
+    prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
+    acctest_desc_submit(dsa, tsk->desc);
+    while(tsk->comp->status == 0){
+      _mm_pause();
+    }
+    if(tsk->comp->status != DSA_COMP_SUCCESS){
+      PRINT("Error in offload: 0x%x\n", tsk->comp->status);
+      goto exit;
+    }
+
+    chase_pointers(pChase, fillerSize / 64);
+
+    start = sampleCoderdtsc();
+    chase_pointers(ifArray, memSize / 64);
+    end = sampleCoderdtsc();
+
+    free(ifArray);
+    free(dst);
+    free(src);
+
+    start_times[i] = start;
+    end_times[i] = end;
+    run_times[i] = end - start;
+
+  }
+  avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
+  PRINT("Cycles: %ld AxBufSize: %d BlockingFillerAccessSize: %ld\n", avg, memSize, fillerSize);
+
+
+  return 0;
+
   #define CACHE_LINE_SIZE 64
   #define L1SIZE 48 * 1024
   #define L2SIZE 2 * 1024 * 1024
