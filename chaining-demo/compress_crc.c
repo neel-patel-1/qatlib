@@ -2893,7 +2893,7 @@ int main(int argc, char **argv){
       goto exit;
     }
 
-    chase_pointers(pChase, fillerSize / 64);
+    // chase_pointers(pChase, fillerSize / 64);
 
     start = sampleCoderdtsc();
     chase_pointers(ifArray, memSize / 64);
