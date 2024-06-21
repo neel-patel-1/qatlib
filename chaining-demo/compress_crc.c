@@ -2918,6 +2918,13 @@ int main(int argc, char **argv){
 
   }
 
+  if(strcmp(argv[1], "no-prefetch") == 0){
+    printf("2MB_Host_Buffer_NoPrefetch\n");
+    scheduler_prefetch = false;
+    ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+  }
+
   if(strcmp(argv[1], "all") == 0){
       PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
       ax_output_pat_interference(pat, post_, NULL, NULL,
