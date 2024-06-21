@@ -2,12 +2,6 @@
 
 
 make -j
-# sudo perf stat -e L1-dcache-loads,L1-dcache-load-misses,L1-dcache-stores,L1-dcache-store-misses taskset -c 30 ./compress_crc block | tee block.log
-sudo taskset -c 30 ./compress_crc block | tee block.log
-# # sudo perf stat -e L1-dcache-loads,L1-dcache-load-misses,L1-dcache-stores,L1-dcache-store-misses taskset -c 30 ./compress_crc prefetch | tee prefetch.log
-sudo taskset -c 30 ./compress_crc prefetch | tee prefetch.log
-
-echo -n "Block "
-grep RequestOnCPU block.log  | awk '{print $2}'
-echo -n "Prefetch "
-grep RequestOnCPU prefetch.log  | awk '{print $2}'
+sudo taskset -c 30  stdbuf -o0 ./compress_crc  -s $(( 48 * 1024 ))  -b -t 0 | tee 48kb_linear_blocking
+sudo taskset -c 30  stdbuf -o0 ./compress_crc  -s $(( 48 * 1024 ))  -t 0 | tee 48kb_linear
+sudo taskset -c 30  stdbuf -o0 ./compress_crc  -s $(( 48 * 1024 ))  -p -t 0 | tee 48kb_linear_prefetch

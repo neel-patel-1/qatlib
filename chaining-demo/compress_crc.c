@@ -2583,9 +2583,10 @@ int ax_output_pat_interference(
   bool specClevel,
   bool pollute_concurrent,
   bool blocking,
-  enum wait_style wait_style)
+  enum wait_style wait_style,
+  int iterations)
 {
-  int num_requests = 10000;
+  int num_requests = iterations;
   time_preempt_args_t t_args;
   t_args.ts0 = malloc(sizeof(uint64_t) * num_requests);
   t_args.ts1 = malloc(sizeof(uint64_t) * num_requests);
@@ -2710,13 +2711,11 @@ int ax_output_pat_interference(
   uint64_t avg = 0;
   uint64_t run_times[num_requests];
   /* print bytes */
-  avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
-  PRINT("RequestOnCPUPostProcessing: %ld ", avg);
   avg_samples_from_arrays(run_times,avg, bMnp2, bMnp, num_requests);
   PRINT("CyclesInSchedulingContext: %ld ", avg);
+  avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
+  PRINT("RequestOnCPUPostProcessing: %ld ", avg);
 
-  PRINT("FillerBytesAccessed: %d ", chainSize);
-  PRINT("RequestorBytesAccessed: %d ", xfer_size);
   // avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
   // PRINT("Create_a_request_processing_context: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
@@ -2895,8 +2894,9 @@ int main(int argc, char **argv){
   bool scheduler_prefetch = false;
   int opt;
   int chase_on_dst = 0; /* yielder reads dst */
+  int iterations;
 
-  while ((opt = getopt(argc, argv, "bps:f:t:")) != -1) {
+  while ((opt = getopt(argc, argv, "bps:f:t:i:")) != -1) {
 		switch (opt) {
 		case 'b':
 			block = true;
@@ -2917,15 +2917,18 @@ int main(int argc, char **argv){
       int pat_num = atoi(optarg);
       pat = (enum acc_pattern)pat_num;
       break;
+    case 'i':
+      iterations = atoi(optarg);
+      break;
 		default:
 			break;
 		}
 	}
 
-  PRINT("Pattern: %s SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
-    pattern_str(pat), scheduler_prefetch, post_, filler_);
+  PRINT("PostPattern: %s Blocking: %d SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
+    pattern_str(pat), scheduler_prefetch, block, post_, filler_);
   ax_output_pat_interference(pat, post_, scheduler_prefetch, false,
-        chase_on_dst, tflags, filler_, 0, false, true, block, SPIN);
+        chase_on_dst, tflags, filler_, 0, false, true, block, SPIN, iterations);
 
 
 
