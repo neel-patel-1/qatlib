@@ -2713,7 +2713,7 @@ int ax_output_pat_interference(
   avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld ", avg);
   avg_samples_from_arrays(run_times,avg, bMnp2, bMnp, num_requests);
-  PRINT("AddedPrefetchingTime: %ld ", avg);
+  PRINT("CyclesInSchedulingContext: %ld ", avg);
 
   PRINT("FillerBytesAccessed: %d ", chainSize);
   PRINT("RequestorBytesAccessed: %d ", xfer_size);
@@ -2877,8 +2877,6 @@ int main(int argc, char **argv){
   int f_acc_size[5] = {2 * 1024, L1SIZE, L2SIZE, L3FULLSIZE};
   /* but how much damage can the filler even do if we preempt it*/
 
-
-  // for(int cLevel = 0; cLevel <= 2; cLevel++){
   int cLevel = 0;
 
   int xfer_size = 1024 * 1024;
@@ -2889,15 +2887,6 @@ int main(int argc, char **argv){
 
   int post_proc_sizes[2] = {L1SIZE, L2SIZE};
   tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
-  int chase_on_dst = 0; /* yielder reads dst */
-
-  /* Post Processed Payload Size Impacts the benefits of sw prefetching */
-  /*
-  How much data should the filler be allowed to evict ? -
-    (1) have the filler check the signal while making memory accesses to implement a tight preemption interval
-      - share a buffer counter indicating how many bytes have been accessed
-      - show how many bytes a filler can access for different offload sizes
-  */
 
   int post_ = post_proc_sizes[1];
   int filler_ = L2SIZE;
@@ -2905,8 +2894,9 @@ int main(int argc, char **argv){
   bool block = false;
   bool scheduler_prefetch = false;
   int opt;
+  int chase_on_dst = 0; /* yielder reads dst */
 
-  while ((opt = getopt(argc, argv, "bps:")) != -1) {
+  while ((opt = getopt(argc, argv, "bps:f:t:")) != -1) {
 		switch (opt) {
 		case 'b':
 			block = true;
@@ -2915,73 +2905,30 @@ int main(int argc, char **argv){
 			scheduler_prefetch = true;
       break;
     case 's':
-      xfer_size = atoi(optarg);
+      post_ = atoi(optarg);
+      break;
+    case 'f':
+      filler_ = atoi(optarg);
+      break;
+    case 'a':
+      chase_on_dst = 1;
+      break;
+    case 't':
+      int pat_num = atoi(optarg);
+      pat = (enum acc_pattern)pat_num;
       break;
 		default:
 			break;
 		}
 	}
 
-  PRINT("HostBufferSize: %d AxBufferSize: %s ", post_, pattern_str(pat));
-  ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
-
-  }
-
-  if(strcmp(argv[1], "no-prefetch") == 0){
-    printf("2MB_Host_Buffer_NoPrefetch\n");
-    scheduler_prefetch = false;
-    ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
-  }
-
-  ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
-
-  if(strcmp(argv[1], "all") == 0){
-      PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, NULL, NULL,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
-      // PRINT("Blocking-Umwait: %d pattern: %s ", post_, pattern_str(pat));
-      // ax_output_pat_interference(pat, post_, NULL, NULL,
-      //   chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, UMWAIT);
-      // PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
-      // ax_output_pat_interference(pat, post_, NULL, NULL,
-      //   chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
-      scheduler_prefetch = false;
-      PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
-      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
-      PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
-      scheduler_prefetch = true;
-      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
-
-  }
-
-  //
- for(enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
-  for(int i=0; i<2; i++){
+  PRINT("Pattern: %s SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
+    pattern_str(pat), scheduler_prefetch, post_, filler_);
+  ax_output_pat_interference(pat, post_, scheduler_prefetch, false,
+        chase_on_dst, tflags, filler_, 0, false, true, block, SPIN);
 
 
-      // PRINT("Blocking-Umwait: %d pattern: %s ", post_, pattern_str(pat));
-      // ax_output_pat_interference(pat, post_, NULL, NULL,
-      //   chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, UMWAIT);
-      // PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
 
-      // scheduler_prefetch = false;
-      // PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
-      // ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-      // chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
-      // PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
-
-
-      // PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
-      // ax_output_pat_interference(pat, post_, NULL, NULL,
-      //   chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
-
-    }
- }
   return 0;
 
 
