@@ -2872,16 +2872,16 @@ int main(int argc, char **argv){
   /* Blocking , fill, then access */
   int memSize = 32 * 1024;
   int fillerSizeMax = 16 * 1024 * 1024;
-  for(int fillerSize = 1 * 1024 ; fillerSize<= fillerSizeMax; fillerSize*=2){
+  for(int  fillerSize= fillerSizeMax; fillerSize >= 1 * 1024 ; fillerSize/=2){
     for(int i=0; i<num_requests; i++){
       void **src;
       void **dst = (void **)malloc(memSize);
       void **ifArray = malloc(memSize);
-      void **pChase = create_random_chain(fillerSize);
+      // void **pChase = create_random_chain(fillerSize);
       struct task *tsk = acctest_alloc_task(dsa);
 
       for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
-        ((uint8_t*)(dst))[i] = 0;
+        ((uint8_t*)(ifArray))[i] = 0;
       }
       src = create_random_chain_starting_at(memSize, ifArray);
       prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
