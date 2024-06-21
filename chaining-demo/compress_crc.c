@@ -40,6 +40,8 @@
 #include <sys/user.h>
 #include "fcontext.h"
 
+#include <unistd.h>
+
 int gDebugParam = 1;
 
 uint8_t **mini_bufs;
@@ -2884,8 +2886,6 @@ int main(int argc, char **argv){
   int reuse_distance = L1SIZE;
   int do_flush = 0;
   bool specClevel = false;
-  int scheduler_prefetch = false;
-
 
   int post_proc_sizes[2] = {L1SIZE, L2SIZE};
   tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
@@ -2902,18 +2902,28 @@ int main(int argc, char **argv){
   int post_ = post_proc_sizes[1];
   int filler_ = L2SIZE;
   enum acc_pattern pat = RANDOM;
+  bool block = false;
+  bool scheduler_prefetch = false;
+  int opt;
 
- if (strcmp(argv[1], "prefetch") == 0){
-    printf("2MB_Host_Buffer_Prefetch\n");
-    scheduler_prefetch = true;
-      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
-        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+  while ((opt = getopt(argc, argv, "bps:")) != -1) {
+		switch (opt) {
+		case 'b':
+			block = true;
+			break;
+		case 'p':
+			scheduler_prefetch = true;
+      break;
+    case 's':
+      xfer_size = atoi(optarg);
+      break;
+		default:
+			break;
+		}
+	}
 
-  }
-
-  if (strcmp(argv[1], "block") == 0){
-    printf("2MB_Host_Buffer_Block\n");
-    ax_output_pat_interference(pat, post_, NULL, NULL,
+  PRINT("HostBufferSize: %d AxBufferSize: %s ", post_, pattern_str(pat));
+  ax_output_pat_interference(pat, post_, NULL, NULL,
         chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
 
   }
@@ -2924,6 +2934,9 @@ int main(int argc, char **argv){
     ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
       chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
   }
+
+  ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
 
   if(strcmp(argv[1], "all") == 0){
       PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
