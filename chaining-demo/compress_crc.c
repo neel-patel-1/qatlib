@@ -2918,6 +2918,27 @@ int main(int argc, char **argv){
 
   }
 
+  if(strcmp(argv[1], "all") == 0){
+      PRINT("Blocking-Poll: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, NULL, NULL,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, SPIN);
+      // PRINT("Blocking-Umwait: %d pattern: %s ", post_, pattern_str(pat));
+      // ax_output_pat_interference(pat, post_, NULL, NULL,
+      //   chase_on_dst, tflags, filler_, cLevel, specClevel, NULL, true, UMWAIT);
+      // PRINT("Blocking-Prefetch: %d pattern: %s ", post_, pattern_str(pat));
+      // ax_output_pat_interference(pat, post_, NULL, NULL,
+      //   chase_on_dst, tflags, filler_, 0, true, NULL, true, SPIN);
+      scheduler_prefetch = false;
+      PRINT("HostBuffer-NoPrefetch: %d pattern: %s ", post_, pattern_str(pat));
+      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+      chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+      PRINT("HostBuffer-Prefetched: %d pattern: %s ", post_, pattern_str(pat));
+      scheduler_prefetch = true;
+      ax_output_pat_interference(pat, post_, scheduler_prefetch, do_flush,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, false, SPIN);
+
+  }
+
   //
  for(enum acc_pattern pat = LINEAR; pat <= RANDOM; pat++){
   for(int i=0; i<2; i++){
