@@ -2896,7 +2896,7 @@ int main(int argc, char **argv){
   int chase_on_dst = 0; /* yielder reads dst */
   int iterations;
 
-  while ((opt = getopt(argc, argv, "bps:f:t:i:")) != -1) {
+  while ((opt = getopt(argc, argv, "bps:f:t:i:a")) != -1) {
 		switch (opt) {
 		case 'b':
 			block = true;
@@ -2925,8 +2925,8 @@ int main(int argc, char **argv){
 		}
 	}
 
-  PRINT("PostPattern: %s Blocking: %d SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
-    pattern_str(pat), scheduler_prefetch, block, post_, filler_);
+  PRINT("PostPattern: %s Blocking: %d AccessAxBuffer: %d SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
+    pattern_str(pat), scheduler_prefetch, block, chase_on_dst, post_, filler_);
   ax_output_pat_interference(pat, post_, scheduler_prefetch, false,
         chase_on_dst, tflags, filler_, 0, false, true, block, SPIN, iterations);
 
