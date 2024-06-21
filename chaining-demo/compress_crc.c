@@ -2915,7 +2915,7 @@ int main(int argc, char **argv){
   int chase_on_dst = 0; /* yielder reads dst */
   int iterations;
 
-  while ((opt = getopt(argc, argv, "bps:f:t:i:ac:j")) != -1) {
+  while ((opt = getopt(argc, argv, "bps:f:t:h:i:ac:j")) != -1) {
 		switch (opt) {
 		case 'b':
 			block = true;
