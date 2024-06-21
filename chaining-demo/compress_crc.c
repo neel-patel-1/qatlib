@@ -2872,7 +2872,7 @@ int main(int argc, char **argv){
   /* Blocking , fill, then access */
   int memSize = 32 * 1024;
   int fillerSizeMax = 16 * 1024 * 1024;
-  for(int fillerSize = 1 * 1024 ; fillerSize<= 5 * 1024 * 1024; fillerSize*=2){
+  for(int fillerSize = 1 * 1024 ; fillerSize<= fillerSizeMax; fillerSize*=2){
     for(int i=0; i<num_requests; i++){
       void **src;
       void **dst = (void **)malloc(memSize);
