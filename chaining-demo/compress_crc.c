@@ -2926,7 +2926,7 @@ int main(int argc, char **argv){
 	}
 
   PRINT("PostPattern: %s Blocking: %d AccessAxBuffer: %d SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
-    pattern_str(pat), scheduler_prefetch, block, chase_on_dst, post_, filler_);
+    pattern_str(pat), block, chase_on_dst, scheduler_prefetch, post_, filler_);
   ax_output_pat_interference(pat, post_, scheduler_prefetch, false,
         chase_on_dst, tflags, filler_, 0, false, true, block, SPIN, iterations);
 
