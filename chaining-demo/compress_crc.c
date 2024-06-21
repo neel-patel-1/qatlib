@@ -2872,12 +2872,12 @@ int main(int argc, char **argv){
   /* Blocking , fill, then access */
   int memSize = 32 * 1024;
   int fillerSizeMax = 16 * 1024 * 1024;
-  for(int  fillerSize= fillerSizeMax; fillerSize >= 1 * 1024 ; fillerSize/=2){
+  for(int  fillerSize= 1 * 1024 ; fillerSize <= fillerSizeMax ; fillerSize*=2){
     for(int i=0; i<num_requests; i++){
       void **src;
       void **dst = (void **)malloc(memSize);
       void **ifArray = malloc(memSize);
-      // void **pChase = create_random_chain(fillerSize);
+      void **pChase = malloc(fillerSize);
       struct task *tsk = acctest_alloc_task(dsa);
 
       for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
@@ -2895,6 +2895,9 @@ int main(int argc, char **argv){
       }
 
       // chase_pointers(pChase, fillerSize / 64);
+      for(int i=0; i<fillerSize; i+=64){
+        ((uint8_t*)pChase)[i] = 0;
+      }
 
       start = sampleCoderdtsc();
       chase_pointers(ifArray, memSize / 64);
