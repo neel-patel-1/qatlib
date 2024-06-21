@@ -2573,6 +2573,7 @@ int filler_thread_cycle_estimate_ts(){
 
 int ax_output_pat_interference(
   enum acc_pattern pat,
+  enum acc_pattern fillerPat,
   int xfer_size,
   int scheduler_prefetch,
   int do_flush,
@@ -2645,6 +2646,9 @@ int ax_output_pat_interference(
     case GATHER:
       t_args.pat = GATHER;
       break;
+    default:
+      t_args.pat = RANDOM;
+      break;
   }
   t_args.src_size = xfer_size;
   t_args.scheduler_l1_prefetch = scheduler_prefetch;
@@ -2656,7 +2660,20 @@ int ax_output_pat_interference(
   t_args.cLevel = cLevel;
   t_args.specClevel =specClevel;
   t_args.pollute_concurrent = pollute_concurrent;
-  t_args.filler_access_pattern = RANDOM;
+  switch(fillerPat){
+    case LINEAR:
+      t_args.filler_access_pattern = LINEAR;
+      break;
+    case RANDOM:
+      t_args.filler_access_pattern = RANDOM;
+      break;
+    case GATHER:
+      t_args.filler_access_pattern = GATHER;
+      break;
+    default:
+      t_args.filler_access_pattern = RANDOM;
+      break;
+  }
   t_args.block_wait_style = wait_style;
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
@@ -2713,6 +2730,8 @@ int ax_output_pat_interference(
   /* print bytes */
   avg_samples_from_arrays(run_times,avg, bMnp2, bMnp, num_requests);
   PRINT("CyclesInSchedulingContext: %ld ", avg);
+  avg_samples_from_arrays(run_times,avg, ts12, ts6, num_requests);
+  PRINT("PrefetchCycles(IfBlockingEnabled): %ld ", avg);
   avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld ", avg);
 
@@ -2865,59 +2884,6 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  int num_requests = 1000;
-  uint64_t start, end, avg;
-  uint64_t start_times[num_requests], end_times[num_requests], run_times[num_requests];
-
-  /* Blocking , fill, then access */
-  int memSize = 32 * 1024;
-  int fillerSizeMax = 16 * 1024 * 1024;
-  for(int  fillerSize= 1 * 1024 ; fillerSize <= fillerSizeMax ; fillerSize*=2){
-    for(int i=0; i<num_requests; i++){
-      void **src;
-      void **dst = (void **)malloc(memSize);
-      void **ifArray = malloc(memSize);
-      void **pChase = malloc(fillerSize);
-      struct task *tsk = acctest_alloc_task(dsa);
-
-      for(int i=0; i<memSize; i++){ /* we write to dst, but ax will overwrite, src is prefaulted from chain func*/
-        ((uint8_t*)(ifArray))[i] = 0;
-      }
-      src = create_random_chain_starting_at(memSize, ifArray);
-      prepare_memcpy_task_flags(tsk, dsa, (uint8_t *)src, memSize, (uint8_t *)ifArray, IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
-      acctest_desc_submit(dsa, tsk->desc);
-      while(tsk->comp->status == 0){
-        _mm_pause();
-      }
-      if(tsk->comp->status != DSA_COMP_SUCCESS){
-        PRINT("Error in offload: 0x%x\n", tsk->comp->status);
-        goto exit;
-      }
-
-      // chase_pointers(pChase, fillerSize / 64);
-      for(int i=0; i<fillerSize; i+=64){
-        ((uint8_t*)pChase)[i] = 0;
-      }
-
-      start = sampleCoderdtsc();
-      chase_pointers(ifArray, memSize / 64);
-      end = sampleCoderdtsc();
-
-      free(ifArray);
-      free(dst);
-      free(src);
-
-      start_times[i] = start;
-      end_times[i] = end;
-      run_times[i] = end - start;
-
-    }
-    avg_samples_from_arrays(run_times, avg, end_times, start_times, num_requests);
-    PRINT("Cycles: %ld AxBufSize: %d BlockingFillerAccessSize: %ld\n", avg, memSize, fillerSize);
-  }
-
-  return 0;
-
   #define CACHE_LINE_SIZE 64
   #define L1SIZE 48 * 1024
   #define L2SIZE 2 * 1024 * 1024
@@ -2937,18 +2903,19 @@ int main(int argc, char **argv){
   bool specClevel = false;
 
   int post_proc_sizes[2] = {L1SIZE, L2SIZE};
-  tflags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC;
+  tflags = IDXD_OP_FLAG_BOF ;
 
   int post_ = post_proc_sizes[1];
   int filler_ = L2SIZE;
   enum acc_pattern pat = RANDOM;
+  enum acc_pattern filler_pat = RANDOM;
   bool block = false;
   bool scheduler_prefetch = false;
   int opt;
   int chase_on_dst = 0; /* yielder reads dst */
   int iterations;
 
-  while ((opt = getopt(argc, argv, "bps:f:t:i:a")) != -1) {
+  while ((opt = getopt(argc, argv, "bps:f:t:i:ac:j")) != -1) {
 		switch (opt) {
 		case 'b':
 			block = true;
@@ -2969,18 +2936,32 @@ int main(int argc, char **argv){
       int pat_num = atoi(optarg);
       pat = (enum acc_pattern)pat_num;
       break;
+    case 'h':
+      int fill_num = atoi(optarg);
+      filler_pat = (enum acc_pattern)fill_num;
     case 'i':
       iterations = atoi(optarg);
+      break;
+    case 'l':
+      cLevel = atoi(optarg);
+      break;
+    case 'c':
+      specClevel = true;
+      break;
+    case 'j':
+      tflags |= IDXD_OP_FLAG_CC;
       break;
 		default:
 			break;
 		}
 	}
 
-  PRINT("PostPattern: %s Blocking: %d AccessAxBuffer: %d SchedulerPrefetch: %d Host/AxBufferSize: %d FillerBufferSize: %d ",
-    pattern_str(pat), block, chase_on_dst, scheduler_prefetch, post_, filler_);
-  ax_output_pat_interference(pat, post_, scheduler_prefetch, false,
-        chase_on_dst, tflags, filler_, 0, false, true, block, SPIN, iterations);
+  PRINT("b: %d p: %d s: %d f: %d a: %d t: %d h: %d i: %d l: %d c: %d j: %d\n",
+    block, scheduler_prefetch, post_, filler_, chase_on_dst, pat, filler_pat,
+    iterations, cLevel, specClevel, tflags);
+
+  ax_output_pat_interference(pat, filler_pat, post_, scheduler_prefetch, false,
+        chase_on_dst, tflags, filler_, cLevel, specClevel, true, block, SPIN, iterations);
 
 
 
