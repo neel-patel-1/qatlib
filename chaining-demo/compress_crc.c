@@ -2318,6 +2318,7 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
     uint64_t *ts4 = r_arg->ts4;
     uint64_t *ts5 = r_arg->ts5;
     uint64_t *ts6 = r_arg->ts6;
+    uint64_t *ts7 = r_arg->ts12;
     uint64_t *ts12 = r_arg->ts12;
     uint64_t *ts13 = r_arg->ts13;
     uint64_t *ts14 = r_arg->ts14;
@@ -2370,12 +2371,12 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
       touch = ((volatile uint8_t *)ifArray)[i];
     }
 
-
-
     /* about to submit */
     ts5[idx] = sampleCoderdtsc();
 
     acctest_desc_submit(dsa, tsk->desc);
+    ts6[idx] = sampleCoderdtsc();
+
     switch(block_style){
       case UMWAIT:
         wait_umwait(tsk->comp);
@@ -2387,7 +2388,7 @@ void block_offload_request_ts (fcontext_transfer_t arg) {
         wait_spin(tsk->comp);
         break;
     }
-    ts6[idx] = sampleCoderdtsc();
+    ts7[idx] = sampleCoderdtsc();
     /* made it back to the offload context to perform some post processing */
 
     /* Preform buffer movement as dictated */
@@ -2678,11 +2679,10 @@ int ax_output_pat_interference(
   for(int i=0; i<num_requests; i++){
     t_args.idx = i;
     fcontext_state_t *self = fcontext_create_proxy();
-    ts0[i] = sampleCoderdtsc();
     fcontext_state_t *child;
 
     if(!blocking){
-
+      ts0[i] = sampleCoderdtsc();
     child = fcontext_create(yield_offload_request_ts);
     ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
     fcontext_state_t *filler = fcontext_create(filler_request_ts);
@@ -2716,8 +2716,10 @@ int ax_output_pat_interference(
     ts16[i] = sampleCoderdtsc(); /* filler destroyed*/
     fcontext_destroy(child);
     } else {
+      ts0[i] = sampleCoderdtsc();
       child = fcontext_create(block_offload_request_ts);
       fcontext_swap(child->context, &t_args);
+      ts1[i] = sampleCoderdtsc(); /* how long to create context for a request?*/
       fcontext_destroy(child);
     }
 
@@ -2735,6 +2737,25 @@ int ax_output_pat_interference(
   avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
   PRINT("RequestOnCPUPostProcessing: %ld ", avg);
 
+  if(blocking){
+    avg_samples_from_arrays(run_times,avg, ts3, ts0, num_requests);
+    PRINT("SwitchIntoBlockingContext: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts4, ts3, num_requests);
+    PRINT("AllocatBuffers_PrefaultPages_CreateRandomChainad_AllocateTask: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts5, ts4, num_requests);
+    PRINT("PrepareDescriptor_TouchHostSrcBuffer: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts6, ts5, num_requests);
+    PRINT("AxSubmit: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts7, ts6, num_requests);
+    PRINT("AxComputeTime: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts12, ts7, num_requests);
+    PRINT("PlacingBufferInHierarchy: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts13, ts12, num_requests);
+    PRINT("PostProcessing: %ld ", avg);
+    avg_samples_from_arrays(run_times,avg, ts1, ts13, num_requests);
+    PRINT("SwitchBackIntoScheduler: %ld\n", avg);
+
+  }
   // avg_samples_from_arrays(run_times,avg, ts1, ts0, num_requests);
   // PRINT("Create_a_request_processing_context: %ld\n", avg);
   // avg_samples_from_arrays(run_times,avg, ts3, ts2, num_requests);
