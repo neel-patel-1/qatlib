@@ -3210,7 +3210,7 @@ int main(int argc, char **argv){
     } else if(exists_waiting_preempted_task){
       PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
       exists_waiting_preempted_task = false;
-      fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+      request_xfers[last_preempted_task_idx] = fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
     } else {
       PRINT_DBG("Request %d starting\n", next_unused_task_comp_idx);
       request_states[next_unused_task_comp_idx] = fcontext_create(offload_request);
@@ -3238,7 +3238,7 @@ int main(int argc, char **argv){
     else if(exists_waiting_preempted_task){
       PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
       exists_waiting_preempted_task = false;
-      fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+      request_xfers[last_preempted_task_idx] = fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
     }
   }
 
