@@ -3205,7 +3205,8 @@ int main(int argc, char **argv){
     next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
     if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
       PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
-      fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+      request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
+        fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
       next_unresumed_task_comp_idx++;
     } else if(exists_waiting_preempted_task){
       PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
@@ -3232,13 +3233,15 @@ int main(int argc, char **argv){
     next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
     if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
       PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
-      fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+      request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
+        fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
       next_unresumed_task_comp_idx++;
     }
     else if(exists_waiting_preempted_task){
       PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
       exists_waiting_preempted_task = false;
-      request_xfers[last_preempted_task_idx] = fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+      request_xfers[last_preempted_task_idx] =
+        fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
     }
   }
 
