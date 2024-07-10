@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 1;
+int gDebugParam = 0;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -2194,8 +2194,18 @@ void filler_request_ts(fcontext_transfer_t arg) {
 /* request_sim.h */
 struct completion_record *comps = NULL;
 int next_unresumed_task_comp_idx = 0;
+int last_preempted_task_idx = 0;
+bool exists_waiting_preempted_task = false;
 
-void pre_offload_kernel(int kernel, void *input, int input_len){
+void probe_point(int task_idx, fcontext_t parent){
+  if(task_idx > next_unresumed_task_comp_idx){
+    PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
+    exists_waiting_preempted_task = true;
+    fcontext_swap(parent,NULL);
+  }
+}
+
+void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx, fcontext_t parent){
   if(kernel == 0){
     if(next_unresumed_task_comp_idx == 0){
       return;
@@ -2207,13 +2217,17 @@ void pre_offload_kernel(int kernel, void *input, int input_len){
   }
   else if(kernel == 1){
     for(int i=0; i<input_len; i++){
+      if(i%200 == 0){
+        probe_point(task_idx, parent);
+      }
       ((uint8_t *)input)[i] = 0;
     }
   }
 }
 
 void post_offload_kernel(int kernel, void *pre_wrk_set,
-  int pre_wrk_set_size, void *offload_data, int offload_data_size){
+  int pre_wrk_set_size, void *offload_data, int offload_data_size,
+  int task_idx, fcontext_t parent){
   if(kernel == 0){
     struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
     while(next_unresumed_task_comp->status == 0){
@@ -2221,13 +2235,20 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
     }
   }
   else if(kernel == 1){
+    int iters_between_probes = 100;
     for(int i=0; i<pre_wrk_set_size; i++){
+      if(i%iters_between_probes == 0){
+        probe_point(task_idx, parent);
+      }
       if(((uint8_t *)pre_wrk_set)[i] != 0){
         PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)pre_wrk_set)[i]);
       }
       ((uint8_t *)pre_wrk_set)[i] = 0x1;
     }
     for(int i=0; i<offload_data_size; i++){
+      if(i%iters_between_probes == 0){
+        probe_point(task_idx, parent);
+      }
       if(((uint8_t *)offload_data)[i] != 0){
         PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)offload_data)[i]);
       }
@@ -2312,6 +2333,7 @@ typedef struct offload_request_args_t {
 } offload_request_args;
 void offload_request(fcontext_transfer_t arg){
   offload_request_args *r_arg = (offload_request_args *)(arg.data);
+  fcontext_t parent = arg.prev_context;
   bool do_yield = r_arg->do_yield;
   int task_id = r_arg->task_id;
 
@@ -2325,7 +2347,8 @@ void offload_request(fcontext_transfer_t arg){
 
   /*pre offload*/
   void *pre_working_set = malloc(pre_working_set_size);
-  pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size);
+  pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size,
+    task_id, parent);
 
   /*offload*/
   int dst_buf_size = offload_size;
@@ -2334,8 +2357,8 @@ void offload_request(fcontext_transfer_t arg){
     dst_buf_size, do_yield, arg.prev_context, task_id);
 
   /*post offload*/
-  post_offload_kernel(post_offload_kernel, pre_working_set,
-    pre_working_set_size, dst_buf, dst_buf_size);
+  post_offload_kernel(post_offload_kernel_type, pre_working_set,
+    pre_working_set_size, dst_buf, dst_buf_size, task_id, parent);
   PRINT_DBG("Request %d done\n", task_id);
   fcontext_swap(arg.prev_context, NULL);
 }
@@ -3146,13 +3169,13 @@ int main(int argc, char **argv){
 
   bool do_yield = true;
 
-  int pre_offload_kernel_type = 0;
+  int pre_offload_kernel_type = 1;
   int pre_working_set_size = 16 * 1024;
 
   int offload_type = 0;
   int offload_size = 16 * 1024;
 
-  int post_offload_kernel_type = 0;
+  int post_offload_kernel_type = 1;
 
   int next_unused_task_comp_idx = 0;
   fcontext_state_t *request_states[total_requests];
@@ -3167,6 +3190,8 @@ int main(int argc, char **argv){
 
   offload_request_args *r_args[total_requests];
   struct completion_record *next_unresumed_task_comp;
+
+
 
   while(next_unused_task_comp_idx < total_requests){
     next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
