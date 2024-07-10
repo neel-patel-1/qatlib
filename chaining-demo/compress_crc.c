@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 1;
+int gDebugParam = 0;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -3204,25 +3204,39 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
     uint64_t end = sampleCoderdtsc();
     uint64_t nanos = (end - start)/(2.1);
     uint64_t micros = nanos / 1000;
-    if (micros > 0)
-      PRINT("AvgServicetime(us): %ld\n", micros/total_requests);
-    else
-      PRINT("AvgServicetime(ns): %ld\n", nanos/total_requests);
+    uint64_t total_requests_processed;
 
-    /* Complete all in-flight requests without starting up new ones*/
-    while(next_unresumed_task_comp_idx < next_unused_task_comp_idx){
-      next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
-      if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
-        PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
-        request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
-          fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
-        next_unresumed_task_comp_idx++;
-      }
-      else if(exists_waiting_preempted_task){
-        PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
-        exists_waiting_preempted_task = false;
-        request_xfers[last_preempted_task_idx] =
-          fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+
+    if(do_yield){
+      total_requests_processed = next_unresumed_task_comp_idx;
+      PRINT("TotalRequestsProcessed: %d\n", total_requests_processed);
+    }
+    else {
+      total_requests_processed = total_requests;
+      PRINT("TotalRequestsProcessed: %d\n", total_requests);
+    }
+
+    if (micros > 0)
+      PRINT("AvgServicetime(us): %ld\n", micros/total_requests_processed);
+    else
+      PRINT("AvgServicetime(ns): %ld\n", nanos/total_requests_processed);
+
+    if(need_check_for_completed_offload_tasks){
+      /* Complete all in-flight requests without starting up new ones*/
+      while(next_unresumed_task_comp_idx < next_unused_task_comp_idx){
+        next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+        if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
+          PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
+          request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
+            fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+          next_unresumed_task_comp_idx++;
+        }
+        else if(exists_waiting_preempted_task){
+          PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
+          exists_waiting_preempted_task = false;
+          request_xfers[last_preempted_task_idx] =
+            fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+        }
       }
     }
     /*teardonw*/
@@ -3270,6 +3284,38 @@ int main(int argc, char **argv){
   int offload_size = 16 * 1024;
 
   int post_offload_kernel_type = 1;
+
+  int opt;
+  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:")) != -1) {
+    switch (opt) {
+    case 'y':
+      do_yield = true;
+      break;
+    case 'i':
+      iters = atoi(optarg);
+      break;
+    case 'r':
+      total_requests = atoi(optarg);
+      break;
+    case 'f':
+      pre_working_set_size = atoi(optarg);
+      break;
+    case 'o':
+      offload_size = atoi(optarg);
+      break;
+    case 'k':
+      pre_offload_kernel_type = atoi(optarg);
+      break;
+    case 'l':
+      post_offload_kernel_type = atoi(optarg);
+      break;
+    default:
+      break;
+    }
+  }
+  PRINT("y: %d i: %d r: %d f: %d o: %d k: %d l: %d\n",
+    do_yield, iters, total_requests, pre_working_set_size,
+    offload_size, pre_offload_kernel_type, post_offload_kernel_type);
 
 
   service_time_under_exec_model_test(do_yield, total_requests, iters,
