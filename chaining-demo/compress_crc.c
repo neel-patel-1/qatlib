@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -2201,6 +2201,7 @@ void probe_point(int task_idx, fcontext_t parent){
   if(task_idx > next_unresumed_task_comp_idx){
     PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
     exists_waiting_preempted_task = true;
+    last_preempted_task_idx = task_idx;
     fcontext_swap(parent,NULL);
   }
 }
@@ -2305,6 +2306,7 @@ void do_offload(
       IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
     acctest_desc_submit(dsa, tsk->desc);
     if(do_yield){
+      PRINT_DBG("Request %d Yielding\n", task_id);
       fcontext_swap(parent, NULL);
     } else {
       while(tsk->comp->status == 0){
@@ -3165,17 +3167,17 @@ int main(int argc, char **argv){
 
   // accel_output_acc_test(argc, argv);
 
-  int total_requests = 1000;
+  int total_requests = 5;
 
   bool do_yield = true;
 
-  int pre_offload_kernel_type = 1;
+  int pre_offload_kernel_type = 0;
   int pre_working_set_size = 16 * 1024;
 
   int offload_type = 0;
   int offload_size = 16 * 1024;
 
-  int post_offload_kernel_type = 1;
+  int post_offload_kernel_type = 0;
 
   int next_unused_task_comp_idx = 0;
   fcontext_state_t *request_states[total_requests];
@@ -3196,11 +3198,15 @@ int main(int argc, char **argv){
   while(next_unused_task_comp_idx < total_requests){
     next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
     if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
-      PRINT_DBG("Request %d resuming\n", next_unresumed_task_comp_idx);
+      PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
       fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
-      fcontext_destroy(request_states[next_unresumed_task_comp_idx]);
-      free(r_args[next_unresumed_task_comp_idx]);
+      // fcontext_destroy(request_states[next_unresumed_task_comp_idx]);
+      // free(r_args[next_unresumed_task_comp_idx]);
       next_unresumed_task_comp_idx++;
+    } else if(exists_waiting_preempted_task){
+      PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
+      exists_waiting_preempted_task = false;
+      fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
     } else {
       PRINT_DBG("Request %d starting\n", next_unused_task_comp_idx);
       request_states[next_unused_task_comp_idx] = fcontext_create(offload_request);
@@ -3218,6 +3224,12 @@ int main(int argc, char **argv){
     while(next_unresumed_task_comp->status != DSA_COMP_SUCCESS){
       _mm_pause();
     }
+  }
+
+  /*teardonw*/
+  for(int i=0; i<total_requests; i++){
+    fcontext_destroy(request_states[i]);
+    free(r_args[i]);
   }
 
   fcontext_destroy(self);
