@@ -3167,7 +3167,7 @@ int main(int argc, char **argv){
 
   // accel_output_acc_test(argc, argv);
 
-  int total_requests = 5;
+  int total_requests = 1000;
 
   bool do_yield = true;
 
