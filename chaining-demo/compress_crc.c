@@ -2199,10 +2199,12 @@ bool exists_waiting_preempted_task = false;
 
 void probe_point(int task_idx, fcontext_t parent){
   if(task_idx > next_unresumed_task_comp_idx){
-    PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
-    exists_waiting_preempted_task = true;
-    last_preempted_task_idx = task_idx;
-    fcontext_swap(parent,NULL);
+    if(comps[next_unresumed_task_comp_idx].status == DSA_COMP_SUCCESS){
+      PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
+      exists_waiting_preempted_task = true;
+      last_preempted_task_idx = task_idx;
+      fcontext_swap(parent,NULL);
+    }
   }
 }
 
@@ -3167,7 +3169,7 @@ int main(int argc, char **argv){
 
   // accel_output_acc_test(argc, argv);
 
-  int total_requests = 1000;
+  int total_requests = 4096 / 64;
 
   bool do_yield = true;
 
@@ -3184,7 +3186,7 @@ int main(int argc, char **argv){
   fcontext_t *request_ctxs[total_requests];
   fcontext_transfer_t request_xfers[total_requests];
 
-  comps = malloc(sizeof(struct completion_record) * total_requests);
+  comps = aligned_alloc(4096, sizeof(struct completion_record) * total_requests);
   memset(comps, 0, sizeof(struct completion_record) * total_requests);
 
   fcontext_state_t *self = fcontext_create_proxy();
@@ -3221,10 +3223,9 @@ int main(int argc, char **argv){
       request_xfers[next_unused_task_comp_idx] = fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
       next_unused_task_comp_idx++;
     }
-    while(next_unresumed_task_comp->status != DSA_COMP_SUCCESS){
-      _mm_pause();
-    }
   }
+
+  /* Wait for all in flight requests*/
 
   /*teardonw*/
   for(int i=0; i<total_requests; i++){
