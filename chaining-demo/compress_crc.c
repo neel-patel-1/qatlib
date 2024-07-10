@@ -3201,25 +3201,7 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
         next_unused_task_comp_idx++;
       }
     }
-    uint64_t end = sampleCoderdtsc();
-    uint64_t nanos = (end - start)/(2.1);
-    uint64_t micros = nanos / 1000;
-    uint64_t total_requests_processed;
 
-
-    if(do_yield){
-      total_requests_processed = next_unresumed_task_comp_idx;
-      PRINT("TotalRequestsProcessed: %d\n", total_requests_processed);
-    }
-    else {
-      total_requests_processed = total_requests;
-      PRINT("TotalRequestsProcessed: %d\n", total_requests);
-    }
-
-    if (micros > 0)
-      PRINT("AvgServicetime(us): %ld\n", micros/total_requests_processed);
-    else
-      PRINT("AvgServicetime(ns): %ld\n", nanos/total_requests_processed);
 
     if(need_check_for_completed_offload_tasks){
       /* Complete all in-flight requests without starting up new ones*/
@@ -3239,6 +3221,26 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
         }
       }
     }
+
+    uint64_t end = sampleCoderdtsc();
+    uint64_t nanos = (end - start)/(2.1);
+    uint64_t micros = nanos / 1000;
+    uint64_t total_requests_processed;
+    double seconds = (double)nanos / 1000000000;
+
+
+    if(do_yield){
+      total_requests_processed = next_unresumed_task_comp_idx;
+      PRINT("TotalRequestsProcessed: %d\n", total_requests_processed);
+    }
+    else {
+      total_requests_processed = total_requests;
+      PRINT("TotalRequestsProcessed: %d\n", total_requests);
+    }
+
+
+      PRINT("OfferedLoad(RPS): %f\n", (double)((double)(total_requests_processed)/(double)seconds));
+
     /*teardonw*/
     for(int i=0; i<total_requests; i++){
       fcontext_destroy(request_states[i]);
