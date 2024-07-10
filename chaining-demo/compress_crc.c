@@ -2226,6 +2226,8 @@ void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
       }
       ((uint8_t *)input)[i] = 0;
     }
+  } else if (kernel == 2){
+    create_random_chain_starting_at(input_len, &input);
   }
 }
 
@@ -2258,6 +2260,9 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
       }
       ((uint8_t *)offload_data)[i] = 0x1;
     }
+  }
+  else if(kernel == 2){
+    chase_pointers(pre_wrk_set, pre_wrk_set_size/sizeof(void *));
   }
 }
 
@@ -3323,7 +3328,7 @@ int main(int argc, char **argv){
       post_offload_kernel_type = atoi(optarg);
       break;
     case 's':
-      offload_size = 1;
+      offload_size = atoi(optarg);
       break;
     case 'd':
       gDebugParam = 1;
