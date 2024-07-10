@@ -2283,6 +2283,7 @@ struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
 }
 
 
+
 void do_offload(
   int offload_type,
   void *input,
@@ -2298,7 +2299,7 @@ void do_offload(
     /* do some offload */
     struct task *tsk =
       acctest_alloc_task_with_provided_comp(dsa,
-        &comps[next_unresumed_task_comp_idx]);
+        &comps[task_id]);
     /* use the task id to map to the correct comp */
     prepare_memcpy_task_flags(tsk,
       dsa,
@@ -2306,7 +2307,10 @@ void do_offload(
       input_size,
       (uint8_t *)output,
       IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
-    acctest_desc_submit(dsa, tsk->desc);
+    if(enqcmd(dsa->wq_reg, tsk->desc)){
+      PRINT_ERR("Failed to enqueue task\n");
+      exit(-1);
+    }
     if(do_yield){
       PRINT_DBG("Request %d Yielding\n", task_id);
       fcontext_swap(parent, NULL);
@@ -3202,8 +3206,6 @@ int main(int argc, char **argv){
     if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
       PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
       fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
-      // fcontext_destroy(request_states[next_unresumed_task_comp_idx]);
-      // free(r_args[next_unresumed_task_comp_idx]);
       next_unresumed_task_comp_idx++;
     } else if(exists_waiting_preempted_task){
       PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
@@ -3225,7 +3227,20 @@ int main(int argc, char **argv){
     }
   }
 
-  /* Wait for all in flight requests*/
+  /* Complete all in-flight requests without starting up new ones*/
+  while(next_unresumed_task_comp_idx < next_unused_task_comp_idx){
+    next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+    if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
+      PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
+      fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+      next_unresumed_task_comp_idx++;
+    }
+    else if(exists_waiting_preempted_task){
+      PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
+      exists_waiting_preempted_task = false;
+      fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+    }
+  }
 
   /*teardonw*/
   for(int i=0; i<total_requests; i++){
