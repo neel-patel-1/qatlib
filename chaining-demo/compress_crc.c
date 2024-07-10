@@ -3152,6 +3152,8 @@ int accel_output_acc_test(int argc, char **argv){
 int service_time_under_exec_model_test(bool do_yield, int total_requests, int iters, int pre_offload_kernel_type,
   int pre_working_set_size, int offload_type, int offload_size, int post_offload_kernel_type)
 {
+  double offered_loads[iters];
+  double avg_offered_load = 0;
   for(int i=0;i<iters; i++){
     int next_unused_task_comp_idx = 0;
     next_unresumed_task_comp_idx = 0;
@@ -3206,7 +3208,7 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
     uint64_t end = sampleCoderdtsc();
     if(do_yield){
       total_requests_processed = next_unresumed_task_comp_idx;
-      PRINT("RequestsProcessed: %d\n", total_requests_processed);
+      PRINT_DBG("RequestsProcessed: %d\n", total_requests_processed);
     }
 
 
@@ -3237,11 +3239,12 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 
     if (!do_yield) {
       total_requests_processed = total_requests;
-      PRINT("TotalRequestsProcessed: %d\n", total_requests);
+      PRINT_DBG("TotalRequestsProcessed: %d\n", total_requests);
     }
 
 
-    PRINT("OfferedLoad(RPS): %f\n", (double)((double)(total_requests_processed)/(double)seconds));
+    PRINT_DBG("OfferedLoad(RPS): %f\n", (double)((double)(total_requests_processed)/(double)seconds));
+    offered_loads[i] = (double)((double)(total_requests_processed)/(double)seconds);
 
     /*teardonw*/
     for(int i=0; i<total_requests; i++){
@@ -3252,6 +3255,12 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
     free(comps);
     fcontext_destroy(self);
   }
+  for(int i=0; i<iters; i++){
+    avg_offered_load += offered_loads[i];
+  }
+  avg_offered_load = avg_offered_load / iters;
+  PRINT("AvgOfferedLoad(RPS): %f\n", avg_offered_load);
+
 }
 
 int main(int argc, char **argv){
