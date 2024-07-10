@@ -1763,6 +1763,7 @@ int direct_vs_indirect(){
 int num_requests =  1;
 int ret_val;
 struct acctest_context *dsa = NULL;
+struct acctest_context *iaa = NULL;
 
 typedef struct _request_args{
   int idx;
@@ -2962,47 +2963,7 @@ static inline do_access_pattern(enum acc_pattern pat, void *dst, int size){
   }
 }
 
-int main(int argc, char **argv){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  int tflags = TEST_FLAGS_BOF;
-	int wq_id = 0;
-	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
-  int wq_type = ACCFG_WQ_SHARED;
-  int rc;
-
-  int num_offload_requests = 1;
-  dsa = acctest_init(tflags);
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
-
-  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-
-  fcontext_transfer_t off_req_xfer;
-  fcontext_state_t *off_req_ctx;
-  fcontext_state_t *self = fcontext_create_proxy();
-  off_req_ctx = fcontext_create(offload_request);
-  off_req_xfer = fcontext_swap(off_req_ctx->context, NULL);
-
-  while(global_cr->status != DSA_COMP_SUCCESS){
-    _mm_pause();
-  }
-  PRINT_DBG("Request Completed\n");
-  off_req_ctx = off_req_xfer.prev_context;
-  fcontext_swap(off_req_ctx, NULL);
-
-  fcontext_destroy(off_req_ctx);
-
-  return 0;
-
-
+int accel_output_acc_test(int argc, char **argv){
   #define CACHE_LINE_SIZE 64
   #define L1SIZE 48 * 1024
   #define L2SIZE 2 * 1024 * 1024
@@ -3022,7 +2983,7 @@ int main(int argc, char **argv){
   bool specClevel = false;
 
   int post_proc_sizes[2] = {L1SIZE, L2SIZE};
-  tflags = IDXD_OP_FLAG_BOF ;
+  int tflags = IDXD_OP_FLAG_BOF ;
 
   int post_ = post_proc_sizes[1];
   int filler_ = L2SIZE;
@@ -3085,9 +3046,54 @@ int main(int argc, char **argv){
 
 
   return 0;
+}
 
+int main(int argc, char **argv){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
 
-    return;
+  int tflags = TEST_FLAGS_BOF;
+	int wq_id = 0;
+	int dev_id = 2;
+  int opcode = DSA_OPCODE_MEMMOVE;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+
+  int num_offload_requests = 1;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+  accel_output_acc_test(argc, argv);
+
+  return 0;
+
+  wq_id=1;
+  dev_id=3;
+  iaa = acctest_init(tflags);
+  rc = acctest_alloc(iaa, wq_type, dev_id, wq_id);
+
+  fcontext_transfer_t off_req_xfer;
+  fcontext_state_t *off_req_ctx;
+  fcontext_state_t *self = fcontext_create_proxy();
+  off_req_ctx = fcontext_create(offload_request);
+  off_req_xfer = fcontext_swap(off_req_ctx->context, NULL);
+
+  while(global_cr->status != DSA_COMP_SUCCESS){
+    _mm_pause();
+  }
+  PRINT_DBG("Request Completed\n");
+  off_req_ctx = off_req_xfer.prev_context;
+  fcontext_swap(off_req_ctx, NULL);
+
+  fcontext_destroy(off_req_ctx);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
@@ -3095,8 +3101,6 @@ int main(int argc, char **argv){
   /* scheduler thread waits for offload completion and switches tasks */
   /* figure of merit is filler ops completed */
   /* Want to measure the request throughput*/
-
-
 exit:
 
   icp_sal_userStop();
