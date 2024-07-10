@@ -3165,7 +3165,7 @@ int main(int argc, char **argv){
   struct completion_record *next_unresumed_task_comp;
 
   while(next_unused_task_comp_idx < total_requests){
-    next_unresumed_task_comp = &comps[next_unused_task_comp_idx];
+    next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
     if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
       PRINT_DBG("Request %d resuming\n", next_unresumed_task_comp_idx);
       fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
@@ -3185,6 +3185,9 @@ int main(int argc, char **argv){
       r_args[next_unused_task_comp_idx]->post_offload_kernel_type = post_offload_kernel_type;
       request_xfers[next_unused_task_comp_idx] = fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
       next_unused_task_comp_idx++;
+    }
+    while(next_unresumed_task_comp->status != DSA_COMP_SUCCESS){
+      _mm_pause();
     }
   }
 
