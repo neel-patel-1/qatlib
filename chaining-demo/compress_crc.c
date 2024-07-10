@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -2197,8 +2197,8 @@ int next_unresumed_task_comp_idx = 0;
 int last_preempted_task_idx = 0;
 bool exists_waiting_preempted_task = false;
 
-void probe_point(int task_idx, fcontext_t parent){
-  if(task_idx > next_unresumed_task_comp_idx){
+void probe_point(int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
+  if(task_idx > next_unresumed_task_comp_idx && yield_to_completed_offloads){
     if(comps[next_unresumed_task_comp_idx].status == DSA_COMP_SUCCESS){
       PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
       exists_waiting_preempted_task = true;
@@ -2208,7 +2208,8 @@ void probe_point(int task_idx, fcontext_t parent){
   }
 }
 
-void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx, fcontext_t parent){
+void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
+  fcontext_t parent, bool yield_to_completed_offloads){
   if(kernel == 0){
     if(next_unresumed_task_comp_idx == 0){
       return;
@@ -2221,7 +2222,7 @@ void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx, fc
   else if(kernel == 1){
     for(int i=0; i<input_len; i++){
       if(i%200 == 0){
-        probe_point(task_idx, parent);
+        probe_point(task_idx, parent, yield_to_completed_offloads);
       }
       ((uint8_t *)input)[i] = 0;
     }
@@ -2230,7 +2231,7 @@ void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx, fc
 
 void post_offload_kernel(int kernel, void *pre_wrk_set,
   int pre_wrk_set_size, void *offload_data, int offload_data_size,
-  int task_idx, fcontext_t parent){
+  int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
   if(kernel == 0){
     struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
     while(next_unresumed_task_comp->status == 0){
@@ -2241,7 +2242,7 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
     int iters_between_probes = 100;
     for(int i=0; i<pre_wrk_set_size; i++){
       if(i%iters_between_probes == 0){
-        probe_point(task_idx, parent);
+        probe_point(task_idx, parent, yield_to_completed_offloads);
       }
       if(((uint8_t *)pre_wrk_set)[i] != 0){
         PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)pre_wrk_set)[i]);
@@ -2250,7 +2251,7 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
     }
     for(int i=0; i<offload_data_size; i++){
       if(i%iters_between_probes == 0){
-        probe_point(task_idx, parent);
+        probe_point(task_idx, parent, yield_to_completed_offloads);
       }
       if(((uint8_t *)offload_data)[i] != 0){
         PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)offload_data)[i]);
@@ -2356,7 +2357,7 @@ void offload_request(fcontext_transfer_t arg){
   /*pre offload*/
   void *pre_working_set = malloc(pre_working_set_size);
   pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size,
-    task_id, parent);
+    task_id, parent, do_yield);
 
   /*offload*/
   int dst_buf_size = offload_size;
@@ -2366,7 +2367,7 @@ void offload_request(fcontext_transfer_t arg){
 
   /*post offload*/
   post_offload_kernel(post_offload_kernel_type, pre_working_set,
-    pre_working_set_size, dst_buf, dst_buf_size, task_id, parent);
+    pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
   PRINT_DBG("Request %d done\n", task_id);
   fcontext_swap(arg.prev_context, NULL);
 }
@@ -3148,45 +3149,10 @@ int accel_output_acc_test(int argc, char **argv){
   return 0;
 }
 
-int main(int argc, char **argv){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  int tflags = TEST_FLAGS_BOF;
-	int wq_id = 0;
-	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
-  int wq_type = ACCFG_WQ_SHARED;
-  int rc;
-
-  int num_offload_requests = 1;
-  dsa = acctest_init(tflags);
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
-
-  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-
-  // accel_output_acc_test(argc, argv);
-
-  int total_requests = 128;
-  int iters = 10;
+int service_time_under_exec_model_test(bool do_yield, int total_requests, int iters, int pre_offload_kernel_type,
+  int pre_working_set_size, int offload_type, int offload_size, int post_offload_kernel_type)
+{
   for(int i=0;i<iters; i++){
-
-    bool do_yield = true;
-
-    int pre_offload_kernel_type = 1;
-    int pre_working_set_size = 16 * 1024;
-
-    int offload_type = 0;
-    int offload_size = 16 * 1024;
-
-    int post_offload_kernel_type = 1;
-
     int next_unused_task_comp_idx = 0;
     next_unresumed_task_comp_idx = 0;
     last_preempted_task_idx = 0;
@@ -3206,11 +3172,12 @@ int main(int argc, char **argv){
     offload_request_args *r_args[total_requests];
     struct completion_record *next_unresumed_task_comp;
 
+    bool need_check_for_completed_offload_tasks = do_yield; /* are tasks yielding?*/
 
     uint64_t start = sampleCoderdtsc();
     while(next_unused_task_comp_idx < total_requests){
       next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
-      if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
+      if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS && need_check_for_completed_offload_tasks){
         PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
         request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
           fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
@@ -3267,7 +3234,47 @@ int main(int argc, char **argv){
     free(comps);
     fcontext_destroy(self);
   }
+}
 
+int main(int argc, char **argv){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  int tflags = TEST_FLAGS_BOF;
+	int wq_id = 0;
+	int dev_id = 2;
+  int opcode = DSA_OPCODE_MEMMOVE;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+
+  int num_offload_requests = 1;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+  int total_requests = 128;
+  int iters = 10;
+  bool do_yield = false;
+
+  int pre_offload_kernel_type = 1;
+  int pre_working_set_size = 16 * 1024;
+
+  int offload_type = 0;
+  int offload_size = 16 * 1024;
+
+  int post_offload_kernel_type = 1;
+
+
+  service_time_under_exec_model_test(do_yield, total_requests, iters,
+    pre_offload_kernel_type, pre_working_set_size,
+      offload_type, offload_size, post_offload_kernel_type);
 
 
   acctest_free_task(dsa);
