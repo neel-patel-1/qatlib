@@ -2198,6 +2198,24 @@ void pre_offload_kernel(int kernel, void *input, int input_len){
   }
 }
 
+void post_offload_kernel(int kernel, void *pre_wrk_set,
+  int pre_wrk_set_size, void *offload_data, int offload_data_size){
+  if(kernel == 0){
+    for(int i=0; i<pre_wrk_set_size; i++){
+      if(((uint8_t *)pre_wrk_set)[i] != 0){
+        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)pre_wrk_set)[i]);
+      }
+      ((uint8_t *)pre_wrk_set)[i] = 0x1;
+    }
+    for(int i=0; i<offload_data_size; i++){
+      if(((uint8_t *)offload_data)[i] != 0){
+        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)offload_data)[i]);
+      }
+      ((uint8_t *)offload_data)[i] = 0x1;
+    }
+  }
+}
+
 struct completion_record *global_cr = NULL;
 void do_offload(
   int offload_type,
@@ -2243,11 +2261,12 @@ void offload_request(fcontext_transfer_t arg){
   pre_offload_kernel(0,pre_working_set, pre_working_set_size);
 
   /*offload*/
-  do_offload(0, pre_working_set, pre_working_set_size, pre_working_set,
-    pre_working_set_size, do_yield, arg.prev_context);
+  int dst_buf_size = 16*1024;
+  void *dst_buf = malloc(dst_buf_size);
+  do_offload(0, pre_working_set, pre_working_set_size, dst_buf, dst_buf_size, do_yield, arg.prev_context);
 
   /*post offload*/
-
+  post_offload_kernel(0, pre_working_set, pre_working_set_size, dst_buf, dst_buf_size);
   PRINT_DBG("Offload request done\n");
 }
 
