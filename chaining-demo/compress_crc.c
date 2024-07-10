@@ -2190,6 +2190,67 @@ void filler_request_ts(fcontext_transfer_t arg) {
     fcontext_swap(parent, NULL);
 }
 
+void pre_offload_kernel(int kernel, void *input, int input_len){
+  if(kernel == 0){
+    for(int i=0; i<input_len; i++){
+      ((uint8_t *)input)[i] = 0;
+    }
+  }
+}
+
+struct completion_record *global_cr = NULL;
+void do_offload(
+  int offload_type,
+  void *input,
+  int input_size,
+  void *output,
+  int output_size,
+  bool do_yield,
+  fcontext_t parent
+  )
+{
+  if(offload_type == 0){
+    /* do some offload */
+    struct task *tsk = acctest_alloc_task(dsa);
+    prepare_memcpy_task_flags(tsk,
+      dsa,
+      (uint8_t *)input,
+      input_size,
+      (uint8_t *)output,
+      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
+    acctest_desc_submit(dsa, tsk->desc);
+    if(do_yield){
+      global_cr = tsk->comp;
+      fcontext_swap(parent, NULL);
+    } else {
+      while(tsk->comp->status == 0){
+        _mm_pause();
+      }
+    }
+    if(tsk->comp->status != DSA_COMP_SUCCESS){
+      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
+    }
+  }
+}
+
+/* Give a req, switch into req context, it determines what it needs to do*/
+/* Does each req need its own args?*/
+void offload_request(fcontext_transfer_t arg){
+  bool do_yield = true;
+  /*pre offload*/
+  int pre_working_set_size = 16*1024;
+  void *pre_working_set = malloc(pre_working_set_size);
+  pre_offload_kernel(0,pre_working_set, pre_working_set_size);
+
+  /*offload*/
+  do_offload(0, pre_working_set, pre_working_set_size, pre_working_set,
+    pre_working_set_size, do_yield, arg.prev_context);
+
+  /*post offload*/
+
+  PRINT_DBG("Offload request done\n");
+}
+
 void yield_offload_request_ts (fcontext_transfer_t arg) {
     time_preempt_args_t *r_arg = (time_preempt_args_t *)(arg.data);
     int idx = r_arg->idx;
@@ -2904,6 +2965,24 @@ int main(int argc, char **argv){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+  fcontext_transfer_t off_req_xfer;
+  fcontext_state_t *off_req_ctx;
+  fcontext_state_t *self = fcontext_create_proxy();
+  off_req_ctx = fcontext_create(offload_request);
+  off_req_xfer = fcontext_swap(off_req_ctx->context, NULL);
+
+  while(global_cr->status != DSA_COMP_SUCCESS){
+    _mm_pause();
+  }
+  PRINT_DBG("Request Completed\n");
+  off_req_ctx = off_req_xfer.prev_context;
+  fcontext_swap(off_req_ctx, NULL);
+
+  fcontext_destroy(off_req_ctx);
+
+  return 0;
+
 
   #define CACHE_LINE_SIZE 64
   #define L1SIZE 48 * 1024
