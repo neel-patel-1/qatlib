@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 1;
+int gDebugParam = 0;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -3173,85 +3173,102 @@ int main(int argc, char **argv){
 
   // accel_output_acc_test(argc, argv);
 
-  int total_requests = 4096 / 64;
+  int total_requests = 128;
+  int iters = 10;
+  for(int i=0;i<iters; i++){
 
-  bool do_yield = true;
+    bool do_yield = true;
 
-  int pre_offload_kernel_type = 1;
-  int pre_working_set_size = 16 * 1024;
+    int pre_offload_kernel_type = 1;
+    int pre_working_set_size = 16 * 1024;
 
-  int offload_type = 0;
-  int offload_size = 16 * 1024;
+    int offload_type = 0;
+    int offload_size = 16 * 1024;
 
-  int post_offload_kernel_type = 1;
+    int post_offload_kernel_type = 1;
 
-  int next_unused_task_comp_idx = 0;
-  fcontext_state_t *request_states[total_requests];
-  fcontext_t *request_ctxs[total_requests];
-  fcontext_transfer_t request_xfers[total_requests];
-
-  comps = aligned_alloc(4096, sizeof(struct completion_record) * total_requests);
-  memset(comps, 0, sizeof(struct completion_record) * total_requests);
-
-  fcontext_state_t *self = fcontext_create_proxy();
-  fcontext_t off_req_ctx;
-
-  offload_request_args *r_args[total_requests];
-  struct completion_record *next_unresumed_task_comp;
+    int next_unused_task_comp_idx = 0;
+    next_unresumed_task_comp_idx = 0;
+    last_preempted_task_idx = 0;
+    exists_waiting_preempted_task = false;
 
 
+    fcontext_state_t *request_states[total_requests];
+    fcontext_t *request_ctxs[total_requests];
+    fcontext_transfer_t request_xfers[total_requests];
 
-  while(next_unused_task_comp_idx < total_requests){
-    next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
-    if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
-      PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
-      request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
-        fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
-      next_unresumed_task_comp_idx++;
-    } else if(exists_waiting_preempted_task){
-      PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
-      exists_waiting_preempted_task = false;
-      request_xfers[last_preempted_task_idx] = fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
-    } else {
-      PRINT_DBG("Request %d starting\n", next_unused_task_comp_idx);
-      request_states[next_unused_task_comp_idx] = fcontext_create(offload_request);
-      r_args[next_unused_task_comp_idx] = malloc(sizeof(offload_request_args));
-      r_args[next_unused_task_comp_idx]->do_yield = do_yield;
-      r_args[next_unused_task_comp_idx]->task_id = next_unused_task_comp_idx;
-      r_args[next_unused_task_comp_idx]->pre_offload_kernel_type = pre_offload_kernel_type;
-      r_args[next_unused_task_comp_idx]->pre_working_set_size = pre_working_set_size;
-      r_args[next_unused_task_comp_idx]->offload_type = offload_type;
-      r_args[next_unused_task_comp_idx]->offload_size = offload_size;
-      r_args[next_unused_task_comp_idx]->post_offload_kernel_type = post_offload_kernel_type;
-      request_xfers[next_unused_task_comp_idx] = fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
-      next_unused_task_comp_idx++;
+    comps = aligned_alloc(4096, sizeof(struct completion_record) * total_requests);
+    memset(comps, 0, sizeof(struct completion_record) * total_requests);
+
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_t off_req_ctx;
+
+    offload_request_args *r_args[total_requests];
+    struct completion_record *next_unresumed_task_comp;
+
+
+    uint64_t start = sampleCoderdtsc();
+    while(next_unused_task_comp_idx < total_requests){
+      next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+      if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
+        PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
+        request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
+          fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+        next_unresumed_task_comp_idx++;
+      } else if(exists_waiting_preempted_task){
+        PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
+        exists_waiting_preempted_task = false;
+        request_xfers[last_preempted_task_idx] = fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+      } else {
+        PRINT_DBG("Request %d starting\n", next_unused_task_comp_idx);
+        request_states[next_unused_task_comp_idx] = fcontext_create(offload_request);
+        r_args[next_unused_task_comp_idx] = malloc(sizeof(offload_request_args));
+        r_args[next_unused_task_comp_idx]->do_yield = do_yield;
+        r_args[next_unused_task_comp_idx]->task_id = next_unused_task_comp_idx;
+        r_args[next_unused_task_comp_idx]->pre_offload_kernel_type = pre_offload_kernel_type;
+        r_args[next_unused_task_comp_idx]->pre_working_set_size = pre_working_set_size;
+        r_args[next_unused_task_comp_idx]->offload_type = offload_type;
+        r_args[next_unused_task_comp_idx]->offload_size = offload_size;
+        r_args[next_unused_task_comp_idx]->post_offload_kernel_type = post_offload_kernel_type;
+        request_xfers[next_unused_task_comp_idx] = fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
+        next_unused_task_comp_idx++;
+      }
     }
+    uint64_t end = sampleCoderdtsc();
+    uint64_t nanos = (end - start)/(2.1);
+    uint64_t micros = nanos / 1000;
+    if (micros > 0)
+      PRINT("AvgServicetime(us): %ld\n", micros/total_requests);
+    else
+      PRINT("AvgServicetime(ns): %ld\n", nanos/total_requests);
+
+    /* Complete all in-flight requests without starting up new ones*/
+    while(next_unresumed_task_comp_idx < next_unused_task_comp_idx){
+      next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+      if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
+        PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
+        request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
+          fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+        next_unresumed_task_comp_idx++;
+      }
+      else if(exists_waiting_preempted_task){
+        PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
+        exists_waiting_preempted_task = false;
+        request_xfers[last_preempted_task_idx] =
+          fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+      }
+    }
+    /*teardonw*/
+    for(int i=0; i<total_requests; i++){
+      fcontext_destroy(request_states[i]);
+      free(r_args[i]);
+    }
+
+    free(comps);
+    fcontext_destroy(self);
   }
 
-  /* Complete all in-flight requests without starting up new ones*/
-  while(next_unresumed_task_comp_idx < next_unused_task_comp_idx){
-    next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
-    if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
-      PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
-      request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
-        fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
-      next_unresumed_task_comp_idx++;
-    }
-    else if(exists_waiting_preempted_task){
-      PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
-      exists_waiting_preempted_task = false;
-      request_xfers[last_preempted_task_idx] =
-        fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
-    }
-  }
 
-  /*teardonw*/
-  for(int i=0; i<total_requests; i++){
-    fcontext_destroy(request_states[i]);
-    free(r_args[i]);
-  }
-
-  fcontext_destroy(self);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
