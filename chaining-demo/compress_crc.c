@@ -2217,7 +2217,30 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
   }
 }
 
-struct completion_record *global_cr = NULL;
+struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
+  struct completion_record *comp)
+{
+	struct task *tsk;
+
+	tsk = malloc(sizeof(struct task));
+	if (!tsk)
+		return NULL;
+	memset(tsk, 0, sizeof(struct task));
+
+	tsk->desc = malloc(sizeof(struct hw_desc));
+	if (!tsk->desc) {
+		free_task(tsk);
+		return NULL;
+	}
+	memset(tsk->desc, 0, sizeof(struct hw_desc));
+
+  tsk->comp = comp;
+
+	return tsk;
+}
+
+struct completion_record *comps = NULL;
+int next_unresumed_task_comp_idx = 0;
 void do_offload(
   int offload_type,
   void *input,
@@ -2225,12 +2248,16 @@ void do_offload(
   void *output,
   int output_size,
   bool do_yield,
-  fcontext_t parent
+  fcontext_t parent,
+  int task_id
   )
 {
   if(offload_type == 0){
     /* do some offload */
-    struct task *tsk = acctest_alloc_task(dsa);
+    struct task *tsk =
+      acctest_alloc_task_with_provided_comp(dsa,
+        &comps[next_unresumed_task_comp_idx]);
+    /* use the task id to map to the correct comp */
     prepare_memcpy_task_flags(tsk,
       dsa,
       (uint8_t *)input,
@@ -2239,7 +2266,6 @@ void do_offload(
       IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
     acctest_desc_submit(dsa, tsk->desc);
     if(do_yield){
-      global_cr = tsk->comp;
       fcontext_swap(parent, NULL);
     } else {
       while(tsk->comp->status == 0){
@@ -2254,21 +2280,46 @@ void do_offload(
 
 /* Give a req, switch into req context, it determines what it needs to do*/
 /* Does each req need its own args?*/
+typedef struct offload_request_args_t {
+  bool do_yield;
+  int task_id;
+
+  int pre_offload_kernel_type;
+  int pre_working_set_size;
+
+  int offload_type;
+  int offload_size;
+
+  int post_offload_kernel_type;
+} offload_request_args;
 void offload_request(fcontext_transfer_t arg){
-  bool do_yield = true;
+  offload_request_args *r_arg = (offload_request_args *)(arg.data);
+  bool do_yield = r_arg->do_yield;
+  int task_id = r_arg->task_id;
+
+  int pre_offload_kernel_type = r_arg->pre_offload_kernel_type;
+  int pre_working_set_size = r_arg->pre_working_set_size;
+
+  int offload_type = r_arg->offload_type;
+  int offload_size = r_arg->offload_size;
+
+  int post_offload_kernel_type = r_arg->post_offload_kernel_type;
+
   /*pre offload*/
-  int pre_working_set_size = 16*1024;
   void *pre_working_set = malloc(pre_working_set_size);
-  pre_offload_kernel(0,pre_working_set, pre_working_set_size);
+  pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size);
 
   /*offload*/
-  int dst_buf_size = 16*1024;
+  int dst_buf_size = offload_size;
   void *dst_buf = malloc(dst_buf_size);
-  do_offload(0, pre_working_set, pre_working_set_size, dst_buf, dst_buf_size, do_yield, arg.prev_context);
+  do_offload(offload_type, pre_working_set, pre_working_set_size, dst_buf,
+    dst_buf_size, do_yield, arg.prev_context, task_id);
 
   /*post offload*/
-  post_offload_kernel(0, pre_working_set, pre_working_set_size, dst_buf, dst_buf_size);
+  post_offload_kernel(post_offload_kernel, pre_working_set,
+    pre_working_set_size, dst_buf, dst_buf_size);
   PRINT_DBG("Offload request done\n");
+  fcontext_swap(arg.prev_context, NULL);
 }
 
 void yield_offload_request_ts (fcontext_transfer_t arg) {
@@ -3071,29 +3122,56 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  accel_output_acc_test(argc, argv);
+  // accel_output_acc_test(argc, argv);
 
-  return 0;
+  int total_requests = 1000;
 
-  wq_id=1;
-  dev_id=3;
-  iaa = acctest_init(tflags);
-  rc = acctest_alloc(iaa, wq_type, dev_id, wq_id);
+  bool do_yield = true;
+  int task_id = 0;
+
+  int pre_offload_kernel_type = 0;
+  int pre_working_set_size = 16 * 1024;
+
+  int offload_type = 0;
+  int offload_size = 16 * 1024;
+
+  int post_offload_kernel_type = 0;
+
+  struct completion_record *next_unresumed_task_comp;
+  comps = malloc(sizeof(struct completion_record) * total_requests);
 
   fcontext_transfer_t off_req_xfer;
-  fcontext_state_t *off_req_ctx;
+  fcontext_state_t *child;
   fcontext_state_t *self = fcontext_create_proxy();
-  off_req_ctx = fcontext_create(offload_request);
-  off_req_xfer = fcontext_swap(off_req_ctx->context, NULL);
+  fcontext_t off_req_ctx;
 
-  while(global_cr->status != DSA_COMP_SUCCESS){
+  offload_request_args *r_args = malloc(sizeof(offload_request_args));
+
+  r_args->do_yield = do_yield;
+  r_args->task_id = task_id;
+  r_args->pre_offload_kernel_type = pre_offload_kernel_type;
+  r_args->pre_working_set_size = pre_working_set_size;
+  r_args->offload_type = offload_type;
+  r_args->offload_size = offload_size;
+  r_args->post_offload_kernel_type = post_offload_kernel_type;
+
+
+  child = fcontext_create(offload_request);
+  off_req_xfer = fcontext_swap(child->context, r_args);
+
+  next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+
+  while(next_unresumed_task_comp->status != DSA_COMP_SUCCESS){
     _mm_pause();
   }
-  PRINT_DBG("Request Completed\n");
+
   off_req_ctx = off_req_xfer.prev_context;
   fcontext_swap(off_req_ctx, NULL);
 
-  fcontext_destroy(off_req_ctx);
+  PRINT_DBG("Request Completed\n");
+
+  fcontext_destroy(child);
+  fcontext_destroy(self);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
