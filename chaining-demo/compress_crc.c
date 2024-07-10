@@ -3171,13 +3171,13 @@ int main(int argc, char **argv){
 
   bool do_yield = true;
 
-  int pre_offload_kernel_type = 0;
+  int pre_offload_kernel_type = 1;
   int pre_working_set_size = 16 * 1024;
 
   int offload_type = 0;
   int offload_size = 16 * 1024;
 
-  int post_offload_kernel_type = 0;
+  int post_offload_kernel_type = 1;
 
   int next_unused_task_comp_idx = 0;
   fcontext_state_t *request_states[total_requests];
