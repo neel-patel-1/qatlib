@@ -3174,6 +3174,8 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 
     bool need_check_for_completed_offload_tasks = do_yield; /* are tasks yielding?*/
 
+    uint64_t total_requests_processed;
+
     uint64_t start = sampleCoderdtsc();
     while(next_unused_task_comp_idx < total_requests){
       next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
@@ -3201,6 +3203,11 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
         next_unused_task_comp_idx++;
       }
     }
+    uint64_t end = sampleCoderdtsc();
+    if(do_yield){
+      total_requests_processed = next_unresumed_task_comp_idx;
+      PRINT("RequestsProcessed: %d\n", total_requests_processed);
+    }
 
 
     if(need_check_for_completed_offload_tasks){
@@ -3222,24 +3229,19 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
       }
     }
 
-    uint64_t end = sampleCoderdtsc();
     uint64_t nanos = (end - start)/(2.1);
     uint64_t micros = nanos / 1000;
-    uint64_t total_requests_processed;
     double seconds = (double)nanos / 1000000000;
 
 
-    if(do_yield){
-      total_requests_processed = next_unresumed_task_comp_idx;
-      PRINT("TotalRequestsProcessed: %d\n", total_requests_processed);
-    }
-    else {
+
+    if (!do_yield) {
       total_requests_processed = total_requests;
       PRINT("TotalRequestsProcessed: %d\n", total_requests);
     }
 
 
-      PRINT("OfferedLoad(RPS): %f\n", (double)((double)(total_requests_processed)/(double)seconds));
+    PRINT("OfferedLoad(RPS): %f\n", (double)((double)(total_requests_processed)/(double)seconds));
 
     /*teardonw*/
     for(int i=0; i<total_requests; i++){
@@ -3288,7 +3290,7 @@ int main(int argc, char **argv){
   int post_offload_kernel_type = 1;
 
   int opt;
-  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:")) != -1) {
+  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:s:d")) != -1) {
     switch (opt) {
     case 'y':
       do_yield = true;
@@ -3303,7 +3305,7 @@ int main(int argc, char **argv){
       pre_working_set_size = atoi(optarg);
       break;
     case 'o':
-      offload_size = atoi(optarg);
+      offload_type = atoi(optarg);
       break;
     case 'k':
       pre_offload_kernel_type = atoi(optarg);
@@ -3311,6 +3313,11 @@ int main(int argc, char **argv){
     case 'l':
       post_offload_kernel_type = atoi(optarg);
       break;
+    case 's':
+      offload_size = 1;
+      break;
+    case 'd':
+      gDebugParam = 1;
     default:
       break;
     }
