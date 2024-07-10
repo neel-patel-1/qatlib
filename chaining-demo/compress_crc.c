@@ -2197,7 +2197,10 @@ int next_unresumed_task_comp_idx = 0;
 
 void pre_offload_kernel(int kernel, void *input, int input_len){
   if(kernel == 0){
-    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+    if(next_unresumed_task_comp_idx == 0){
+      return;
+    }
+    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx-1]);
     while(next_unresumed_task_comp->status == 0){
       _mm_pause();
     }
@@ -3157,6 +3160,7 @@ int main(int argc, char **argv){
   fcontext_transfer_t request_xfers[total_requests];
 
   comps = malloc(sizeof(struct completion_record) * total_requests);
+  memset(comps, 0, sizeof(struct completion_record) * total_requests);
 
   fcontext_state_t *self = fcontext_create_proxy();
   fcontext_t off_req_ctx;
