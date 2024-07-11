@@ -2531,6 +2531,25 @@ static inline int gen_sample_memcached_request(void *buf, int buf_size){
   memcpy(buf, key, strlen(key));
 }
 
+void hash_memcached_request(void *request){
+    /* extract hashable suffix*/
+    char *suffix_start, *suffix_end;
+    char route_end = '/';
+    int hashable_len = 0;
+
+    suffix_start = strrchr(request,route_end );
+    suffix_end = strchr(suffix_start, '|');
+    if(suffix_start != NULL && suffix_end !=NULL){
+      suffix_start++;
+      hashable_len = suffix_end - suffix_start;
+    } else {
+      PRINT_ERR("No suffix found\n");
+    }
+    PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
+      hashable_len, suffix_start);
+    furc_hash(suffix_start, hashable_len, 16);
+}
+
 void ax_access(int kernel, int offload_size){
   char *dst_buf = malloc(offload_size);
   char *src_buf = malloc(offload_size);
@@ -2547,23 +2566,27 @@ void ax_access(int kernel, int offload_size){
 
     /*ax produced*/
     if(kernel == 0){ /*furc*/
-      char *suffix_start, *suffix_end;
-      char route_end = '/';
-      int hashable_len = 0;
       start = sampleCoderdtsc(); /*timing phase*/
       /* extract hashable suffix*/
+      hash_memcached_request(dst_buf);
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
+    }
+  }
+  /* average across the runs */
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+  PRINT("AX-Access-Cycles: %ld\n", avg);
 
-      suffix_start = strrchr(dst_buf,route_end );
-      suffix_end = strchr(suffix_start, '|');
-      if(suffix_start != NULL && suffix_end !=NULL){
-        suffix_start++;
-        hashable_len = suffix_end - suffix_start;
-      } else {
-        PRINT_ERR("No suffix found\n");
-      }
-      PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
-        hashable_len, suffix_start);
-      furc_hash(suffix_start, hashable_len, 16);
+  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
+    int key_size = gen_sample_memcached_request(src_buf, offload_size);
+    memcpy((void *)dst_buf,
+      (void *)src_buf, offload_size);
+
+    /*host produced*/
+    if(kernel == 0){ /*furc*/
+      start = sampleCoderdtsc(); /*timing phase*/
+      hash_memcached_request(dst_buf);
       end = sampleCoderdtsc();
       end_times[i] = end;
       start_times[i] = start;
@@ -2572,13 +2595,10 @@ void ax_access(int kernel, int offload_size){
 
   /* average across the runs */
   avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
-  PRINT("AX-Access-Cycles: %ld\n", avg);
+  PRINT("Host-Access-Cycles: %ld\n", avg);
 
 }
 
-void compare_access(){
-
-}
 /* Give a req, switch into req context, it determines what it needs to do*/
 /* Does each req need its own args?*/
 typedef struct offload_request_args_t {
