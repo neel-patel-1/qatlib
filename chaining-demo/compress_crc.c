@@ -2265,8 +2265,40 @@ murmur_hash_64A(const void* const key, const size_t len, const uint32_t seed) {
     h ^= k;
     h *= m;
   }
+  const uint8_t* data2 = (const uint8_t*)data;
 
-static uint32_t furc_get_bit(
+  switch (len & 7) {
+    case 7:
+      h ^= (uint64_t)data2[6] << 48;
+      __attribute__((fallthrough));
+    case 6:
+      h ^= (uint64_t)data2[5] << 40;
+      __attribute__((fallthrough));
+    case 5:
+      h ^= (uint64_t)data2[4] << 32;
+      __attribute__((fallthrough));
+    case 4:
+      h ^= (uint64_t)data2[3] << 24;
+      __attribute__((fallthrough));
+    case 3:
+      h ^= (uint64_t)data2[2] << 16;
+      __attribute__((fallthrough));
+    case 2:
+      h ^= (uint64_t)data2[1] << 8;
+      __attribute__((fallthrough));
+    case 1:
+      h ^= (uint64_t)data2[0];
+      h *= m;
+  }
+
+  h ^= h >> r;
+  h *= m;
+  h ^= h >> r;
+
+  return h;
+}
+
+uint32_t furc_get_bit(
     const char* const key,
     const size_t len,
     const uint32_t idx,
@@ -2337,6 +2369,7 @@ uint32_t furc_hash(const char* const key, const size_t len, const uint32_t m) {
   // Give up; return 0, which is a legal value in all cases.
   return 0;
 }
+
 
 void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
   fcontext_t parent, bool yield_to_completed_offloads){
@@ -2420,7 +2453,7 @@ struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
 
 
 
-void do_offload(
+void do_offload_offered_load_test(
   int offload_type,
   void *input,
   int input_size,
@@ -2461,6 +2494,91 @@ void do_offload(
   }
 }
 
+void dsa_memcpy(
+  void *input,
+  int input_size,
+  void *output,
+  int output_size
+  )
+{
+
+    struct task *tsk =
+      acctest_alloc_task(dsa);
+    /* use the task id to map to the correct comp */
+    prepare_memcpy_task_flags(tsk,
+      dsa,
+      (uint8_t *)input,
+      input_size,
+      (uint8_t *)output,
+      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
+    if(enqcmd(dsa->wq_reg, tsk->desc)){
+      PRINT_ERR("Failed to enqueue task\n");
+      exit(-1);
+    }
+    while(tsk->comp->status == 0){
+      _mm_pause();
+    }
+
+    if(tsk->comp->status != DSA_COMP_SUCCESS){
+      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
+    }
+
+}
+
+
+static inline int gen_sample_memcached_request(void *buf, int buf_size){
+  const char *key = "/region/cluster/foo:key|#|etc";
+  memcpy(buf, key, strlen(key));
+}
+
+void ax_access(int kernel, int offload_size){
+  char *dst_buf = malloc(offload_size);
+  char *src_buf = malloc(offload_size);
+  uint64_t start, end;
+
+  int iterations = 100;
+  uint64_t start_times[iterations], end_times[iterations], times[iterations];
+  uint64_t avg = 0;
+
+  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
+    int key_size = gen_sample_memcached_request(src_buf, offload_size);
+    dsa_memcpy((void *)src_buf,
+      offload_size, (void *)dst_buf, offload_size);
+
+    /*ax produced*/
+    if(kernel == 0){ /*furc*/
+      char *suffix_start, *suffix_end;
+      char route_end = '/';
+      int hashable_len = 0;
+      start = sampleCoderdtsc(); /*timing phase*/
+      /* extract hashable suffix*/
+
+      suffix_start = strrchr(dst_buf,route_end );
+      suffix_end = strchr(suffix_start, '|');
+      if(suffix_start != NULL && suffix_end !=NULL){
+        suffix_start++;
+        hashable_len = suffix_end - suffix_start;
+      } else {
+        PRINT_ERR("No suffix found\n");
+      }
+      PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
+        hashable_len, suffix_start);
+      furc_hash(suffix_start, hashable_len, 16);
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
+    }
+  }
+
+  /* average across the runs */
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+  PRINT("AX-Access-Cycles: %ld\n", avg);
+
+}
+
+void compare_access(){
+
+}
 /* Give a req, switch into req context, it determines what it needs to do*/
 /* Does each req need its own args?*/
 typedef struct offload_request_args_t {
@@ -2497,7 +2615,7 @@ void offload_request(fcontext_transfer_t arg){
   /*offload*/
   int dst_buf_size = offload_size;
   void *dst_buf = malloc(dst_buf_size);
-  do_offload(offload_type, pre_working_set, pre_working_set_size, dst_buf,
+  do_offload_offered_load_test(offload_type, pre_working_set, pre_working_set_size, dst_buf,
     dst_buf_size, do_yield, arg.prev_context, task_id);
 
   /*post offload*/
@@ -3398,29 +3516,7 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 
 }
 
-int main(int argc, char **argv){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  int tflags = TEST_FLAGS_BOF;
-	int wq_id = 0;
-	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
-  int wq_type = ACCFG_WQ_SHARED;
-  int rc;
-
-  int num_offload_requests = 1;
-  dsa = acctest_init(tflags);
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
-
-  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-
+void do_offered_load_test(int argc, char **argv){
   int total_requests = 128;
   int iters = 10;
   bool do_yield = false;
@@ -3474,7 +3570,33 @@ int main(int argc, char **argv){
   service_time_under_exec_model_test(do_yield, total_requests, iters,
     pre_offload_kernel_type, pre_working_set_size,
       offload_type, offload_size, post_offload_kernel_type);
+}
 
+int main(int argc, char **argv){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  int tflags = TEST_FLAGS_BOF;
+	int wq_id = 0;
+	int dev_id = 2;
+  int opcode = DSA_OPCODE_MEMMOVE;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+
+  int num_offload_requests = 1;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+
+  ax_access(0,256);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
