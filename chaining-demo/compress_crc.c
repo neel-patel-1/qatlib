@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 1;
+int gDebugParam = 0;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -3527,6 +3527,7 @@ typedef struct offload_request_args_t {
 
   int offload_type;
   int offload_size;
+  uint64_t offload_cycles;
 
   int post_offload_kernel_type;
 } offload_request_args;
@@ -3541,6 +3542,8 @@ void offload_request(fcontext_transfer_t arg){
 
   int offload_type = r_arg->offload_type;
   int offload_size = r_arg->offload_size;
+
+  uint64_t offload_cycles = r_arg->offload_cycles;
 
   int post_offload_kernel_type = r_arg->post_offload_kernel_type;
 
@@ -3560,7 +3563,7 @@ void offload_request(fcontext_transfer_t arg){
     arg.prev_context,
     task_id,
     (uint8_t **)&dst_buf,
-    2100);
+    offload_cycles);
 
   /*post offload*/
   post_offload_kernel(post_offload_kernel_type, pre_working_set,
@@ -3598,7 +3601,16 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 
     uint64_t total_requests_processed;
 
+
+    /*setup */
+    pthread_t emul_ax;
+    if(offload_type == 1){
+      createThreadPinned(&emul_ax, emul_ax_func, NULL, 20);
+      emul_ax_receptive = true;
+    }
+
     uint64_t start = sampleCoderdtsc();
+
     while(next_unused_task_comp_idx < total_requests){
       next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
       if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS && need_check_for_completed_offload_tasks){
@@ -3621,7 +3633,9 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
         r_args[next_unused_task_comp_idx]->offload_type = offload_type;
         r_args[next_unused_task_comp_idx]->offload_size = offload_size;
         r_args[next_unused_task_comp_idx]->post_offload_kernel_type = post_offload_kernel_type;
-        request_xfers[next_unused_task_comp_idx] = fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
+        r_args[next_unused_task_comp_idx]->offload_cycles = 2100 * 100;
+        request_xfers[next_unused_task_comp_idx] =
+          fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
         next_unused_task_comp_idx++;
       }
     }
@@ -3674,6 +3688,11 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 
     free(comps);
     fcontext_destroy(self);
+
+    if(offload_type == 1){
+      emul_ax_receptive = false;
+      pthread_join( emul_ax, NULL);
+    }
   }
   for(int i=0; i<iters; i++){
     avg_offered_load += offered_loads[i];
@@ -3696,7 +3715,6 @@ void do_offered_load_test(int argc, char **argv){
 
   int post_offload_kernel_type = 3;
 
-  pthread_t emul_ax;
 
   int opt;
   while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:s:d")) != -1) {
@@ -3735,9 +3753,7 @@ void do_offered_load_test(int argc, char **argv){
     do_yield, iters, total_requests, pre_working_set_size,
     offload_size, pre_offload_kernel_type, post_offload_kernel_type);
 
-  if(offload_type == 1){
-    createThreadPinned(&emul_ax, emul_ax_func, NULL, 20);
-  }
+
   if(post_offload_kernel_type == 3){
     prep_ax_desered_mc_reqs(total_requests, offload_size);
   }
@@ -3745,11 +3761,6 @@ void do_offered_load_test(int argc, char **argv){
   service_time_under_exec_model_test(do_yield, total_requests, iters,
     pre_offload_kernel_type, pre_working_set_size,
       offload_type, offload_size, post_offload_kernel_type);
-
-  if(offload_type == 1){
-    emul_ax_receptive = false;
-    pthread_join( emul_ax, NULL);
-  }
 
 }
 
