@@ -3247,10 +3247,22 @@ struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
 	return tsk;
 }
 
+_Atomic bool offload_pending = false;
+uint8_t **pOutBuf= NULL;
+uint64_t offloadDur = 0;
 void *emul_ax_func(void *arg){
   PRINT_DBG("Emul Ax Started \n");
+  struct task *tsk = NULL;
+  uint8_t *pDstBuf = NULL;
+  uint64_t stallCycles = 0;
   while(emul_ax_receptive){
-    // get buffer
+    if(offload_pending){
+      pDstBuf = (uint8_t **)(pOutBuf);
+      stallCycles = offloadDur;
+      PRINT_DBG("DstBuf: 0x%lx StallCycles: %ld\n",
+        *pDstBuf, stallCycles);
+      offload_pending = false;
+    }
   }
 }
 
@@ -3262,7 +3274,9 @@ void do_offload_offered_load_test(
   int output_size,
   bool do_yield,
   fcontext_t parent,
-  int task_id
+  int task_id,
+  uint8_t **pDstBuf, /*pointer to overwrite after comp*/
+  uint64_t cycles_to_stall
   )
 {
   if(offload_type == 0){
@@ -3293,8 +3307,9 @@ void do_offload_offered_load_test(
       PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
     }
   } else if (offload_type == 1){
-    /* */
-    PRINT_DBG("Request %d Blocking\n", task_id);
+    pOutBuf = pDstBuf;
+    offloadDur = cycles_to_stall;
+    offload_pending = true;
   }
 }
 
@@ -3439,8 +3454,15 @@ void offload_request(fcontext_transfer_t arg){
   /*offload*/
   int dst_buf_size = offload_size;
   void *dst_buf = malloc(dst_buf_size);
-  do_offload_offered_load_test(offload_type, pre_working_set, pre_working_set_size, dst_buf,
-    dst_buf_size, do_yield, arg.prev_context, task_id);
+  do_offload_offered_load_test(offload_type,
+    pre_working_set,
+    pre_working_set_size, dst_buf,
+    dst_buf_size,
+    do_yield,
+    arg.prev_context,
+    task_id,
+    (uint8_t **)&dst_buf,
+    2100);
 
   /*post offload*/
   post_offload_kernel(post_offload_kernel_type, pre_working_set,
