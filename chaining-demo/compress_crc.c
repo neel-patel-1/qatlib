@@ -3626,9 +3626,40 @@ void prep_dsa_bufs(uint8_t **valuable_src_bufs, int num_bufs, int buf_size){
   }
 }
 
-// void prep_ax_desered_bufs(){
+uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
+  uint8_t **memcached_requests =
+    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
+  for(int i=0; i<num_mc_reqs; i++){
+    memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
+    gen_sample_memcached_request(memcached_requests[i], mc_req_size);
+  }
+  prep_dsa_bufs(memcached_requests, num_mc_reqs, mc_req_size);
+  return prepped_dsa_bufs;
+}
 
-// }
+uint8_t **  prep_host_deserd_mc_reqs(int num_mc_reqs, int mc_req_size){
+  uint8_t **memcached_requests =
+    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
+  for(int i=0; i<num_mc_reqs; i++){
+    memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
+    gen_sample_memcached_request(memcached_requests[i], mc_req_size);
+  }
+  return memcached_requests;
+}
+
+void hash_ax_memcached_request(int num_mc_reqs){
+  uint8_t ** ax_memcached_requests = prep_ax_desered_mc_reqs(num_mc_reqs, 256);
+  for(int i=0; i<num_mc_reqs; i++){
+    hash_memcached_request(ax_memcached_requests[i]);
+  }
+}
+
+void hash_host_memcached_request(int num_mc_reqs){
+  uint8_t ** host_memcached_requests = prep_host_deserd_mc_reqs(num_mc_reqs, 256);
+  for(int i=0; i<num_mc_reqs; i++){
+    hash_memcached_request(host_memcached_requests[i]);
+  }
+}
 
 int main(int argc, char **argv){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -3653,18 +3684,17 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  int num_mc_reqs = 100;
-  int mc_req_size = 256;
-  uint8_t **memcached_requests =
-    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
-  for(int i=0; i<num_mc_reqs; i++){
-    memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
-    gen_sample_memcached_request(memcached_requests[i], mc_req_size);
-  }
-  prep_dsa_bufs(memcached_requests, num_mc_reqs, mc_req_size);
+  int num_mc_reqs = 128;
 
-  for(int i=0; i<num_mc_reqs; i++){
-    hash_memcached_request(prepped_dsa_bufs[i]);
+
+  {
+    time_code_region((void *)NULL, hash_host_memcached_request(num_mc_reqs), (void *)NULL, 1000);
+    PRINT("host_hash: %ld\n", avg);
+  }
+
+  {
+    time_code_region((void *)NULL, hash_ax_memcached_request(num_mc_reqs), (void *)NULL, 1000);
+    PRINT("ax_hash: %ld\n", avg);
   }
 
   // do_offered_load_test(argc, argv);
