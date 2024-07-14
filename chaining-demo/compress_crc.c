@@ -3250,18 +3250,27 @@ struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
 _Atomic bool offload_pending = false;
 uint8_t **pOutBuf= NULL;
 uint64_t offloadDur = 0;
+struct completion_record *subComp;
 void *emul_ax_func(void *arg){
   PRINT_DBG("Emul Ax Started \n");
   struct task *tsk = NULL;
   uint8_t *pDstBuf = NULL;
   uint64_t stallCycles = 0;
+  struct completion_record *comp = NULL;
   while(emul_ax_receptive){
     if(offload_pending){
       pDstBuf = (uint8_t **)(pOutBuf);
       stallCycles = offloadDur;
+      comp = subComp;
       PRINT_DBG("DstBuf: 0x%lx StallCycles: %ld\n",
         *pDstBuf, stallCycles);
       offload_pending = false;
+    }
+    while(stallCycles > 0){
+      stallCycles--;
+    }
+    if(comp != NULL){
+      comp->status = DSA_COMP_SUCCESS;
     }
   }
 }
@@ -3309,7 +3318,18 @@ void do_offload_offered_load_test(
   } else if (offload_type == 1){
     pOutBuf = pDstBuf;
     offloadDur = cycles_to_stall;
+    subComp = &(comps[task_id]);
+    struct completion_record *wait_comp = &(comps[task_id]);
     offload_pending = true;
+
+    if(do_yield){
+      PRINT_DBG("Request %d Yielding\n", task_id);
+      fcontext_swap(parent, NULL);
+    } else {
+      while(comp->status == 0){
+        _mm_pause();
+      }
+    }
   }
 }
 
@@ -3588,7 +3608,7 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 void do_offered_load_test(int argc, char **argv){
   int total_requests = 128;
   int iters = 10;
-  bool do_yield = true;
+  bool do_yield = false;
 
   int pre_offload_kernel_type = 1;
   int pre_working_set_size = 16 * 1024;
