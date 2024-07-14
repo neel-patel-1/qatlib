@@ -3147,13 +3147,67 @@ uint32_t furc_hash(const char* const key, const size_t len, const uint32_t m) {
   // Give up; return 0, which is a legal value in all cases.
   return 0;
 }
+static inline int gen_sample_memcached_request(void *buf, int buf_size){
+  const char *key = "/region/cluster/foo:key|#|etc";
+  memcpy(buf, key, strlen(key));
+}
+
+/*
+timed_arbitrated_dsa_offload
+prob:
+stall many in-flight offloads at once
+*/
+uint8_t **prepped_dsa_bufs;
+uint8_t ** host_memcached_requests;
+
+
+void prep_dsa_bufs(uint8_t **valuable_src_bufs, int num_bufs, int buf_size){
+  prepped_dsa_bufs = (uint8_t **)malloc(sizeof(uint8_t*) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    prepped_dsa_bufs[i] = (uint8_t *)malloc(buf_size);
+    dsa_memcpy(valuable_src_bufs[i], buf_size, prepped_dsa_bufs[i], buf_size);
+  }
+}
+
+uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
+  uint8_t **memcached_requests =
+    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
+  for(int i=0; i<num_mc_reqs; i++){
+    memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
+    gen_sample_memcached_request(memcached_requests[i], mc_req_size);
+  }
+  prep_dsa_bufs(memcached_requests, num_mc_reqs, mc_req_size);
+  return prepped_dsa_bufs;
+}
+
+uint8_t **  prep_host_deserd_mc_reqs(int num_mc_reqs, int mc_req_size){
+  host_memcached_requests =
+    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
+  for(int i=0; i<num_mc_reqs; i++){
+    host_memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
+    gen_sample_memcached_request(host_memcached_requests[i], mc_req_size);
+  }
+}
+
+void free_prepped_dsa_bufs(int num_bufs){
+  for(int i=0; i<num_bufs; i++){
+    free(prepped_dsa_bufs[i]);
+  }
+  free(prepped_dsa_bufs);
+}
+
+void free_host_memcached_requests(int num_mc_reqs){
+  for(int i=0; i<num_mc_reqs; i++){
+    free(host_memcached_requests[i]);
+  }
+  free(host_memcached_requests);
+}
 
 /* request_sim.h */
 struct completion_record *comps = NULL;
 int next_unresumed_task_comp_idx = 0;
 int last_preempted_task_idx = 0;
 bool exists_waiting_preempted_task = false;
-bool emul_ax_receptive = true;
 
 void probe_point(int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
   if(task_idx > next_unresumed_task_comp_idx && yield_to_completed_offloads){
@@ -3246,28 +3300,37 @@ struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
 }
 
 _Atomic bool offload_pending = false;
+
 uint8_t **pOutBuf= NULL;
 uint64_t offloadDur = 0;
 struct completion_record *subComp;
+int submitter_task_idx = 0;
+
+bool emul_ax_receptive = true;
+
+
 void *emul_ax_func(void *arg){
   PRINT_DBG("Emul Ax Started \n");
   struct task *tsk = NULL;
-  uint8_t *pDstBuf = NULL;
+  uint8_t **pDstBuf = NULL;
   uint64_t stallCycles = 0;
+  int subTaskIdx = 0;
   struct completion_record *comp = NULL;
   while(emul_ax_receptive){
     if(offload_pending){
       pDstBuf = (uint8_t **)(pOutBuf);
       stallCycles = offloadDur;
+      subTaskIdx = submitter_task_idx;
       comp = subComp;
-      PRINT_DBG("DstBuf: 0x%lx StallCycles: %ld\n",
-        *pDstBuf, stallCycles);
+      PRINT_DBG("DstBuf: 0x%lx StallCycles: %ld Submitter: %d\n",
+        *pDstBuf, stallCycles, subTaskIdx);
       offload_pending = false;
     }
     while(stallCycles > 0){
       stallCycles--;
     }
     if(comp != NULL){
+      *pDstBuf = prepped_dsa_bufs[subTaskIdx];
       comp->status = DSA_COMP_SUCCESS;
     }
   }
@@ -3317,6 +3380,7 @@ void do_offload_offered_load_test(
     pOutBuf = pDstBuf;
     offloadDur = cycles_to_stall;
     subComp = &(comps[task_id]);
+    submitter_task_idx = task_id;
     struct completion_record *wait_comp = &(comps[task_id]);
     offload_pending = true;
 
@@ -3363,10 +3427,7 @@ void dsa_memcpy(
 }
 
 
-static inline int gen_sample_memcached_request(void *buf, int buf_size){
-  const char *key = "/region/cluster/foo:key|#|etc";
-  memcpy(buf, key, strlen(key));
-}
+
 
 void hash_memcached_request(void *request){
     /* extract hashable suffix*/
@@ -3436,56 +3497,7 @@ void ax_access(int kernel, int offload_size){
 
 }
 
-/*
-timed_arbitrated_dsa_offload
-prob:
-stall many in-flight offloads at once
-*/
-uint8_t **prepped_dsa_bufs;
-uint8_t ** host_memcached_requests;
 
-
-void prep_dsa_bufs(uint8_t **valuable_src_bufs, int num_bufs, int buf_size){
-  prepped_dsa_bufs = (uint8_t **)malloc(sizeof(uint8_t*) * num_bufs);
-  for(int i=0; i<num_bufs; i++){
-    prepped_dsa_bufs[i] = (uint8_t *)malloc(buf_size);
-    dsa_memcpy(valuable_src_bufs[i], buf_size, prepped_dsa_bufs[i], buf_size);
-  }
-}
-
-uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
-  uint8_t **memcached_requests =
-    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
-  for(int i=0; i<num_mc_reqs; i++){
-    memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
-    gen_sample_memcached_request(memcached_requests[i], mc_req_size);
-  }
-  prep_dsa_bufs(memcached_requests, num_mc_reqs, mc_req_size);
-  return prepped_dsa_bufs;
-}
-
-uint8_t **  prep_host_deserd_mc_reqs(int num_mc_reqs, int mc_req_size){
-  host_memcached_requests =
-    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
-  for(int i=0; i<num_mc_reqs; i++){
-    host_memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
-    gen_sample_memcached_request(host_memcached_requests[i], mc_req_size);
-  }
-}
-
-void free_prepped_dsa_bufs(int num_bufs){
-  for(int i=0; i<num_bufs; i++){
-    free(prepped_dsa_bufs[i]);
-  }
-  free(prepped_dsa_bufs);
-}
-
-void free_host_memcached_requests(int num_mc_reqs){
-  for(int i=0; i<num_mc_reqs; i++){
-    free(host_memcached_requests[i]);
-  }
-  free(host_memcached_requests);
-}
 
 /* Give a req, switch into req context, it determines what it needs to do*/
 /* Does each req need its own args?*/
@@ -3665,7 +3677,7 @@ void do_offered_load_test(int argc, char **argv){
   int offload_type = 1;
   int offload_size = 16 * 1024;
 
-  int post_offload_kernel_type = 1;
+  int post_offload_kernel_type = 3;
 
   pthread_t emul_ax;
 
