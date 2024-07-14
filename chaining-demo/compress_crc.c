@@ -42,7 +42,7 @@
 
 #include <unistd.h>
 
-int gDebugParam = 0;
+int gDebugParam = 1;
 
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
@@ -2206,459 +2206,6 @@ void filler_request_ts(fcontext_transfer_t arg) {
     fcontext_swap(parent, NULL);
 }
 
-/* request_sim.h */
-struct completion_record *comps = NULL;
-int next_unresumed_task_comp_idx = 0;
-int last_preempted_task_idx = 0;
-bool exists_waiting_preempted_task = false;
-
-void probe_point(int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
-  if(task_idx > next_unresumed_task_comp_idx && yield_to_completed_offloads){
-    if(comps[next_unresumed_task_comp_idx].status == DSA_COMP_SUCCESS){
-      PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
-      exists_waiting_preempted_task = true;
-      last_preempted_task_idx = task_idx;
-      fcontext_swap(parent,NULL);
-    }
-  }
-}
-
-/* Seed constant for MurmurHash64A selected by search for optimum diffusion
- * including recursive application.
- */
-#define SEED 4193360111ul
-
-/* Maximum number tries for in-range result before just returning 0. */
-#define MAX_TRIES 32
-
-/* Gap in bit index per try; limits us to 2^FURC_SHIFT shards.  Making this
- * larger will sacrifice a modest amount of performance.
- */
-#define FURC_SHIFT 23
-
-/* Size of cache for hash values; should be > MAXTRIES * (FURCSHIFT + 1) */
-#define FURC_CACHE_SIZE 1024
-
-/* MurmurHash64A performance-optimized for hash of uint64_t keys and seed = M0
- */
-static uint64_t murmur_rehash_64A(uint64_t k) {
-  const uint64_t m = 0xc6a4a7935bd1e995ULL;
-  const int r = 47;
-
-  uint64_t h = (uint64_t)SEED ^ (sizeof(uint64_t) * m);
-
-  k *= m;
-  k ^= k >> r;
-  k *= m;
-
-  h ^= k;
-  h *= m;
-
-  h ^= h >> r;
-  h *= m;
-  h ^= h >> r;
-
-  return h;
-}
-uint64_t
-murmur_hash_64A(const void* const key, const size_t len, const uint32_t seed) {
-  const uint64_t m = 0xc6a4a7935bd1e995ULL;
-  const int r = 47;
-
-  uint64_t h = seed ^ (len * m);
-
-  const uint64_t* data = (const uint64_t*)key;
-  const uint64_t* end = data + (len / 8);
-
-  while (data != end) {
-    uint64_t k = *data++;
-
-    k *= m;
-    k ^= k >> r;
-    k *= m;
-
-    h ^= k;
-    h *= m;
-  }
-  const uint8_t* data2 = (const uint8_t*)data;
-
-  switch (len & 7) {
-    case 7:
-      h ^= (uint64_t)data2[6] << 48;
-      __attribute__((fallthrough));
-    case 6:
-      h ^= (uint64_t)data2[5] << 40;
-      __attribute__((fallthrough));
-    case 5:
-      h ^= (uint64_t)data2[4] << 32;
-      __attribute__((fallthrough));
-    case 4:
-      h ^= (uint64_t)data2[3] << 24;
-      __attribute__((fallthrough));
-    case 3:
-      h ^= (uint64_t)data2[2] << 16;
-      __attribute__((fallthrough));
-    case 2:
-      h ^= (uint64_t)data2[1] << 8;
-      __attribute__((fallthrough));
-    case 1:
-      h ^= (uint64_t)data2[0];
-      h *= m;
-  }
-
-  h ^= h >> r;
-  h *= m;
-  h ^= h >> r;
-
-  return h;
-}
-
-uint32_t furc_get_bit(
-    const char* const key,
-    const size_t len,
-    const uint32_t idx,
-    uint64_t* hash,
-    int32_t* old_ord_p) {
-  int32_t ord = (idx >> 6);
-  int n;
-
-  if (key == NULL) {
-    *old_ord_p = -1;
-    return 0;
-  }
-
-  if (*old_ord_p < ord) {
-    for (n = *old_ord_p + 1; n <= ord; n++) {
-      hash[n] =
-          ((n == 0) ? murmur_hash_64A(key, len, SEED)
-                    : murmur_rehash_64A(hash[n - 1]));
-    }
-    *old_ord_p = ord;
-  }
-
-  return (hash[ord] >> (idx & 0x3f)) & 0x1;
-}
-
-uint32_t furc_hash(const char* const key, const size_t len, const uint32_t m) {
-  uint32_t try;
-  uint32_t d;
-  uint32_t num;
-  uint32_t i;
-  uint32_t a;
-  uint64_t hash[FURC_CACHE_SIZE];
-  int32_t old_ord;
-
-  // There are (ab)users of this function that pass in larger
-  // numbers, and depend on the behavior not changing (ie we can't
-  // just clamp to the max). Just let it go for now.
-
-  // assert(m <= furc_maximum_pool_size());
-
-  if (m <= 1) {
-    return 0;
-  }
-
-  furc_get_bit(NULL, 0, 0, hash, &old_ord);
-  for (d = 0; m > (1ul << d); d++)
-    ;
-
-  a = d;
-  for (try = 0; try < MAX_TRIES; try++) {
-    while (!furc_get_bit(key, len, a, hash, &old_ord)) {
-      if (--d == 0) {
-        return 0;
-      }
-      a = d;
-    }
-    a += FURC_SHIFT;
-    num = 1;
-    for (i = 0; i < d - 1; i++) {
-      num = (num << 1) | furc_get_bit(key, len, a, hash, &old_ord);
-      a += FURC_SHIFT;
-    }
-    if (num < m) {
-      return num;
-    }
-  }
-
-  // Give up; return 0, which is a legal value in all cases.
-  return 0;
-}
-
-
-void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
-  fcontext_t parent, bool yield_to_completed_offloads){
-  if(kernel == 0){
-    if(next_unresumed_task_comp_idx == 0){
-      return;
-    }
-    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx-1]);
-    while(next_unresumed_task_comp->status == 0){
-      _mm_pause();
-    }
-  }
-  else if(kernel == 1){
-    for(int i=0; i<input_len; i++){
-      if(i%200 == 0){
-        probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      ((uint8_t *)input)[i] = 0;
-    }
-  } else if (kernel == 2){
-    create_random_chain_starting_at(input_len, &input);
-  }
-}
-
-void post_offload_kernel(int kernel, void *pre_wrk_set,
-  int pre_wrk_set_size, void *offload_data, int offload_data_size,
-  int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
-  if(kernel == 0){
-    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
-    while(next_unresumed_task_comp->status == 0){
-      _mm_pause();
-    }
-  }
-  else if(kernel == 1){
-    int iters_between_probes = 100;
-    for(int i=0; i<pre_wrk_set_size; i++){
-      if(i%iters_between_probes == 0){
-        probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      if(((uint8_t *)pre_wrk_set)[i] != 0){
-        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)pre_wrk_set)[i]);
-      }
-      ((uint8_t *)pre_wrk_set)[i] = 0x1;
-    }
-    for(int i=0; i<offload_data_size; i++){
-      if(i%iters_between_probes == 0){
-        probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      if(((uint8_t *)offload_data)[i] != 0){
-        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)offload_data)[i]);
-      }
-      ((uint8_t *)offload_data)[i] = 0x1;
-    }
-  }
-  else if(kernel == 2){
-    chase_pointers(pre_wrk_set, pre_wrk_set_size/sizeof(void *));
-  }
-}
-
-struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
-  struct completion_record *comp)
-{
-	struct task *tsk;
-
-	tsk = malloc(sizeof(struct task));
-	if (!tsk)
-		return NULL;
-	memset(tsk, 0, sizeof(struct task));
-
-	tsk->desc = malloc(sizeof(struct hw_desc));
-	if (!tsk->desc) {
-		free_task(tsk);
-		return NULL;
-	}
-	memset(tsk->desc, 0, sizeof(struct hw_desc));
-
-  tsk->comp = comp;
-
-	return tsk;
-}
-
-
-
-void do_offload_offered_load_test(
-  int offload_type,
-  void *input,
-  int input_size,
-  void *output,
-  int output_size,
-  bool do_yield,
-  fcontext_t parent,
-  int task_id
-  )
-{
-  if(offload_type == 0){
-    /* do some offload */
-    struct task *tsk =
-      acctest_alloc_task_with_provided_comp(dsa,
-        &comps[task_id]);
-    /* use the task id to map to the correct comp */
-    prepare_memcpy_task_flags(tsk,
-      dsa,
-      (uint8_t *)input,
-      input_size,
-      (uint8_t *)output,
-      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
-    if(enqcmd(dsa->wq_reg, tsk->desc)){
-      PRINT_ERR("Failed to enqueue task\n");
-      exit(-1);
-    }
-    if(do_yield){
-      PRINT_DBG("Request %d Yielding\n", task_id);
-      fcontext_swap(parent, NULL);
-    } else {
-      while(tsk->comp->status == 0){
-        _mm_pause();
-      }
-    }
-    if(tsk->comp->status != DSA_COMP_SUCCESS){
-      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
-    }
-  }
-}
-
-void dsa_memcpy(
-  void *input,
-  int input_size,
-  void *output,
-  int output_size
-  )
-{
-
-    struct task *tsk =
-      acctest_alloc_task(dsa);
-    /* use the task id to map to the correct comp */
-    prepare_memcpy_task_flags(tsk,
-      dsa,
-      (uint8_t *)input,
-      input_size,
-      (uint8_t *)output,
-      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
-    if(enqcmd(dsa->wq_reg, tsk->desc)){
-      PRINT_ERR("Failed to enqueue task\n");
-      exit(-1);
-    }
-    while(tsk->comp->status == 0){
-      _mm_pause();
-    }
-
-    if(tsk->comp->status != DSA_COMP_SUCCESS){
-      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
-    }
-
-}
-
-
-static inline int gen_sample_memcached_request(void *buf, int buf_size){
-  const char *key = "/region/cluster/foo:key|#|etc";
-  memcpy(buf, key, strlen(key));
-}
-
-void hash_memcached_request(void *request){
-    /* extract hashable suffix*/
-    char *suffix_start, *suffix_end;
-    char route_end = '/';
-    int hashable_len = 0;
-
-    suffix_start = strrchr(request,route_end );
-    suffix_end = strchr(suffix_start, '|');
-    if(suffix_start != NULL && suffix_end !=NULL){
-      suffix_start++;
-      hashable_len = suffix_end - suffix_start;
-    } else {
-      PRINT_ERR("No suffix found\n");
-    }
-    PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
-      hashable_len, suffix_start);
-    furc_hash(suffix_start, hashable_len, 16);
-}
-
-void ax_access(int kernel, int offload_size){
-  char *dst_buf = malloc(offload_size);
-  char *src_buf = malloc(offload_size);
-  uint64_t start, end;
-
-  int iterations = 100;
-  uint64_t start_times[iterations], end_times[iterations], times[iterations];
-  uint64_t avg = 0;
-
-  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
-    int key_size = gen_sample_memcached_request(src_buf, offload_size);
-    dsa_memcpy((void *)src_buf,
-      offload_size, (void *)dst_buf, offload_size);
-
-    /*ax produced*/
-    if(kernel == 0){ /*furc*/
-      start = sampleCoderdtsc(); /*timing phase*/
-      /* extract hashable suffix*/
-      hash_memcached_request(dst_buf);
-      end = sampleCoderdtsc();
-      end_times[i] = end;
-      start_times[i] = start;
-    }
-  }
-  /* average across the runs */
-  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
-  PRINT("AX-Access-Cycles: %ld\n", avg);
-
-  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
-    int key_size = gen_sample_memcached_request(src_buf, offload_size);
-    memcpy((void *)dst_buf,
-      (void *)src_buf, offload_size);
-
-    /*host produced*/
-    if(kernel == 0){ /*furc*/
-      start = sampleCoderdtsc(); /*timing phase*/
-      hash_memcached_request(dst_buf);
-      end = sampleCoderdtsc();
-      end_times[i] = end;
-      start_times[i] = start;
-    }
-  }
-
-  /* average across the runs */
-  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
-  PRINT("Host-Access-Cycles: %ld\n", avg);
-
-}
-
-/* Give a req, switch into req context, it determines what it needs to do*/
-/* Does each req need its own args?*/
-typedef struct offload_request_args_t {
-  bool do_yield;
-  int task_id;
-
-  int pre_offload_kernel_type;
-  int pre_working_set_size;
-
-  int offload_type;
-  int offload_size;
-
-  int post_offload_kernel_type;
-} offload_request_args;
-void offload_request(fcontext_transfer_t arg){
-  offload_request_args *r_arg = (offload_request_args *)(arg.data);
-  fcontext_t parent = arg.prev_context;
-  bool do_yield = r_arg->do_yield;
-  int task_id = r_arg->task_id;
-
-  int pre_offload_kernel_type = r_arg->pre_offload_kernel_type;
-  int pre_working_set_size = r_arg->pre_working_set_size;
-
-  int offload_type = r_arg->offload_type;
-  int offload_size = r_arg->offload_size;
-
-  int post_offload_kernel_type = r_arg->post_offload_kernel_type;
-
-  /*pre offload*/
-  void *pre_working_set = malloc(pre_working_set_size);
-  pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size,
-    task_id, parent, do_yield);
-
-  /*offload*/
-  int dst_buf_size = offload_size;
-  void *dst_buf = malloc(dst_buf_size);
-  do_offload_offered_load_test(offload_type, pre_working_set, pre_working_set_size, dst_buf,
-    dst_buf_size, do_yield, arg.prev_context, task_id);
-
-  /*post offload*/
-  post_offload_kernel(post_offload_kernel_type, pre_working_set,
-    pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
-  PRINT_DBG("Request %d done\n", task_id);
-  fcontext_swap(arg.prev_context, NULL);
-}
 
 void yield_offload_request_ts (fcontext_transfer_t arg) {
     time_preempt_args_t *r_arg = (time_preempt_args_t *)(arg.data);
@@ -3437,6 +2984,471 @@ int accel_output_acc_test(int argc, char **argv){
   return 0;
 }
 
+
+/* hash.h*/
+/* Seed constant for MurmurHash64A selected by search for optimum diffusion
+ * including recursive application.
+ */
+#define SEED 4193360111ul
+
+/* Maximum number tries for in-range result before just returning 0. */
+#define MAX_TRIES 32
+
+/* Gap in bit index per try; limits us to 2^FURC_SHIFT shards.  Making this
+ * larger will sacrifice a modest amount of performance.
+ */
+#define FURC_SHIFT 23
+
+/* Size of cache for hash values; should be > MAXTRIES * (FURCSHIFT + 1) */
+#define FURC_CACHE_SIZE 1024
+
+/* MurmurHash64A performance-optimized for hash of uint64_t keys and seed = M0
+ */
+static uint64_t murmur_rehash_64A(uint64_t k) {
+  const uint64_t m = 0xc6a4a7935bd1e995ULL;
+  const int r = 47;
+
+  uint64_t h = (uint64_t)SEED ^ (sizeof(uint64_t) * m);
+
+  k *= m;
+  k ^= k >> r;
+  k *= m;
+
+  h ^= k;
+  h *= m;
+
+  h ^= h >> r;
+  h *= m;
+  h ^= h >> r;
+
+  return h;
+}
+uint64_t
+murmur_hash_64A(const void* const key, const size_t len, const uint32_t seed) {
+  const uint64_t m = 0xc6a4a7935bd1e995ULL;
+  const int r = 47;
+
+  uint64_t h = seed ^ (len * m);
+
+  const uint64_t* data = (const uint64_t*)key;
+  const uint64_t* end = data + (len / 8);
+
+  while (data != end) {
+    uint64_t k = *data++;
+
+    k *= m;
+    k ^= k >> r;
+    k *= m;
+
+    h ^= k;
+    h *= m;
+  }
+  const uint8_t* data2 = (const uint8_t*)data;
+
+  switch (len & 7) {
+    case 7:
+      h ^= (uint64_t)data2[6] << 48;
+      __attribute__((fallthrough));
+    case 6:
+      h ^= (uint64_t)data2[5] << 40;
+      __attribute__((fallthrough));
+    case 5:
+      h ^= (uint64_t)data2[4] << 32;
+      __attribute__((fallthrough));
+    case 4:
+      h ^= (uint64_t)data2[3] << 24;
+      __attribute__((fallthrough));
+    case 3:
+      h ^= (uint64_t)data2[2] << 16;
+      __attribute__((fallthrough));
+    case 2:
+      h ^= (uint64_t)data2[1] << 8;
+      __attribute__((fallthrough));
+    case 1:
+      h ^= (uint64_t)data2[0];
+      h *= m;
+  }
+
+  h ^= h >> r;
+  h *= m;
+  h ^= h >> r;
+
+  return h;
+}
+
+uint32_t furc_get_bit(
+    const char* const key,
+    const size_t len,
+    const uint32_t idx,
+    uint64_t* hash,
+    int32_t* old_ord_p) {
+  int32_t ord = (idx >> 6);
+  int n;
+
+  if (key == NULL) {
+    *old_ord_p = -1;
+    return 0;
+  }
+
+  if (*old_ord_p < ord) {
+    for (n = *old_ord_p + 1; n <= ord; n++) {
+      hash[n] =
+          ((n == 0) ? murmur_hash_64A(key, len, SEED)
+                    : murmur_rehash_64A(hash[n - 1]));
+    }
+    *old_ord_p = ord;
+  }
+
+  return (hash[ord] >> (idx & 0x3f)) & 0x1;
+}
+
+uint32_t furc_hash(const char* const key, const size_t len, const uint32_t m) {
+  uint32_t try;
+  uint32_t d;
+  uint32_t num;
+  uint32_t i;
+  uint32_t a;
+  uint64_t hash[FURC_CACHE_SIZE];
+  int32_t old_ord;
+
+  // There are (ab)users of this function that pass in larger
+  // numbers, and depend on the behavior not changing (ie we can't
+  // just clamp to the max). Just let it go for now.
+
+  // assert(m <= furc_maximum_pool_size());
+
+  if (m <= 1) {
+    return 0;
+  }
+
+  furc_get_bit(NULL, 0, 0, hash, &old_ord);
+  for (d = 0; m > (1ul << d); d++)
+    ;
+
+  a = d;
+  for (try = 0; try < MAX_TRIES; try++) {
+    while (!furc_get_bit(key, len, a, hash, &old_ord)) {
+      if (--d == 0) {
+        return 0;
+      }
+      a = d;
+    }
+    a += FURC_SHIFT;
+    num = 1;
+    for (i = 0; i < d - 1; i++) {
+      num = (num << 1) | furc_get_bit(key, len, a, hash, &old_ord);
+      a += FURC_SHIFT;
+    }
+    if (num < m) {
+      return num;
+    }
+  }
+
+  // Give up; return 0, which is a legal value in all cases.
+  return 0;
+}
+
+/* request_sim.h */
+struct completion_record *comps = NULL;
+int next_unresumed_task_comp_idx = 0;
+int last_preempted_task_idx = 0;
+bool exists_waiting_preempted_task = false;
+bool emul_ax_receptive = true;
+
+void probe_point(int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
+  if(task_idx > next_unresumed_task_comp_idx && yield_to_completed_offloads){
+    if(comps[next_unresumed_task_comp_idx].status == DSA_COMP_SUCCESS){
+      PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
+      exists_waiting_preempted_task = true;
+      last_preempted_task_idx = task_idx;
+      fcontext_swap(parent,NULL);
+    }
+  }
+}
+
+
+void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
+  fcontext_t parent, bool yield_to_completed_offloads){
+  if(kernel == 0){
+    if(next_unresumed_task_comp_idx == 0){
+      return;
+    }
+    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx-1]);
+    while(next_unresumed_task_comp->status == 0){
+      _mm_pause();
+    }
+  }
+  else if(kernel == 1){
+    for(int i=0; i<input_len; i++){
+      if(i%200 == 0){
+        probe_point(task_idx, parent, yield_to_completed_offloads);
+      }
+      ((uint8_t *)input)[i] = 0;
+    }
+  } else if (kernel == 2){
+    create_random_chain_starting_at(input_len, &input);
+  }
+}
+
+void post_offload_kernel(int kernel, void *pre_wrk_set,
+  int pre_wrk_set_size, void *offload_data, int offload_data_size,
+  int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
+  if(kernel == 0){
+    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+    while(next_unresumed_task_comp->status == 0){
+      _mm_pause();
+    }
+  }
+  else if(kernel == 1){
+    int iters_between_probes = 100;
+    for(int i=0; i<pre_wrk_set_size; i++){
+      if(i%iters_between_probes == 0){
+        probe_point(task_idx, parent, yield_to_completed_offloads);
+      }
+      if(((uint8_t *)pre_wrk_set)[i] != 0){
+        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)pre_wrk_set)[i]);
+      }
+      ((uint8_t *)pre_wrk_set)[i] = 0x1;
+    }
+    for(int i=0; i<offload_data_size; i++){
+      if(i%iters_between_probes == 0){
+        probe_point(task_idx, parent, yield_to_completed_offloads);
+      }
+      if(((uint8_t *)offload_data)[i] != 0){
+        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)offload_data)[i]);
+      }
+      ((uint8_t *)offload_data)[i] = 0x1;
+    }
+  }
+  else if(kernel == 2){
+    chase_pointers(pre_wrk_set, pre_wrk_set_size/sizeof(void *));
+  }
+}
+
+struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
+  struct completion_record *comp)
+{
+	struct task *tsk;
+
+	tsk = malloc(sizeof(struct task));
+	if (!tsk)
+		return NULL;
+	memset(tsk, 0, sizeof(struct task));
+
+	tsk->desc = malloc(sizeof(struct hw_desc));
+	if (!tsk->desc) {
+		free_task(tsk);
+		return NULL;
+	}
+	memset(tsk->desc, 0, sizeof(struct hw_desc));
+
+  tsk->comp = comp;
+
+	return tsk;
+}
+
+void *emul_ax_func(void *arg){
+  PRINT_DBG("Emul Ax Started \n");
+  while(emul_ax_receptive){
+    // get buffer
+  }
+}
+
+void do_offload_offered_load_test(
+  int offload_type,
+  void *input,
+  int input_size,
+  void *output,
+  int output_size,
+  bool do_yield,
+  fcontext_t parent,
+  int task_id
+  )
+{
+  if(offload_type == 0){
+    /* do some offload */
+    struct task *tsk =
+      acctest_alloc_task_with_provided_comp(dsa,
+        &comps[task_id]);
+    /* use the task id to map to the correct comp */
+    prepare_memcpy_task_flags(tsk,
+      dsa,
+      (uint8_t *)input,
+      input_size,
+      (uint8_t *)output,
+      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
+    if(enqcmd(dsa->wq_reg, tsk->desc)){
+      PRINT_ERR("Failed to enqueue task\n");
+      exit(-1);
+    }
+    if(do_yield){
+      PRINT_DBG("Request %d Yielding\n", task_id);
+      fcontext_swap(parent, NULL);
+    } else {
+      while(tsk->comp->status == 0){
+        _mm_pause();
+      }
+    }
+    if(tsk->comp->status != DSA_COMP_SUCCESS){
+      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
+    }
+  } else if (offload_type == 1){
+    /* */
+    PRINT_DBG("Request %d Blocking\n", task_id);
+  }
+}
+
+void dsa_memcpy(
+  void *input,
+  int input_size,
+  void *output,
+  int output_size
+  )
+{
+
+    struct task *tsk =
+      acctest_alloc_task(dsa);
+    /* use the task id to map to the correct comp */
+    prepare_memcpy_task_flags(tsk,
+      dsa,
+      (uint8_t *)input,
+      input_size,
+      (uint8_t *)output,
+      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
+    if(enqcmd(dsa->wq_reg, tsk->desc)){
+      PRINT_ERR("Failed to enqueue task\n");
+      exit(-1);
+    }
+    while(tsk->comp->status == 0){
+      _mm_pause();
+    }
+
+    if(tsk->comp->status != DSA_COMP_SUCCESS){
+      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
+    }
+
+}
+
+
+static inline int gen_sample_memcached_request(void *buf, int buf_size){
+  const char *key = "/region/cluster/foo:key|#|etc";
+  memcpy(buf, key, strlen(key));
+}
+
+void hash_memcached_request(void *request){
+    /* extract hashable suffix*/
+    char *suffix_start, *suffix_end;
+    char route_end = '/';
+    int hashable_len = 0;
+
+    suffix_start = strrchr(request,route_end );
+    suffix_end = strchr(suffix_start, '|');
+    if(suffix_start != NULL && suffix_end !=NULL){
+      suffix_start++;
+      hashable_len = suffix_end - suffix_start;
+    } else {
+      PRINT_ERR("No suffix found\n");
+    }
+    PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
+      hashable_len, suffix_start);
+    furc_hash(suffix_start, hashable_len, 16);
+}
+
+void ax_access(int kernel, int offload_size){
+  char *dst_buf = malloc(offload_size);
+  char *src_buf = malloc(offload_size);
+  uint64_t start, end;
+
+  int iterations = 100;
+  uint64_t start_times[iterations], end_times[iterations], times[iterations];
+  uint64_t avg = 0;
+
+  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
+    int key_size = gen_sample_memcached_request(src_buf, offload_size);
+    dsa_memcpy((void *)src_buf,
+      offload_size, (void *)dst_buf, offload_size);
+
+    /*ax produced*/
+    if(kernel == 0){ /*furc*/
+      start = sampleCoderdtsc(); /*timing phase*/
+      /* extract hashable suffix*/
+      hash_memcached_request(dst_buf);
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
+    }
+  }
+  /* average across the runs */
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+  PRINT("AX-Access-Cycles: %ld\n", avg);
+
+  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
+    int key_size = gen_sample_memcached_request(src_buf, offload_size);
+    memcpy((void *)dst_buf,
+      (void *)src_buf, offload_size);
+
+    /*host produced*/
+    if(kernel == 0){ /*furc*/
+      start = sampleCoderdtsc(); /*timing phase*/
+      hash_memcached_request(dst_buf);
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
+    }
+  }
+
+  /* average across the runs */
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+  PRINT("Host-Access-Cycles: %ld\n", avg);
+
+}
+
+/* Give a req, switch into req context, it determines what it needs to do*/
+/* Does each req need its own args?*/
+typedef struct offload_request_args_t {
+  bool do_yield;
+  int task_id;
+
+  int pre_offload_kernel_type;
+  int pre_working_set_size;
+
+  int offload_type;
+  int offload_size;
+
+  int post_offload_kernel_type;
+} offload_request_args;
+void offload_request(fcontext_transfer_t arg){
+  offload_request_args *r_arg = (offload_request_args *)(arg.data);
+  fcontext_t parent = arg.prev_context;
+  bool do_yield = r_arg->do_yield;
+  int task_id = r_arg->task_id;
+
+  int pre_offload_kernel_type = r_arg->pre_offload_kernel_type;
+  int pre_working_set_size = r_arg->pre_working_set_size;
+
+  int offload_type = r_arg->offload_type;
+  int offload_size = r_arg->offload_size;
+
+  int post_offload_kernel_type = r_arg->post_offload_kernel_type;
+
+  /*pre offload*/
+  void *pre_working_set = malloc(pre_working_set_size);
+  pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size,
+    task_id, parent, do_yield);
+
+  /*offload*/
+  int dst_buf_size = offload_size;
+  void *dst_buf = malloc(dst_buf_size);
+  do_offload_offered_load_test(offload_type, pre_working_set, pre_working_set_size, dst_buf,
+    dst_buf_size, do_yield, arg.prev_context, task_id);
+
+  /*post offload*/
+  post_offload_kernel(post_offload_kernel_type, pre_working_set,
+    pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
+  PRINT_DBG("Request %d done\n", task_id);
+  fcontext_swap(arg.prev_context, NULL);
+}
+
 int service_time_under_exec_model_test(bool do_yield, int total_requests, int iters, int pre_offload_kernel_type,
   int pre_working_set_size, int offload_type, int offload_size, int post_offload_kernel_type)
 {
@@ -3554,7 +3566,7 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 void do_offered_load_test(int argc, char **argv){
   int total_requests = 128;
   int iters = 10;
-  bool do_yield = false;
+  bool do_yield = true;
 
   int pre_offload_kernel_type = 1;
   int pre_working_set_size = 16 * 1024;
@@ -3670,6 +3682,26 @@ void hash_host_memcached_request(int num_mc_reqs){
   }
 }
 
+void pre_alloc_deser_vs_reused_src_dst_ax_access_divergence(){
+  int num_mc_reqs = 1; /* maybe there is some kind of prefetching ?*/
+  ax_access(0, 256);
+
+  {
+    time_code_region(  prep_host_deserd_mc_reqs(num_mc_reqs, 256),
+      hash_host_memcached_request(num_mc_reqs),
+      free_host_memcached_requests(num_mc_reqs), 1000);
+    PRINT("host_hash: %ld\n", avg);
+  }
+
+  {
+    time_code_region(prep_ax_desered_mc_reqs(num_mc_reqs, 256),
+      hash_ax_memcached_request(num_mc_reqs), free_prepped_dsa_bufs(num_mc_reqs), 1000);
+    PRINT("ax_hash: %ld\n", avg);
+  }
+}
+
+
+
 int main(int argc, char **argv){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -3693,23 +3725,13 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  int num_mc_reqs = 1;
+  // int num_mc_reqs = 100;
+  // prep_host_deserd_mc_reqs(num_mc_reqs, 256);
+  pthread_t emul_ax;
+  createThreadPinned(&emul_ax, emul_ax_func, NULL, 20);
 
-  ax_access(0, 256);
 
-  {
-    time_code_region(  prep_host_deserd_mc_reqs(num_mc_reqs, 256),
-      hash_host_memcached_request(num_mc_reqs),
-      free_host_memcached_requests(num_mc_reqs), 1000);
-    PRINT("host_hash: %ld\n", avg);
-  }
-
-  {
-    time_code_region(prep_ax_desered_mc_reqs(num_mc_reqs, 256),
-      hash_ax_memcached_request(num_mc_reqs), free_prepped_dsa_bufs(num_mc_reqs), 1000);
-    PRINT("ax_hash: %ld\n", avg);
-  }
-
+  pthread_join( emul_ax, NULL);
   // do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
