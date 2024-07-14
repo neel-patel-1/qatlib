@@ -3573,7 +3573,9 @@ void offload_request(fcontext_transfer_t arg){
 }
 
 int service_time_under_exec_model_test(bool do_yield, int total_requests, int iters, int pre_offload_kernel_type,
-  int pre_working_set_size, int offload_type, int offload_size, int post_offload_kernel_type)
+  int pre_working_set_size, int offload_type,
+  int offload_size, int post_offload_kernel_type,
+  uint64_t offload_cycles)
 {
   double offered_loads[iters];
   double avg_offered_load = 0;
@@ -3633,7 +3635,7 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
         r_args[next_unused_task_comp_idx]->offload_type = offload_type;
         r_args[next_unused_task_comp_idx]->offload_size = offload_size;
         r_args[next_unused_task_comp_idx]->post_offload_kernel_type = post_offload_kernel_type;
-        r_args[next_unused_task_comp_idx]->offload_cycles = 2100 * 100;
+        r_args[next_unused_task_comp_idx]->offload_cycles = offload_cycles;
         request_xfers[next_unused_task_comp_idx] =
           fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
         next_unused_task_comp_idx++;
@@ -3715,9 +3717,11 @@ void do_offered_load_test(int argc, char **argv){
 
   int post_offload_kernel_type = 3;
 
+  uint64_t emul_offload_cycles = 2100 * 100;
+
 
   int opt;
-  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:s:d")) != -1) {
+  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:s:dt:")) != -1) {
     switch (opt) {
     case 'y':
       do_yield = true;
@@ -3745,13 +3749,18 @@ void do_offered_load_test(int argc, char **argv){
       break;
     case 'd':
       gDebugParam = 1;
+      break;
+    case 't':
+      sscanf( optarg, "%lu", &emul_offload_cycles);
+      break;
     default:
       break;
     }
   }
-  PRINT("y: %d i: %d r: %d f: %d o: %d k: %d l: %d\n",
+  PRINT("y: %d i: %d r: %d f: %d o: %d k: %d l: %d d: %d t: %d\n",
     do_yield, iters, total_requests, pre_working_set_size,
-    offload_size, pre_offload_kernel_type, post_offload_kernel_type);
+    offload_size, pre_offload_kernel_type, post_offload_kernel_type,
+    gDebugParam, emul_offload_cycles);
 
 
   if(post_offload_kernel_type == 3){
@@ -3760,7 +3769,8 @@ void do_offered_load_test(int argc, char **argv){
 
   service_time_under_exec_model_test(do_yield, total_requests, iters,
     pre_offload_kernel_type, pre_working_set_size,
-      offload_type, offload_size, post_offload_kernel_type);
+      offload_type, offload_size, post_offload_kernel_type,
+      emul_offload_cycles);
 
 }
 
