@@ -3205,17 +3205,11 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
       if(i%iters_between_probes == 0){
         probe_point(task_idx, parent, yield_to_completed_offloads);
       }
-      if(((uint8_t *)pre_wrk_set)[i] != 0){
-        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)pre_wrk_set)[i]);
-      }
       ((uint8_t *)pre_wrk_set)[i] = 0x1;
     }
     for(int i=0; i<offload_data_size; i++){
       if(i%iters_between_probes == 0){
         probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      if(((uint8_t *)offload_data)[i] != 0){
-        PRINT_ERR("Payload mismatch: 0x%x\n", ((uint8_t *)offload_data)[i]);
       }
       ((uint8_t *)offload_data)[i] = 0x1;
     }
@@ -3326,7 +3320,7 @@ void do_offload_offered_load_test(
       PRINT_DBG("Request %d Yielding\n", task_id);
       fcontext_swap(parent, NULL);
     } else {
-      while(comp->status == 0){
+      while(subComp->status == 0){
         _mm_pause();
       }
     }
@@ -3613,7 +3607,7 @@ void do_offered_load_test(int argc, char **argv){
   int pre_offload_kernel_type = 1;
   int pre_working_set_size = 16 * 1024;
 
-  int offload_type = 0;
+  int offload_type = 1;
   int offload_size = 16 * 1024;
 
   int post_offload_kernel_type = 1;
@@ -3773,8 +3767,8 @@ int main(int argc, char **argv){
   createThreadPinned(&emul_ax, emul_ax_func, NULL, 20);
 
 
-  pthread_join( emul_ax, NULL);
-  // do_offered_load_test(argc, argv);
+  // pthread_join( emul_ax, NULL);
+  do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
