@@ -47,6 +47,21 @@ int gDebugParam = 0;
 uint8_t **mini_bufs;
 uint8_t **dst_mini_bufs;
 
+#define time_code_region(per_run_setup, code_to_measrure, per_run_cleanup, iterations) \
+  uint64_t start, end, avg; \
+  uint64_t start_times[iterations], end_times[iterations], times[iterations]; \
+  for(int i=0; i<iterations; i++){ \
+    per_run_setup; \
+    start = sampleCoderdtsc(); \
+    code_to_measrure; \
+    end = sampleCoderdtsc(); \
+    start_times[i] = start; \
+    end_times[i] = end; \
+    per_run_cleanup; \
+  } \
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+
+
 
 struct task * on_node_task_alloc(struct acctest_context *ctx, int desc_node, int cr_node){
   struct task *tsk;
@@ -3592,6 +3607,29 @@ void do_offered_load_test(int argc, char **argv){
       offload_type, offload_size, post_offload_kernel_type);
 }
 
+/*
+timed_arbitrated_dsa_offload
+prob:
+stall many in-flight offloads at once
+*/
+uint8_t **prepped_dsa_bufs;
+
+void *emul_ax(void *arg){
+
+}
+
+void prep_dsa_bufs(uint8_t **valuable_src_bufs, int num_bufs, int buf_size){
+  prepped_dsa_bufs = (uint8_t **)malloc(sizeof(uint8_t*) * num_bufs);
+  for(int i=0; i<num_bufs; i++){
+    prepped_dsa_bufs[i] = (uint8_t *)malloc(buf_size);
+    dsa_memcpy(valuable_src_bufs[i], buf_size, prepped_dsa_bufs[i], buf_size);
+  }
+}
+
+// void prep_ax_desered_bufs(){
+
+// }
+
 int main(int argc, char **argv){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
   stat = qaeMemInit();
@@ -3615,8 +3653,21 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
+  int num_mc_reqs = 100;
+  int mc_req_size = 256;
+  uint8_t **memcached_requests =
+    (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
+  for(int i=0; i<num_mc_reqs; i++){
+    memcached_requests[i] = (uint8_t *)malloc(mc_req_size);
+    gen_sample_memcached_request(memcached_requests[i], mc_req_size);
+  }
+  prep_dsa_bufs(memcached_requests, num_mc_reqs, mc_req_size);
 
-  ax_access(0,256);
+  for(int i=0; i<num_mc_reqs; i++){
+    hash_memcached_request(prepped_dsa_bufs[i]);
+  }
+
+  // do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
