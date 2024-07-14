@@ -3307,31 +3307,45 @@ struct completion_record *subComp;
 int submitter_task_idx = 0;
 
 bool emul_ax_receptive = true;
-
+int emul_ax_total_expected_offloads = 128;
 
 void *emul_ax_func(void *arg){
-  PRINT_DBG("Emul Ax Started \n");
-  struct task *tsk = NULL;
-  uint8_t **pDstBuf = NULL;
-  uint64_t stallCycles = 0;
-  int subTaskIdx = 0;
-  struct completion_record *comp = NULL;
+
+  uint64_t offCompTimes[emul_ax_total_expected_offloads];
+  struct completion_record *reqComps[emul_ax_total_expected_offloads];
+
+  int lastRcvdTskIdx = -1, earlUncompTskIdx = 0;
+  bool processing_offload = false, offload_completed = false;
+
   while(emul_ax_receptive){
-    if(offload_pending){
-      pDstBuf = (uint8_t **)(pOutBuf);
-      stallCycles = offloadDur;
-      subTaskIdx = submitter_task_idx;
-      comp = subComp;
-      PRINT_DBG("DstBuf: 0x%lx StallCycles: %ld Submitter: %d\n",
-        *pDstBuf, stallCycles, subTaskIdx);
+    if(processing_offload){
+      uint64_t currTime = sampleCoderdtsc();
+      offload_completed = currTime >= offCompTimes[earlUncompTskIdx];
+      if(offload_completed){
+        /*notify offloader*/
+        reqComps[earlUncompTskIdx]->status = DSA_COMP_SUCCESS;
+
+        PRINT_DBG("Offload %d Completed\n", earlUncompTskIdx);
+        earlUncompTskIdx++;
+
+        if(earlUncompTskIdx > lastRcvdTskIdx){
+          processing_offload = false;
+        }
+      }
+    }
+    if(offload_pending){ /* always check for pending offloads */
+      uint64_t offStTime = sampleCoderdtsc();
+      uint64_t stallTime = offloadDur;
+      *pOutBuf = prepped_dsa_bufs[submitter_task_idx]; /* just set this immediately */
+      reqComps[submitter_task_idx] = subComp; /* need this at cr write time*/
+
+      lastRcvdTskIdx = submitter_task_idx;
+
+      processing_offload = true;
       offload_pending = false;
-    }
-    while(stallCycles > 0){
-      stallCycles--;
-    }
-    if(comp != NULL){
-      *pDstBuf = prepped_dsa_bufs[subTaskIdx];
-      comp->status = DSA_COMP_SUCCESS;
+      PRINT_DBG("Received Offload Request %d\n", submitter_task_idx);
+
+      offCompTimes[submitter_task_idx] = offStTime + stallTime;
     }
   }
 }
@@ -3386,6 +3400,9 @@ void do_offload_offered_load_test(
 
     if(do_yield){
       PRINT_DBG("Request %d Yielding\n", task_id);
+      while(offload_pending == true){ /* wait for submission to complete */
+        _mm_pause();
+      }
       fcontext_swap(parent, NULL);
     } else {
       while(subComp->status == 0){
