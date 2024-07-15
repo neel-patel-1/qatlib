@@ -42,6 +42,8 @@
 
 #include <unistd.h>
 
+#include <math.h>
+
 int gDebugParam = 0;
 
 uint8_t **mini_bufs;
@@ -3391,6 +3393,7 @@ void do_offload_offered_load_test(
       PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
     }
   } else if (offload_type == 1){
+    /* submit work to the emul ax*/
     pOutBuf = pDstBuf;
     offloadDur = cycles_to_stall;
     subComp = &(comps[task_id]);
@@ -3409,6 +3412,22 @@ void do_offload_offered_load_test(
         _mm_pause();
       }
     }
+  } else if(offload_type == 2){ /*sychronous deser sim on CPU*/
+    uint64_t st, end;
+    uint64_t deser_dur = 1123;
+    st = sampleCoderdtsc();
+    gen_sample_memcached_request(output, output_size);
+    for(int i=0; i<output_size; i+=64){
+      ((uint8_t *)output)[i] = 0x1;
+    }
+    end = sampleCoderdtsc();
+    while (end - st < deser_dur){
+      end = sampleCoderdtsc();
+    }
+    PRINT_DBG("DataTouched: %d Deserialization Time: %ld\n", output_size, end-st);
+  } else if(offload_type == 3){
+    /* Do a matmul with data produces by a previous layer of a gen AI inference ax*/
+    /*Here the CPU is performing the decode stage of an offload */
   }
 }
 
@@ -3465,33 +3484,38 @@ void hash_memcached_request(void *request){
     furc_hash(suffix_start, hashable_len, 16);
 }
 
+float distance(float *point_query, float *query_feature, int dim){
+  float sum = 0.0;
+    for(int i = 0; i < dim; ++i){
+        float diff = point_query[i] - query_feature[i];
+        sum += diff * diff;
+    }
+  return sqrtf(sum);
+}
+
 void ax_access(int kernel, int offload_size){
   char *dst_buf = malloc(offload_size);
   char *src_buf = malloc(offload_size);
+  float *image_point;
   uint64_t start, end;
 
   int iterations = 100;
   uint64_t start_times[iterations], end_times[iterations], times[iterations];
   uint64_t avg = 0;
 
-  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
-    int key_size = gen_sample_memcached_request(src_buf, offload_size);
-    dsa_memcpy((void *)src_buf,
-      offload_size, (void *)dst_buf, offload_size);
-
-    /*ax produced*/
-    if(kernel == 0){ /*furc*/
-      start = sampleCoderdtsc(); /*timing phase*/
-      /* extract hashable suffix*/
-      hash_memcached_request(dst_buf);
-      end = sampleCoderdtsc();
-      end_times[i] = end;
-      start_times[i] = start;
+  if(kernel == 0){
+    int key_size = gen_sample_memcached_request(src_buf, offload_size); /* kernel 0*/
+  } else if (kernel == 1){
+    float *query_buf = (float *)(src_buf); /* kernel 1 */
+    image_point = (float *)malloc(offload_size); /* one of the indexed imgs*/
+    /* generate random query and image in the index*/
+    for(int i=0; i<offload_size/sizeof(float); i++){
+      query_buf[i] = (float)rand()/(float)(RAND_MAX); /* this gets copied to the dst*/
+      image_point[i] = (float)rand()/(float)(RAND_MAX);
     }
   }
-  /* average across the runs */
-  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
-  PRINT("AX-Access-Cycles: %ld\n", avg);
+
+
 
   for(int i=0; i<iterations; i++){ /*per-iteration setup*/
     int key_size = gen_sample_memcached_request(src_buf, offload_size);
@@ -3505,12 +3529,48 @@ void ax_access(int kernel, int offload_size){
       end = sampleCoderdtsc();
       end_times[i] = end;
       start_times[i] = start;
+    } else if (kernel == 1){ /* get the distance between the random query and the */
+      start = sampleCoderdtsc(); /*timing phase*/
+      /* extract hashable suffix*/
+      distance(dst_buf, image_point, offload_size/sizeof(float));
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
     }
   }
 
   /* average across the runs */
   avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
   PRINT("Host-Access-Cycles: %ld\n", avg);
+
+  for(int i=0; i<iterations; i++){ /*per-iteration setup*/
+    dsa_memcpy((void *)src_buf,
+      offload_size, (void *)dst_buf, offload_size);
+
+    /*ax produced*/
+    if(kernel == 0){ /*furc*/
+      start = sampleCoderdtsc(); /*timing phase*/
+      /* extract hashable suffix*/
+      hash_memcached_request(dst_buf);
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
+    } else if (kernel == 1){ /* get the distance between the random query and the */
+      start = sampleCoderdtsc(); /*timing phase*/
+      /* extract hashable suffix*/
+      distance(dst_buf, image_point, offload_size/sizeof(float));
+      end = sampleCoderdtsc();
+      end_times[i] = end;
+      start_times[i] = start;
+    }
+  }
+  /* average across the runs */
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+  PRINT("AX-Access-Cycles: %ld\n", avg);
+
+  free(dst_buf);
+  free(src_buf);
+  free(image_point);
 
 }
 
@@ -3555,7 +3615,8 @@ void offload_request(fcontext_transfer_t arg){
   /*offload*/
   int dst_buf_size = offload_size;
   void *dst_buf = malloc(dst_buf_size);
-  do_offload_offered_load_test(offload_type,
+  do_offload_offered_load_test(
+    offload_type,
     pre_working_set,
     pre_working_set_size, dst_buf,
     dst_buf_size,
@@ -3762,7 +3823,6 @@ void do_offered_load_test(int argc, char **argv){
     offload_size, pre_offload_kernel_type, post_offload_kernel_type,
     gDebugParam, emul_offload_cycles);
 
-
   if(post_offload_kernel_type == 3){
     prep_ax_desered_mc_reqs(total_requests, offload_size);
   }
@@ -3829,7 +3889,10 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
+
   do_offered_load_test(argc, argv);
+
+  ax_access(1, 8*1024);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
