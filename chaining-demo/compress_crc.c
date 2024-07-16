@@ -3837,7 +3837,10 @@ void pre_alloc_deser_vs_reused_src_dst_ax_access_divergence(){
   }
 }
 
-
+typedef struct _node{
+  struct node *next;
+  int data;
+} node;
 
 int main(int argc, char **argv){
   CpaStatus status = CPA_STATUS_SUCCESS, stat;
@@ -3862,10 +3865,62 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
+  int iterations = 100;
+  uint64_t start_times[iterations], end_times[iterations], times[iterations];
+  uint64_t start, end, avg = 0;
 
-  do_offered_load_test(argc, argv);
+  int num_nodes = 10;
+  int ll_data_size = sizeof(node) * num_nodes;
 
-  ax_access(1, 8*1024);
+  /* allocate big mem */
+  node *llist = (node *)malloc(ll_data_size);
+  node *dst_llist = (node *)malloc(ll_data_size);
+
+  for(int i=0; i<num_nodes-1; i++){
+    llist[i].data = i;
+    llist[i].next = &llist[i+1];
+  }
+  llist[num_nodes-1].data = num_nodes-1;
+  llist[num_nodes-1].next = NULL;
+
+  dsa_memcpy(llist,
+    ll_data_size, dst_llist, ll_data_size);
+
+  for(int i=0; i<iterations; i++){
+    dsa_memcpy(llist,
+      ll_data_size, dst_llist, ll_data_size);
+    start = sampleCoderdtsc();
+    node *curr = dst_llist;
+    while(curr != NULL){
+      curr->data = 0;
+      curr = curr->next;
+    }
+    end = sampleCoderdtsc();
+    end_times[i] = end;
+    start_times[i] = start;
+  }
+  avg_samples_from_arrays(times,
+    avg, end_times, start_times, iterations);
+
+  PRINT("AX-Access-Cycles: %ld\n", avg);
+
+  for(int i=0; i<iterations; i++){
+    memcpy(dst_llist,
+      llist, ll_data_size);
+    start = sampleCoderdtsc();
+    node *curr = dst_llist;
+    while(curr != NULL){
+      curr->data = 0;
+      curr = curr->next;
+    }
+    end = sampleCoderdtsc();
+    end_times[i] = end;
+    start_times[i] = start;
+  }
+  avg_samples_from_arrays(times,
+    avg, end_times, start_times, iterations);
+
+  PRINT("AX-Access-Cycles: %ld\n", avg);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
