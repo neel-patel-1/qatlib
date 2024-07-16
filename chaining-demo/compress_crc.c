@@ -3432,12 +3432,16 @@ void do_offload_offered_load_test(
     }
   } else if (offload_type == 1){
     /* submit work to the emul ax*/
+    uint64_t st, end;
+    st = sampleCoderdtsc();
     pOutBuf = pDstBuf;
     offloadDur = cycles_to_stall;
     subComp = &(comps[task_id]);
     submitter_task_idx = task_id;
     struct completion_record *wait_comp = &(comps[task_id]);
     offload_pending = true;
+    end = sampleCoderdtsc();
+    PRINT_DBG("Offload SUBMIT %ld\n", end - st);
 
     if(do_yield){
       PRINT_DBG("Request %d Yielding\n", task_id);
