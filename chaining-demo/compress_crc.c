@@ -3837,7 +3837,7 @@ void do_offered_load_test(int argc, char **argv){
     prep_ax_desered_mc_reqs(total_requests, offload_size);
   } else if (post_offload_kernel_type == 4)
   {
-    prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node));
+    prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
   }
 
   service_time_under_exec_model_test(do_yield, total_requests, iters,
