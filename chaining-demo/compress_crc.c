@@ -3157,9 +3157,7 @@ static inline int gen_sample_memcached_request(void *buf, int buf_size){
 }
 
 /*
-timed_arbitrated_dsa_offload
-prob:
-stall many in-flight offloads at once
+functions/buffers prepared for host access after offload
 */
 uint8_t **prepped_dsa_bufs;
 uint8_t ** host_memcached_requests;
@@ -3173,6 +3171,7 @@ void prep_dsa_bufs(uint8_t **valuable_src_bufs, int num_bufs, int buf_size){
   }
 }
 
+/* router */
 uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
   uint8_t **memcached_requests =
     (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
@@ -3181,6 +3180,31 @@ uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
     gen_sample_memcached_request(memcached_requests[i], mc_req_size);
   }
   prep_dsa_bufs(memcached_requests, num_mc_reqs, mc_req_size);
+  return prepped_dsa_bufs;
+}
+
+typedef struct _node{
+  struct node *next;
+  int data;
+} node;
+/* linked list merge */
+uint8_t ** prep_ax_generated_linked_lists(int num_lls, int num_nodes){
+  /* allocate contiguous linked lists*/
+  int ll_data_size = sizeof(node) * num_nodes;
+  node **llists = (node **)malloc(sizeof(node*) * num_lls);
+
+  for(int j=0; j<num_lls; j++){
+    llists[j] = (node *)malloc(ll_data_size);
+    node *llist = llists[j];
+
+    for(int i=0; i<num_nodes-1; i++){
+      llist[i].data = i;
+      llist[i].next = &llist[i+1];
+    }
+    llist[num_nodes-1].data = num_nodes-1;
+    llist[num_nodes-1].next = NULL;
+  }
+  prep_dsa_bufs(llists, num_lls, ll_data_size);
   return prepped_dsa_bufs;
 }
 
@@ -3248,6 +3272,8 @@ void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
   }
 }
 
+
+
 void post_offload_kernel(int kernel, void *pre_wrk_set,
   int pre_wrk_set_size, void *offload_data, int offload_data_size,
   int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
@@ -3278,6 +3304,16 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
   else if(kernel == 3){
     PRINT_DBG("Task %d Hashing Memcached Request: %s\n", task_idx, offload_data);
     hash_memcached_request(offload_data);
+  }
+  else if (kernel == 4){
+    int ctr = 0;
+    node *curr = offload_data;
+    while(curr != NULL){
+      curr->data = 0;
+      curr = curr->next;
+      ctr++;
+    }
+    PRINT_DBG("Traversed %d length list\n", ctr);
   }
 }
 
@@ -3796,8 +3832,12 @@ void do_offered_load_test(int argc, char **argv){
     offload_size, pre_offload_kernel_type, post_offload_kernel_type,
     gDebugParam, emul_offload_cycles);
 
+  /* prep the dsa bufs depending on the offload kernel type */
   if(post_offload_kernel_type == 3){
     prep_ax_desered_mc_reqs(total_requests, offload_size);
+  } else if (post_offload_kernel_type == 4)
+  {
+    prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node));
   }
 
   service_time_under_exec_model_test(do_yield, total_requests, iters,
@@ -3837,10 +3877,7 @@ void pre_alloc_deser_vs_reused_src_dst_ax_access_divergence(){
   }
 }
 
-typedef struct _node{
-  struct node *next;
-  int data;
-} node;
+
 
 /* Use this to measure access overhead for linked list traversal */
 void linked_list_overhead(){
@@ -3930,7 +3967,8 @@ int main(int argc, char **argv){
 
 
 
-  linked_list_overhead();
+  // linked_list_overhead();
+  do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
