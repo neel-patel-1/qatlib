@@ -3464,8 +3464,26 @@ void do_offload_offered_load_test(
     }
     PRINT_DBG("DataTouched: %d Deserialization Time: %ld\n", output_size, end-st);
   } else if(offload_type == 3){
-    /* Do a matmul with data produces by a previous layer of a gen AI inference ax*/
-    /*Here the CPU is performing the decode stage of an offload */
+      /* synchronous CPU linked list traversal updating a variable for each node visited*/
+      /* we can create the linked list here, or we can swap the dst pointer same as the emul ax*/
+      *pDstBuf = prepped_dsa_bufs[task_id];
+      int ctr = 0;
+      node *curr = *pDstBuf; /*output data is prepped ll?*/
+      while(curr != NULL){
+        curr->data = ctr;
+        curr = curr->next;
+        ctr++;
+      }
+      PRINT_DBG("Traversed %d length list\n", ctr);
+      int buf_size = 2 * 1024 * 1024;
+      uint8_t *dummy_buf = (uint8_t *)malloc(buf_size);
+      memset(dummy_buf, 0, buf_size);
+
+      for(int i=0; i<48 * 1024; i+=64){
+        dummy_buf[i] += i;
+      }
+      PRINT_DBG("DummyBufTouched: %d\n", buf_size);
+
   }
 }
 
