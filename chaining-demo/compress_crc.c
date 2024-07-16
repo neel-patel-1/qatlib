@@ -44,6 +44,8 @@
 
 #include <math.h>
 
+#include "accel-sim.h"
+
 int gDebugParam = 0;
 
 uint8_t **mini_bufs;
@@ -3431,36 +3433,7 @@ void do_offload_offered_load_test(
   }
 }
 
-void dsa_memcpy(
-  void *input,
-  int input_size,
-  void *output,
-  int output_size
-  )
-{
 
-    struct task *tsk =
-      acctest_alloc_task(dsa);
-    /* use the task id to map to the correct comp */
-    prepare_memcpy_task_flags(tsk,
-      dsa,
-      (uint8_t *)input,
-      input_size,
-      (uint8_t *)output,
-      IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CC);
-    if(enqcmd(dsa->wq_reg, tsk->desc)){
-      PRINT_ERR("Failed to enqueue task\n");
-      exit(-1);
-    }
-    while(tsk->comp->status == 0){
-      _mm_pause();
-    }
-
-    if(tsk->comp->status != DSA_COMP_SUCCESS){
-      PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
-    }
-
-}
 
 
 
