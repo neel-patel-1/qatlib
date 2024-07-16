@@ -3842,36 +3842,14 @@ typedef struct _node{
   int data;
 } node;
 
-int main(int argc, char **argv){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  int tflags = TEST_FLAGS_BOF;
-	int wq_id = 0;
-	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
-  int wq_type = ACCFG_WQ_SHARED;
-  int rc;
-
-  int num_offload_requests = 1;
-  dsa = acctest_init(tflags);
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
-
-  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
-
+/* Use this to measure access overhead for linked list traversal */
+void linked_list_overhead(){
   int iterations = 100;
   uint64_t start_times[iterations], end_times[iterations], times[iterations];
   uint64_t start, end, avg = 0;
 
   int num_nodes = 10;
   int ll_data_size = sizeof(node) * num_nodes;
-
   /* allocate big mem */
   node *llist = (node *)malloc(ll_data_size);
   node *dst_llist = (node *)malloc(ll_data_size);
@@ -3920,7 +3898,39 @@ int main(int argc, char **argv){
   avg_samples_from_arrays(times,
     avg, end_times, start_times, iterations);
 
-  PRINT("AX-Access-Cycles: %ld\n", avg);
+  PRINT("Host-Access-Cycles: %ld\n", avg);
+}
+
+
+
+int main(int argc, char **argv){
+  CpaStatus status = CPA_STATUS_SUCCESS, stat;
+  stat = qaeMemInit();
+  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
+  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
+  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
+
+  int tflags = TEST_FLAGS_BOF;
+	int wq_id = 0;
+	int dev_id = 2;
+  int opcode = DSA_OPCODE_MEMMOVE;
+  int wq_type = ACCFG_WQ_SHARED;
+  int rc;
+
+  int num_offload_requests = 1;
+  dsa = acctest_init(tflags);
+
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
+  if (rc < 0)
+    return -ENOMEM;
+
+  acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+
+
+
+
+  linked_list_overhead();
 
   acctest_free_task(dsa);
   acctest_free(dsa);
