@@ -3891,9 +3891,29 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
       pthread_join( emul_ax, NULL);
     }
 
-    if(post_offload_kernel_type == 3
-      || post_offload_kernel_type == 4){
+    if(post_offload_kernel_type == 3) {
       free_prepped_dsa_bufs(total_requests);
+    }
+
+    if (post_offload_kernel_type == 4)
+    {
+      /* free dst lls */
+      for(int i=0; i<total_requests; i++){
+        free(prepped_dst_lls[i]);
+      }
+      free(prepped_dst_lls);
+      if(offload_type == 3){
+        /* free host lls */
+        for(int i=0; i<total_requests * 2; i++){
+          free(prepped_host_lls[i]);
+        }
+        free(prepped_host_lls);
+      } else if(offload_type == 1){
+        /* free ax lls */
+        for(int i=0; i<total_requests; i++){
+          free(prepped_dsa_bufs[i]);
+        }
+      }
     }
   }
   for(int i=0; i<iters; i++){

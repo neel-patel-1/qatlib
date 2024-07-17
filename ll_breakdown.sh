@@ -1,6 +1,6 @@
 #!/bin/bash
 
-num_nodes=10
+num_nodes=100
 
 sudo taskset -c 20,21 ./compress_crc  -s $(( $num_nodes * 16 )) -t 0 -d -l 4 -i 100 -o 1 -t 432 -d | tee req_brkdown.log
 awk '/offload_req/{print}' req_brkdown.log  | \
