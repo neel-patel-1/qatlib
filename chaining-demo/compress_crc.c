@@ -3208,6 +3208,48 @@ uint8_t ** prep_ax_generated_linked_lists(int num_lls, int num_nodes){
   return prepped_dsa_bufs;
 }
 
+void intersect_linked_lists(node *ll1, node *ll2, int ll1_size, int ll2_size){
+  node *merged = (node *)malloc(sizeof(node) * (ll1_size + ll2_size));
+  node *curr1 = ll1;
+  node *curr2 = ll2;
+  int idx=0;
+
+  while(curr1 != NULL && curr2 != NULL){
+    if(curr1->data == curr2->data){
+      PRINT_DBG("ll1->data:%d == ll2->data:%d\n", ll1->data, ll2->data);
+      merged[idx].data = curr1->data;
+      merged[idx].next = &merged[idx+1];
+      curr1 = curr1->next;
+      curr2 = curr2->next;
+      idx++;
+    } else if (curr1->data < curr2->data){
+      PRINT_DBG("ll1->data:%d < ll2->data:%d\n", ll1->data, ll2->data);
+      curr1 = curr1->next;
+    } else {
+      PRINT_DBG("ll1->data:%d > ll2->data:%d\n", ll1->data, ll2->data);
+      curr2 = curr2->next;
+    }
+  }
+
+}
+
+void gen_linked_list(node *ll, int num_nodes){
+  for(int i=0; i<num_nodes-1; i++){
+    ll[i].data = i;
+    ll[i].next = &ll[i+1];
+  }
+  ll[num_nodes-1].data = num_nodes-1;
+  ll[num_nodes-1].next = NULL;
+}
+
+void iterate_linked_list(node *ll, int num_nodes){
+  node *curr = ll;
+  while(curr != NULL){
+    PRINT_DBG("Node Data: %d\n", curr->data);
+    curr = curr->next;
+  }
+}
+
 uint8_t **  prep_host_deserd_mc_reqs(int num_mc_reqs, int mc_req_size){
   host_memcached_requests =
     (uint8_t **)malloc(sizeof(uint8_t*) * num_mc_reqs);
@@ -4000,13 +4042,20 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  // for(int i=10; i<=150; i+=10){
-  //   linked_list_overhead(i);
-  // }
+  gDebugParam = 1;
+
+  node *ll = (node *)malloc(sizeof(node) * 10);
+  node *ll_2 = (node *)malloc(sizeof(node) * 10);
+  gen_linked_list(ll, 10);
+  gen_linked_list(ll_2, 10);
+  iterate_linked_list(ll, 10);
+
+  intersect_linked_lists(ll, ll_2, 10, 10);
+  // gen_linked_list()
 
 
   // linked_list_overhead();
-  do_offered_load_test(argc, argv);
+  // do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
