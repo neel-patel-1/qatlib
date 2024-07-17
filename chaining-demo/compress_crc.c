@@ -3204,6 +3204,7 @@ functions/buffers prepared for host access after offload
 int g_total_requests = 0;
 uint8_t **prepped_dsa_bufs;
 uint8_t **prepped_host_lls;
+uint8_t **prepped_ax_lls;
 uint8_t **prepped_dst_lls;
 uint8_t ** host_memcached_requests;
 
@@ -3270,6 +3271,28 @@ uint8_t **  prep_host_linked_lists(int num_nodes, int num_lls){
     }
     llist[num_nodes-1].data = num_nodes-1;
     llist[num_nodes-1].next = NULL;
+  }
+  return prepped_host_lls;
+}
+uint8_t **  prep_ax_linked_lists(int num_nodes, int num_lls){
+  /* allocate contiguous linked lists*/
+  int ll_data_size = sizeof(node) * num_nodes;
+  prepped_host_lls = (node **)malloc(sizeof(node*) * num_lls);
+  for(int j=0; j<num_lls; j++){
+    prepped_host_lls[j] = (node *)malloc(ll_data_size);
+    node *llist = prepped_host_lls[j];
+
+    for(int i=0; i<num_nodes-1; i++){
+      llist[i].data = i;
+      llist[i].next = &llist[i+1];
+    }
+    llist[num_nodes-1].data = num_nodes-1;
+    llist[num_nodes-1].next = NULL;
+  }
+
+  for(int j=0; j<num_lls; j++){
+    node *llist = prepped_host_lls[j];
+    dsa_memcpy(llist, ll_data_size, llist, ll_data_size);
   }
   return prepped_host_lls;
 }
@@ -3540,6 +3563,23 @@ void do_offload_offered_load_test(
     *pDstBuf = merged;
     end = sampleCoderdtsc();
     PRINT_DBG(" %ld ", end - st);
+  } else if(offload_type == 4){ /* Overhead of ax lls*/
+    uint64_t st, end;
+    st = sampleCoderdtsc();
+    // this task's unmerged linked lists
+    int ll1_idx = task_id;
+    int ll2_idx = task_id + g_total_requests;
+    node *ll1 = prepped_host_lls[ll1_idx];
+    node *ll2 = prepped_host_lls[ll2_idx];
+    int num_nodes = output_size / sizeof(node);
+    node *merged =
+      intersect_linked_lists(ll1, ll2, num_nodes, num_nodes);
+
+    *pDstBuf = merged;
+    end = sampleCoderdtsc();
+    PRINT_DBG(" %ld ", end - st);
+
+
   }
 }
 
@@ -3801,7 +3841,10 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
       if(offload_type == 3){
         prep_host_linked_lists(offload_size/sizeof(node), total_requests * 2);
       } else if(offload_type == 1){
-        prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
+        prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node));
+      } else if(offload_type == 4){
+        prep_ax_linked_lists(offload_size/sizeof(node), total_requests * 2);
+        prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node));
       }
     }
 
@@ -4104,6 +4147,19 @@ int main(int argc, char **argv){
     return -ENOMEM;
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
+
+  // int size = 1024;
+  // uint8_t *src = (uint8_t *)malloc(size);
+
+  // for(int i=0; i<size; i++){
+  //   src[i] = 0;
+  // }
+
+  // dsa_memcpy(src, size, src, size);
+
+  // for(int i=0; i<size; i++){
+  //   src[i] = 0;
+  // }
 
   do_offered_load_test(argc, argv);
 

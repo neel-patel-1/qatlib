@@ -15,5 +15,10 @@ awk '/offload_req/{print}' cpu_req_brkdown.log  | \
   awk '{ kernsum+=$6; hashsum+=$10;} END{ print  "kern_avg: " kernsum/NR " iterate: " hashsum/NR;}' \
   | tee  cpu_posting_list.txt
 
+sudo taskset -c 20,21 ./compress_crc  -s $(( $num_nodes * $node_size )) -t 0 -d -l 4 -i 100 -o 4 -t 432 -d | tee llc_merge.log
+awk '/offload_req/{print}' ax_merge.log  | \
+  awk '{ kernsum+=$6; hashsum+=$10;} END{ print  "kern_avg: " kernsum/NR " iterate: " hashsum/NR;}' \
+  | tee  llc_merge.txt
+
 echo "num_nodes: $num_nodes"
-cat accel_posting_list.txt cpu_posting_list.txt
+cat accel_posting_list.txt cpu_posting_list.txt ax_merge.txt
