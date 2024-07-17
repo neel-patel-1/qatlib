@@ -3505,7 +3505,8 @@ void do_offload_offered_load_test(
     end = sampleCoderdtsc();
     PRINT_DBG(" %ld ", end - st);
   } else if(offload_type == 3){ /* MODE == CPU */
-
+    uint64_t st, end;
+    st = sampleCoderdtsc();
     // this task's unmerged linked lists
     int ll1_idx = task_id;
     int ll2_idx = task_id + g_total_requests;
@@ -3516,6 +3517,8 @@ void do_offload_offered_load_test(
       intersect_linked_lists(ll1, ll2, num_nodes, num_nodes);
 
     *pDstBuf = merged;
+    end = sampleCoderdtsc();
+    PRINT_DBG(" %ld ", end - st);
   }
 }
 
@@ -3799,8 +3802,9 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
       /* cpu linked lists need to be alloc'd for offload type 3 */
       if(offload_type == 3){
         prep_host_linked_lists(offload_size/sizeof(node), total_requests * 2);
-      }// else if (offload_type)
-      prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
+      } else if(offload_type == 1){
+        prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
+      }
     }
 
 
