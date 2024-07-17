@@ -3455,7 +3455,7 @@ void do_offload_offered_load_test(
       }
     }
     ts[2] = sampleCoderdtsc();
-    PRINT_DBG(" %ld %ld ", task_id, ts[1] - ts[0], ts[2] - ts[1]);
+    PRINT_DBG(" %ld %ld ", ts[1] - ts[0], ts[2] - ts[1]);
   } else if(offload_type == 2){ /*sychronous deser sim on CPU*/
     uint64_t st, end;
     uint64_t deser_dur = 1123;
@@ -3670,7 +3670,7 @@ void offload_request(fcontext_transfer_t arg){
   post_offload_kernel(post_offload_kernel_type, pre_working_set,
     pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
   ts[3] = sampleCoderdtsc();
-  PRINT_DBG(" %ld\n", task_id, ts[3] - ts[2]);
+  PRINT_DBG(" %ld\n",  ts[3] - ts[2]);
 
   fcontext_swap(arg.prev_context, NULL);
 }
