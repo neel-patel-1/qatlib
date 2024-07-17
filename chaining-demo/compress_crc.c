@@ -3302,7 +3302,6 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
     chase_pointers(pre_wrk_set, pre_wrk_set_size/sizeof(void *));
   }
   else if(kernel == 3){
-    PRINT_DBG("Task %d Hashing Memcached Request: %s\n", task_idx, offload_data);
     hash_memcached_request(offload_data);
   }
   else if (kernel == 4){
@@ -3313,7 +3312,6 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
       curr = curr->next;
       ctr++;
     }
-    PRINT_DBG("Traversed %d length list\n", ctr);
   }
 }
 
@@ -3365,7 +3363,6 @@ void *emul_ax_func(void *arg){
         /*notify offloader*/
         reqComps[earlUncompTskIdx]->status = DSA_COMP_SUCCESS;
 
-        PRINT_DBG("Offload %d Completed\n", earlUncompTskIdx);
         earlUncompTskIdx++;
 
         if(earlUncompTskIdx > lastRcvdTskIdx){
@@ -3383,7 +3380,6 @@ void *emul_ax_func(void *arg){
 
       processing_offload = true;
       offload_pending = false;
-      PRINT_DBG("Received Offload Request %d\n", submitter_task_idx);
 
       offCompTimes[submitter_task_idx] = offStTime + stallTime;
     }
@@ -3404,11 +3400,14 @@ void do_offload_offered_load_test(
   )
 {
   if(offload_type == 0){
+    uint64_t ts[4];
     /* do some offload */
+    ts[0] = sampleCoderdtsc();
     struct task *tsk =
       acctest_alloc_task_with_provided_comp(dsa,
         &comps[task_id]);
     /* use the task id to map to the correct comp */
+    ts[1] = sampleCoderdtsc();
     prepare_memcpy_task_flags(tsk,
       dsa,
       (uint8_t *)input,
@@ -3419,6 +3418,7 @@ void do_offload_offered_load_test(
       PRINT_ERR("Failed to enqueue task\n");
       exit(-1);
     }
+    ts[2] = sampleCoderdtsc();
     if(do_yield){
       PRINT_DBG("Request %d Yielding\n", task_id);
       fcontext_swap(parent, NULL);
@@ -3430,21 +3430,21 @@ void do_offload_offered_load_test(
     if(tsk->comp->status != DSA_COMP_SUCCESS){
       PRINT_ERR("Task failed: 0x%x\n", tsk->comp->status);
     }
+    ts[3] = sampleCoderdtsc();
+    PRINT_DBG("Offload %d: %ld %ld %ld %ld\n", task_id, ts[0], ts[1], ts[2], ts[3]);
   } else if (offload_type == 1){
+    uint64_t ts[3];
     /* submit work to the emul ax*/
-    uint64_t st, end;
-    st = sampleCoderdtsc();
+    ts[0] = sampleCoderdtsc();
     pOutBuf = pDstBuf;
     offloadDur = cycles_to_stall;
     subComp = &(comps[task_id]);
     submitter_task_idx = task_id;
     struct completion_record *wait_comp = &(comps[task_id]);
     offload_pending = true;
-    end = sampleCoderdtsc();
-    PRINT_DBG("Offload SUBMIT %ld\n", end - st);
+    ts[1] = sampleCoderdtsc();
 
     if(do_yield){
-      PRINT_DBG("Request %d Yielding\n", task_id);
       while(offload_pending == true){ /* wait for submission to complete */
         _mm_pause();
       }
@@ -3454,6 +3454,8 @@ void do_offload_offered_load_test(
         _mm_pause();
       }
     }
+    ts[2] = sampleCoderdtsc();
+    PRINT_DBG(" %ld %ld ", task_id, ts[1] - ts[0], ts[2] - ts[1]);
   } else if(offload_type == 2){ /*sychronous deser sim on CPU*/
     uint64_t st, end;
     uint64_t deser_dur = 1123;
@@ -3510,8 +3512,8 @@ void hash_memcached_request(void *request){
     } else {
       PRINT_ERR("No suffix found\n");
     }
-    PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
-      hashable_len, suffix_start);
+    // PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
+    //   hashable_len, suffix_start);
     furc_hash(suffix_start, hashable_len, 16);
 }
 
@@ -3623,6 +3625,8 @@ typedef struct offload_request_args_t {
   int post_offload_kernel_type;
 } offload_request_args;
 void offload_request(fcontext_transfer_t arg){
+  uint64_t ts[4];
+  ts[0] = sampleCoderdtsc();
   offload_request_args *r_arg = (offload_request_args *)(arg.data);
   fcontext_t parent = arg.prev_context;
   bool do_yield = r_arg->do_yield;
@@ -3643,6 +3647,8 @@ void offload_request(fcontext_transfer_t arg){
   pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size,
     task_id, parent, do_yield);
 
+  ts[1] = sampleCoderdtsc();
+  PRINT_DBG("Request %d: %ld ", task_id, ts[1] - ts[0]);
   /*offload*/
   int dst_buf_size = offload_size;
   void *dst_buf = malloc(dst_buf_size);
@@ -3657,10 +3663,15 @@ void offload_request(fcontext_transfer_t arg){
     (uint8_t **)&dst_buf,
     offload_cycles);
 
+  ts[2] = sampleCoderdtsc();
+
+  PRINT_DBG(" %ld ", ts[2] - ts[1]);
   /*post offload*/
   post_offload_kernel(post_offload_kernel_type, pre_working_set,
     pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
-  PRINT_DBG("Request %d done\n", task_id);
+  ts[3] = sampleCoderdtsc();
+  PRINT_DBG(" %ld\n", task_id, ts[3] - ts[2]);
+
   fcontext_swap(arg.prev_context, NULL);
 }
 
@@ -3717,7 +3728,6 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
         exists_waiting_preempted_task = false;
         request_xfers[last_preempted_task_idx] = fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
       } else {
-        PRINT_DBG("Request %d starting\n", next_unused_task_comp_idx);
         request_states[next_unused_task_comp_idx] = fcontext_create(offload_request);
         r_args[next_unused_task_comp_idx] = malloc(sizeof(offload_request_args));
         r_args[next_unused_task_comp_idx]->do_yield = do_yield;
@@ -3767,7 +3777,6 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 
     if (!do_yield) {
       total_requests_processed = total_requests;
-      PRINT_DBG("TotalRequestsProcessed: %d\n", total_requests);
     }
 
 
@@ -3902,12 +3911,11 @@ void pre_alloc_deser_vs_reused_src_dst_ax_access_divergence(){
 
 
 /* Use this to measure access overhead for linked list traversal */
-void linked_list_overhead(){
+void linked_list_overhead(int num_nodes){
   int iterations = 100;
   uint64_t start_times[iterations], end_times[iterations], times[iterations];
   uint64_t start, end, avg = 0;
 
-  int num_nodes = 10;
   int ll_data_size = sizeof(node) * num_nodes;
   /* allocate big mem */
   node *llist = (node *)malloc(ll_data_size);
@@ -3939,7 +3947,7 @@ void linked_list_overhead(){
   avg_samples_from_arrays(times,
     avg, end_times, start_times, iterations);
 
-  PRINT("AX-Access-Cycles: %ld\n", avg);
+  PRINT("%ld ", avg);
 
   for(int i=0; i<iterations; i++){
     memcpy(dst_llist,
@@ -3957,7 +3965,7 @@ void linked_list_overhead(){
   avg_samples_from_arrays(times,
     avg, end_times, start_times, iterations);
 
-  PRINT("Host-Access-Cycles: %ld\n", avg);
+  PRINT(" %ld\n", avg);
 }
 
 
@@ -3985,8 +3993,9 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-
-
+  // for(int i=10; i<=150; i+=10){
+  //   linked_list_overhead(i);
+  // }
 
 
   // linked_list_overhead();
