@@ -3156,11 +3156,36 @@ static inline int gen_sample_memcached_request(void *buf, int buf_size){
   memcpy(buf, key, strlen(key));
 }
 
+struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
+  struct completion_record *comp)
+{
+	struct task *tsk;
+
+	tsk = malloc(sizeof(struct task));
+	if (!tsk)
+		return NULL;
+	memset(tsk, 0, sizeof(struct task));
+
+	tsk->desc = malloc(sizeof(struct hw_desc));
+	if (!tsk->desc) {
+		free_task(tsk);
+		return NULL;
+	}
+	memset(tsk->desc, 0, sizeof(struct hw_desc));
+
+  tsk->comp = comp;
+
+	return tsk;
+}
+
+
 /*
 functions/buffers prepared for host access after offload
 */
+int g_total_requests = 0;
 uint8_t **prepped_dsa_bufs;
-uint8_t **prepped_host_lls; int g_total_requests = 0;
+uint8_t **prepped_host_lls;
+uint8_t **prepped_dst_lls;
 uint8_t ** host_memcached_requests;
 
 
@@ -3228,7 +3253,17 @@ uint8_t **  prep_host_linked_lists(int num_nodes, int num_lls){
   return prepped_host_lls;
 }
 
-void intersect_linked_lists(node *ll1, node *ll2, int ll1_size, int ll2_size){
+uint8_t **prep_dst_lls(int num_nodes, int num_lls){
+  /* allocate contiguous linked lists*/
+  int ll_data_size = sizeof(node) * num_nodes;
+  prepped_dst_lls = (node **)malloc(sizeof(node*) * num_lls);
+  for(int j=0; j<num_lls; j++){
+    prepped_dst_lls[j] = (node *)malloc(ll_data_size);
+  }
+  return prepped_dst_lls;
+}
+
+node *intersect_linked_lists(node *ll1, node *ll2, int ll1_size, int ll2_size){
   node *merged = (node *)malloc(sizeof(node) * (ll1_size + ll2_size));
   node *curr1 = ll1;
   node *curr2 = ll2;
@@ -3236,20 +3271,20 @@ void intersect_linked_lists(node *ll1, node *ll2, int ll1_size, int ll2_size){
 
   while(curr1 != NULL && curr2 != NULL){
     if(curr1->data == curr2->data){
-      PRINT_DBG("ll1->data:%d == ll2->data:%d\n", ll1->data, ll2->data);
       merged[idx].data = curr1->data;
       merged[idx].next = &merged[idx+1];
       curr1 = curr1->next;
       curr2 = curr2->next;
       idx++;
     } else if (curr1->data < curr2->data){
-      PRINT_DBG("ll1->data:%d < ll2->data:%d\n", ll1->data, ll2->data);
       curr1 = curr1->next;
     } else {
-      PRINT_DBG("ll1->data:%d > ll2->data:%d\n", ll1->data, ll2->data);
       curr2 = curr2->next;
     }
   }
+  merged[idx-1].next = NULL;
+  merged[idx-1].data = -1;
+  return merged;
 
 }
 
@@ -3262,7 +3297,7 @@ void gen_linked_list(node *ll, int num_nodes){
   ll[num_nodes-1].next = NULL;
 }
 
-void iterate_linked_list(node *ll, int num_nodes){
+void iterate_linked_list(node *ll){
   node *curr = ll;
   while(curr != NULL){
     PRINT_DBG("Node Data: %d\n", curr->data);
@@ -3300,106 +3335,6 @@ struct completion_record *comps = NULL;
 int next_unresumed_task_comp_idx = 0;
 int last_preempted_task_idx = 0;
 bool exists_waiting_preempted_task = false;
-
-void probe_point(int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
-  if(task_idx > next_unresumed_task_comp_idx && yield_to_completed_offloads){
-    if(comps[next_unresumed_task_comp_idx].status == DSA_COMP_SUCCESS){
-      PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
-      exists_waiting_preempted_task = true;
-      last_preempted_task_idx = task_idx;
-      fcontext_swap(parent,NULL);
-    }
-  }
-}
-
-
-void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
-  fcontext_t parent, bool yield_to_completed_offloads){
-  if(kernel == 0){
-    if(next_unresumed_task_comp_idx == 0){
-      return;
-    }
-    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx-1]);
-    while(next_unresumed_task_comp->status == 0){
-      _mm_pause();
-    }
-  }
-  else if(kernel == 1){
-    for(int i=0; i<input_len; i++){
-      if(i%200 == 0){
-        probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      ((uint8_t *)input)[i] = 0;
-    }
-  } else if (kernel == 2){
-    create_random_chain_starting_at(input_len, &input);
-  }
-}
-
-
-
-void post_offload_kernel(int kernel, void *pre_wrk_set,
-  int pre_wrk_set_size, void *offload_data, int offload_data_size,
-  int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
-  if(kernel == 0){
-    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
-    while(next_unresumed_task_comp->status == 0){
-      _mm_pause();
-    }
-  }
-  else if(kernel == 1){
-    int iters_between_probes = 100;
-    for(int i=0; i<pre_wrk_set_size; i++){
-      if(i%iters_between_probes == 0){
-        probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      ((uint8_t *)pre_wrk_set)[i] = 0x1;
-    }
-    for(int i=0; i<offload_data_size; i++){
-      if(i%iters_between_probes == 0){
-        probe_point(task_idx, parent, yield_to_completed_offloads);
-      }
-      ((uint8_t *)offload_data)[i] = 0x1;
-    }
-  }
-  else if(kernel == 2){
-    chase_pointers(pre_wrk_set, pre_wrk_set_size/sizeof(void *));
-  }
-  else if(kernel == 3){
-    hash_memcached_request(offload_data);
-  }
-  else if (kernel == 4){
-    int ctr = 0;
-    node *curr = offload_data;
-    while(curr != NULL){
-      curr->data = 0;
-      curr = curr->next;
-      ctr++;
-    }
-  }
-}
-
-struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
-  struct completion_record *comp)
-{
-	struct task *tsk;
-
-	tsk = malloc(sizeof(struct task));
-	if (!tsk)
-		return NULL;
-	memset(tsk, 0, sizeof(struct task));
-
-	tsk->desc = malloc(sizeof(struct hw_desc));
-	if (!tsk->desc) {
-		free_task(tsk);
-		return NULL;
-	}
-	memset(tsk->desc, 0, sizeof(struct hw_desc));
-
-  tsk->comp = comp;
-
-	return tsk;
-}
 
 _Atomic bool offload_pending = false;
 
@@ -3447,6 +3382,41 @@ void *emul_ax_func(void *arg){
 
       offCompTimes[submitter_task_idx] = offStTime + stallTime;
     }
+  }
+}
+
+void probe_point(int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
+  if(task_idx > next_unresumed_task_comp_idx && yield_to_completed_offloads){
+    if(comps[next_unresumed_task_comp_idx].status == DSA_COMP_SUCCESS){
+      PRINT_DBG("Task %d Preempted In Favor of Task %d\n", task_idx, next_unresumed_task_comp_idx);
+      exists_waiting_preempted_task = true;
+      last_preempted_task_idx = task_idx;
+      fcontext_swap(parent,NULL);
+    }
+  }
+}
+
+
+void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
+  fcontext_t parent, bool yield_to_completed_offloads){
+  if(kernel == 0){
+    if(next_unresumed_task_comp_idx == 0){
+      return;
+    }
+    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx-1]);
+    while(next_unresumed_task_comp->status == 0){
+      _mm_pause();
+    }
+  }
+  else if(kernel == 1){
+    for(int i=0; i<input_len; i++){
+      if(i%200 == 0){
+        probe_point(task_idx, parent, yield_to_completed_offloads);
+      }
+      ((uint8_t *)input)[i] = 0;
+    }
+  } else if (kernel == 2){
+    create_random_chain_starting_at(input_len, &input);
   }
 }
 
@@ -3536,32 +3506,65 @@ void do_offload_offered_load_test(
     PRINT_DBG(" %ld ", end - st);
   } else if(offload_type == 3){ /* MODE == CPU */
 
-    // intersect two existing linked lists of a known size
-    // knwon size ?
-    // - assume prepped dsa bufs match offload size specified by -s
-
-    /*cpu offload intersect kernel */
-
     // this task's unmerged linked lists
     int ll1_idx = task_id;
     int ll2_idx = task_id + g_total_requests;
     node *ll1 = prepped_host_lls[ll1_idx];
     node *ll2 = prepped_host_lls[ll2_idx];
     int num_nodes = output_size / sizeof(node);
-    intersect_linked_lists(ll1, ll2, num_nodes, num_nodes);
+    node *merged =
+      intersect_linked_lists(ll1, ll2, num_nodes, num_nodes);
 
-    /* post offload kernel */
-    // node *cur = prepped_dsa_bufs[task_id];
-    // while(cur != NULL){
-    //   PRINT_DBG("Node: %d\n", cur->data);
-    //   int data = cur->data;
-    //   if(data < (offload_size / sizeof(node)) / 2){
-    //     /* filter out low nodes */
-    //   }
-    // }
+    *pDstBuf = merged;
   }
 }
 
+void post_offload_kernel(int kernel, void *pre_wrk_set,
+  int pre_wrk_set_size, void *offload_data, int offload_data_size,
+  int task_idx, fcontext_t parent, bool yield_to_completed_offloads){
+  if(kernel == 0){
+    struct completion_record *next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+    while(next_unresumed_task_comp->status == 0){
+      _mm_pause();
+    }
+  }
+  else if(kernel == 1){
+    int iters_between_probes = 100;
+    for(int i=0; i<pre_wrk_set_size; i++){
+      if(i%iters_between_probes == 0){
+        probe_point(task_idx, parent, yield_to_completed_offloads);
+      }
+      ((uint8_t *)pre_wrk_set)[i] = 0x1;
+    }
+    for(int i=0; i<offload_data_size; i++){
+      if(i%iters_between_probes == 0){
+        probe_point(task_idx, parent, yield_to_completed_offloads);
+      }
+      ((uint8_t *)offload_data)[i] = 0x1;
+    }
+  }
+  else if(kernel == 2){
+    chase_pointers(pre_wrk_set, pre_wrk_set_size/sizeof(void *));
+  }
+  else if(kernel == 3){
+    hash_memcached_request(offload_data);
+  }
+  else if (kernel == 4){
+    /* post offload kernel */
+    node *cur = offload_data;
+
+    int idx  = 0;
+    node *dst_ll = prepped_dst_lls[task_idx];
+    while(cur != NULL){
+      int data = cur->data;
+      if(data < (offload_data_size / sizeof(node)) / 2){
+        dst_ll[idx].data = data;
+        dst_ll[idx].next = &dst_ll[idx+1];
+      }
+      cur = cur->next;
+    }
+  }
+}
 
 
 
@@ -3788,15 +3791,18 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
     }
     if(post_offload_kernel_type == 3){
       prep_ax_desered_mc_reqs(total_requests, offload_size);
-    } else if (post_offload_kernel_type == 4)
+    }
+
+    if (post_offload_kernel_type == 4) /* need dest linked lists for merge ops */
     {
+      prep_dst_lls(offload_size/sizeof(node), total_requests);
+      /* cpu linked lists need to be alloc'd for offload type 3 */
+      if(offload_type == 3){
+        prep_host_linked_lists(offload_size/sizeof(node), total_requests * 2);
+      }// else if (offload_type)
       prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
     }
 
-    /* cpu linked lists need to be alloc'd for offload type 3 */
-    if(offload_type == 3){
-      prep_host_linked_lists(offload_size/sizeof(node), total_requests);
-    }
 
     uint64_t start = sampleCoderdtsc();
 
@@ -4077,15 +4083,7 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  gDebugParam = 1;
-
-  node *ll = (node *)malloc(sizeof(node) * 10);
-  node *ll_2 = (node *)malloc(sizeof(node) * 10);
-  gen_linked_list(ll, 10);
-  gen_linked_list(ll_2, 10);
-  iterate_linked_list(ll, 10);
-
-  intersect_linked_lists(ll, ll_2, 10, 10);
+  do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
