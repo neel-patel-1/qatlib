@@ -3714,6 +3714,12 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
       createThreadPinned(&emul_ax, emul_ax_func, NULL, 20);
       emul_ax_receptive = true;
     }
+    if(post_offload_kernel_type == 3){
+      prep_ax_desered_mc_reqs(total_requests, offload_size);
+    } else if (post_offload_kernel_type == 4)
+    {
+      prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
+    }
 
     uint64_t start = sampleCoderdtsc();
 
@@ -3797,6 +3803,11 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
       emul_ax_receptive = false;
       pthread_join( emul_ax, NULL);
     }
+
+    if(post_offload_kernel_type == 3
+      || post_offload_kernel_type == 4){
+      free_prepped_dsa_bufs(total_requests);
+    }
   }
   for(int i=0; i<iters; i++){
     avg_offered_load += offered_loads[i];
@@ -3865,12 +3876,7 @@ void do_offered_load_test(int argc, char **argv){
     gDebugParam, emul_offload_cycles);
 
   /* prep the dsa bufs depending on the offload kernel type */
-  if(post_offload_kernel_type == 3){
-    prep_ax_desered_mc_reqs(total_requests, offload_size);
-  } else if (post_offload_kernel_type == 4)
-  {
-    prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
-  }
+
 
   service_time_under_exec_model_test(do_yield, total_requests, iters,
     pre_offload_kernel_type, pre_working_set_size,
