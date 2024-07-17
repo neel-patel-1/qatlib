@@ -3156,6 +3156,25 @@ static inline int gen_sample_memcached_request(void *buf, int buf_size){
   memcpy(buf, key, strlen(key));
 }
 
+void hash_memcached_request(void *request){
+    /* extract hashable suffix*/
+    char *suffix_start, *suffix_end;
+    char route_end = '/';
+    int hashable_len = 0;
+
+    suffix_start = strrchr(request,route_end );
+    suffix_end = strchr(suffix_start, '|');
+    if(suffix_start != NULL && suffix_end !=NULL){
+      suffix_start++;
+      hashable_len = suffix_end - suffix_start;
+    } else {
+      PRINT_ERR("No suffix found\n");
+    }
+    // PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
+    //   hashable_len, suffix_start);
+    furc_hash(suffix_start, hashable_len, 16);
+}
+
 struct task *acctest_alloc_task_with_provided_comp(struct acctest_context *ctx,
   struct completion_record *comp)
 {
@@ -3210,9 +3229,11 @@ uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
 }
 
 /*PREP DSA STRUCTURES*/
+#define DSA_MIN_XFER_SIZE 256
 typedef struct _node{
-  struct node *next;
   int data;
+  uint8_t padding[DSA_MIN_XFER_SIZE - sizeof( struct _node *) - sizeof(int)];
+  struct node *next;
 } node;
 /* linked list merge */
 uint8_t ** prep_ax_generated_linked_lists(int num_lls, int num_nodes){
@@ -3567,29 +3588,6 @@ void post_offload_kernel(int kernel, void *pre_wrk_set,
       cur = cur->next;
     }
   }
-}
-
-
-
-
-
-void hash_memcached_request(void *request){
-    /* extract hashable suffix*/
-    char *suffix_start, *suffix_end;
-    char route_end = '/';
-    int hashable_len = 0;
-
-    suffix_start = strrchr(request,route_end );
-    suffix_end = strchr(suffix_start, '|');
-    if(suffix_start != NULL && suffix_end !=NULL){
-      suffix_start++;
-      hashable_len = suffix_end - suffix_start;
-    } else {
-      PRINT_ERR("No suffix found\n");
-    }
-    // PRINT_DBG("Hashing %d bytes from beginning of this string: %s\n",
-    //   hashable_len, suffix_start);
-    furc_hash(suffix_start, hashable_len, 16);
 }
 
 float distance(float *point_query, float *query_feature, int dim){
