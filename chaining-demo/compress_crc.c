@@ -3160,6 +3160,7 @@ static inline int gen_sample_memcached_request(void *buf, int buf_size){
 functions/buffers prepared for host access after offload
 */
 uint8_t **prepped_dsa_bufs;
+uint8_t **prepped_host_lls; int g_total_requests = 0;
 uint8_t ** host_memcached_requests;
 
 
@@ -3183,6 +3184,7 @@ uint8_t ** prep_ax_desered_mc_reqs(int num_mc_reqs, int mc_req_size){
   return prepped_dsa_bufs;
 }
 
+/*PREP DSA STRUCTURES*/
 typedef struct _node{
   struct node *next;
   int data;
@@ -3206,6 +3208,24 @@ uint8_t ** prep_ax_generated_linked_lists(int num_lls, int num_nodes){
   }
   prep_dsa_bufs(llists, num_lls, ll_data_size);
   return prepped_dsa_bufs;
+}
+uint8_t **  prep_host_linked_lists(int num_nodes, int num_lls){
+  /* allocate contiguous linked lists*/
+  int ll_data_size = sizeof(node) * num_nodes;
+  prepped_host_lls = (node **)malloc(sizeof(node*) * num_lls);
+
+  for(int j=0; j<num_lls; j++){
+    prepped_host_lls[j] = (node *)malloc(ll_data_size);
+    node *llist = prepped_host_lls[j];
+
+    for(int i=0; i<num_nodes-1; i++){
+      llist[i].data = i;
+      llist[i].next = &llist[i+1];
+    }
+    llist[num_nodes-1].data = num_nodes-1;
+    llist[num_nodes-1].next = NULL;
+  }
+  return prepped_host_lls;
 }
 
 void intersect_linked_lists(node *ll1, node *ll2, int ll1_size, int ll2_size){
@@ -3249,6 +3269,8 @@ void iterate_linked_list(node *ll, int num_nodes){
     curr = curr->next;
   }
 }
+
+
 
 uint8_t **  prep_host_deserd_mc_reqs(int num_mc_reqs, int mc_req_size){
   host_memcached_requests =
@@ -3512,27 +3534,31 @@ void do_offload_offered_load_test(
 
     end = sampleCoderdtsc();
     PRINT_DBG(" %ld ", end - st);
-  } else if(offload_type == 3){
-      /* synchronous CPU linked list traversal updating a variable for each node visited*/
-      /* we can create the linked list here, or we can swap the dst pointer same as the emul ax*/
-      *pDstBuf = prepped_dsa_bufs[task_id];
-      int ctr = 0;
-      node *curr = *pDstBuf; /*output data is prepped ll?*/
-      while(curr != NULL){
-        curr->data = ctr;
-        curr = curr->next;
-        ctr++;
-      }
-      PRINT_DBG("Traversed %d length list\n", ctr);
-      int buf_size = 2 * 1024 * 1024;
-      uint8_t *dummy_buf = (uint8_t *)malloc(buf_size);
-      memset(dummy_buf, 0, buf_size);
+  } else if(offload_type == 3){ /* MODE == CPU */
 
-      for(int i=0; i<48 * 1024; i+=64){
-        dummy_buf[i] += i;
-      }
-      PRINT_DBG("DummyBufTouched: %d\n", buf_size);
+    // intersect two existing linked lists of a known size
+    // knwon size ?
+    // - assume prepped dsa bufs match offload size specified by -s
 
+    /*cpu offload intersect kernel */
+
+    // this task's unmerged linked lists
+    int ll1_idx = task_id;
+    int ll2_idx = task_id + g_total_requests;
+    node *ll1 = prepped_host_lls[ll1_idx];
+    node *ll2 = prepped_host_lls[ll2_idx];
+    int num_nodes = output_size / sizeof(node);
+    intersect_linked_lists(ll1, ll2, num_nodes, num_nodes);
+
+    /* post offload kernel */
+    // node *cur = prepped_dsa_bufs[task_id];
+    // while(cur != NULL){
+    //   PRINT_DBG("Node: %d\n", cur->data);
+    //   int data = cur->data;
+    //   if(data < (offload_size / sizeof(node)) / 2){
+    //     /* filter out low nodes */
+    //   }
+    // }
   }
 }
 
@@ -3725,6 +3751,10 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
 {
   double offered_loads[iters];
   double avg_offered_load = 0;
+
+  /*Share total requests info with cpu linked list merge function */
+  g_total_requests = total_requests;
+
   for(int i=0;i<iters; i++){
     int next_unused_task_comp_idx = 0;
     next_unresumed_task_comp_idx = 0;
@@ -3761,6 +3791,11 @@ int service_time_under_exec_model_test(bool do_yield, int total_requests, int it
     } else if (post_offload_kernel_type == 4)
     {
       prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node)); /*node is 16 bytes*/
+    }
+
+    /* cpu linked lists need to be alloc'd for offload type 3 */
+    if(offload_type == 3){
+      prep_host_linked_lists(offload_size/sizeof(node), total_requests);
     }
 
     uint64_t start = sampleCoderdtsc();
@@ -4051,11 +4086,6 @@ int main(int argc, char **argv){
   iterate_linked_list(ll, 10);
 
   intersect_linked_lists(ll, ll_2, 10, 10);
-  // gen_linked_list()
-
-
-  // linked_list_overhead();
-  // do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
