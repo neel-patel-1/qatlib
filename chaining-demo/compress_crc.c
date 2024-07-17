@@ -3460,15 +3460,16 @@ void do_offload_offered_load_test(
     uint64_t st, end;
     uint64_t deser_dur = 1123;
     st = sampleCoderdtsc();
-    gen_sample_memcached_request(output, output_size);
-    for(int i=0; i<output_size; i+=64){
-      ((uint8_t *)output)[i] = 0x1;
-    }
+
+    *pDstBuf = prepped_dsa_bufs[task_id];
+
     end = sampleCoderdtsc();
     while (end - st < deser_dur){
       end = sampleCoderdtsc();
     }
-    PRINT_DBG("DataTouched: %d Deserialization Time: %ld\n", output_size, end-st);
+
+    end = sampleCoderdtsc();
+    PRINT_DBG(" %ld ", end - st);
   } else if(offload_type == 3){
       /* synchronous CPU linked list traversal updating a variable for each node visited*/
       /* we can create the linked list here, or we can swap the dst pointer same as the emul ax*/
