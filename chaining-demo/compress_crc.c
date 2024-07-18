@@ -3421,7 +3421,7 @@ void *emul_ax_func(void *arg){
         if(earlUncompTskIdx > lastRcvdTskIdx){
           processing_offload = false;
         }
-
+        PRINT_DBG("Request: %d num_inflights: %d max_inflights: %d\n", submitter_task_idx, num_inflights, max_inflights);
       }
       offload_completed = false;
     }
@@ -3444,8 +3444,45 @@ void *emul_ax_func(void *arg){
         offload_pending = false;
 
         offCompTimes[submitter_task_idx] = offStTime + stallTime;
-        // PRINT_DBG("Request: %d num_inflights: %d max_inflights: %d\n", submitter_task_idx, num_inflights, max_inflights);
+        PRINT_DBG("Request: %d num_inflights: %d max_inflights: %d\n", submitter_task_idx, num_inflights, max_inflights);
       }
+    }
+  }
+}
+
+void *emul_blocking_ax_func(void *arg){
+
+  uint64_t offCompTime;
+  struct completion_record *reqComps[g_total_requests];
+
+  int lastRcvdTskIdx = -1, earlUncompTskIdx = 0;
+  bool processing_offload = false, offload_completed = false;
+
+  while(emul_ax_receptive){
+    if(processing_offload){
+      uint64_t currTime = sampleCoderdtsc();
+      offload_completed = currTime >= offCompTime;
+
+      if(offload_completed){
+        /*notify offloader*/
+        subComp->status = DSA_COMP_SUCCESS;
+        processing_offload = false;
+
+        PRINT_DBG("Request: %d offload completed\n", submitter_task_idx);
+        offload_completed = false; /* reset */
+      }
+    }
+    if(offload_pending){ /* always check for pending offloads */
+      uint64_t offStTime = sampleCoderdtsc();
+      uint64_t stallTime = offloadDur;
+      *pOutBuf = prepped_dsa_bufs[submitter_task_idx]; /* just set this immediately */
+      status = SUCCESS; /* notify submitter */
+
+      processing_offload = true;
+      offload_pending = false;
+
+      PRINT_DBG("Request: %d offload submitted \n", submitter_task_idx);
+
     }
   }
 }
@@ -3487,6 +3524,9 @@ void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
     return; /* return immediately */
   }
 }
+
+
+bool main_yielded = false;
 
 void do_offload_offered_load_test(
   int offload_type,
@@ -3798,6 +3838,9 @@ typedef struct offload_request_args_t {
 
   int post_offload_kernel_type;
 } offload_request_args;
+
+int main_completed = 0;
+
 void offload_request(fcontext_transfer_t arg){
   uint64_t ts[6];
   ts[0] = sampleCoderdtsc();
@@ -3853,6 +3896,325 @@ void offload_request(fcontext_transfer_t arg){
 
   fcontext_swap(arg.prev_context, NULL);
 }
+
+
+void do_offload_filler_test(
+  int offload_type,
+  void *input,
+  int input_size,
+  void *output,
+  int output_size,
+  bool do_yield,
+  fcontext_t parent,
+  int task_id,
+  uint8_t **pDstBuf, /*pointer to overwrite after comp*/
+  uint64_t cycles_to_stall
+  )
+{
+  if (offload_type == 1){
+    /* submit work to the emul ax*/
+    pOutBuf = pDstBuf;
+    offloadDur = cycles_to_stall;
+    subComp = &(comps[0]);
+    submitter_task_idx = task_id;
+    offload_pending = true;
+
+    if(do_yield){
+      while(offload_pending == true){ /* wait for submission to complete */
+        _mm_pause();
+      }
+      if(status == FULL){
+        PRINT_DBG("Request %d Found Ax Full, CPU fallback to kernel\n", task_id, cpu_kernel);
+        /* CPU Fallback */
+        status = 0;
+        do_offload_offered_load_test(
+          cpu_kernel,
+          input,
+          input_size,
+          output,
+          output_size,
+          do_yield,
+          parent,
+          task_id,
+          pDstBuf,
+          cycles_to_stall
+        );
+      } else {
+        main_yielded = true;
+        PRINT_DBG("Request %d Yielding\n", task_id);
+        fcontext_swap(parent, NULL);
+      }
+    }
+  } else {
+    PRINT_ERR("Unsupported offload type\n");
+    exit(-1);
+  }
+
+}
+
+void main_request(fcontext_transfer_t arg){
+  uint64_t ts[6];
+  ts[0] = sampleCoderdtsc();
+  offload_request_args *r_arg = (offload_request_args *)(arg.data);
+  fcontext_t parent = arg.prev_context;
+  bool do_yield = r_arg->do_yield;
+  int task_id = r_arg->task_id;
+
+  int pre_offload_kernel_type = r_arg->pre_offload_kernel_type;
+  int pre_working_set_size = r_arg->pre_working_set_size;
+
+  int offload_type = r_arg->offload_type;
+  int offload_size = r_arg->offload_size;
+
+  uint64_t offload_cycles = r_arg->offload_cycles;
+
+  int post_offload_kernel_type = r_arg->post_offload_kernel_type;
+
+  /*pre offload*/
+  void *pre_working_set = malloc(pre_working_set_size);
+  pre_offload_kernel(pre_offload_kernel_type,pre_working_set, pre_working_set_size,
+    task_id, parent, do_yield);
+
+  /*offload*/
+  int dst_buf_size = offload_size;
+  void *dst_buf;
+  if(offload_type != 1){
+    dst_buf = malloc(dst_buf_size);
+  }
+  do_offload_filler_test(
+    offload_type,
+    pre_working_set,
+    pre_working_set_size, dst_buf,
+    dst_buf_size,
+    do_yield,
+    arg.prev_context,
+    task_id,
+    (uint8_t **)&dst_buf,
+    offload_cycles);
+  /*post offload*/
+  post_offload_kernel(post_offload_kernel_type, pre_working_set,
+    pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
+
+  main_completed++;
+
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+bool filler_started = false;
+void filler_task(fcontext_transfer_t arg){
+  PRINT_DBG("Waiting for next request offload completion:%d\n", next_unresumed_task_comp_idx);
+  struct completion_record *next_unresumed_task_comp = &(comps[0]);
+  while(next_unresumed_task_comp->status == 0){
+    _mm_pause();
+  }
+end:
+  PRINT_DBG("CR for %d received\n", next_unresumed_task_comp_idx);
+  filler_started = false;
+}
+
+
+int req_service_time_with_filler(bool do_yield, int total_requests, int iters, int pre_offload_kernel_type,
+  int pre_working_set_size, int offload_type,
+  int offload_size, int post_offload_kernel_type,
+  uint64_t offload_cycles)
+{
+  double offered_loads[iters];
+  double avg_offered_load = 0;
+
+  /*Share total requests info with cpu linked list merge function */
+  g_total_requests = total_requests;
+
+  for(int i=0;i<iters; i++){
+    int next_unused_task_comp_idx = 0;
+    next_unresumed_task_comp_idx = 0;
+    last_preempted_task_idx = 0;
+    exists_waiting_preempted_task = false;
+
+
+    fcontext_state_t *request_states[total_requests];
+    fcontext_t *request_ctxs[total_requests];
+    fcontext_transfer_t request_xfers[total_requests];
+
+    comps = aligned_alloc(4096, sizeof(struct completion_record) * total_requests);
+    memset(comps, 0, sizeof(struct completion_record) * total_requests);
+
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_t off_req_ctx;
+
+    offload_request_args *r_args[total_requests];
+    struct completion_record *next_unresumed_task_comp;
+
+    bool need_check_for_completed_offload_tasks = do_yield; /* are tasks yielding?*/
+
+    uint64_t total_requests_processed;
+
+
+    /*setup */
+    pthread_t emul_ax;
+    if(offload_type == 1){
+      createThreadPinned(&emul_ax, emul_blocking_ax_func, NULL, 20);
+      emul_ax_receptive = true;
+    }
+    if(post_offload_kernel_type == 3){
+      prep_ax_desered_mc_reqs(total_requests, offload_size);
+    }
+
+    if (post_offload_kernel_type == 4) /* need dest linked lists for merge ops */
+    {
+      prep_dst_lls(offload_size/sizeof(node), total_requests);
+      /* cpu linked lists need to be alloc'd for offload type 3 */
+      if(offload_type == 3){
+        prep_host_linked_lists(offload_size/sizeof(node), total_requests * 2);
+      } else if(offload_type == 1){
+        prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node));
+      } else if(offload_type == 4){
+        prep_ax_linked_lists(offload_size/sizeof(node), total_requests * 2);
+        prep_ax_generated_linked_lists(total_requests, offload_size/sizeof(node));
+      }
+    }
+
+    /*
+    Reuse the same request context for filler
+    */
+    fcontext_state_t *filler_state;
+    fcontext_transfer_t filler_xfer;
+
+    uint64_t start = sampleCoderdtsc();
+    struct completion_record *unreseumed_tsk_comp = &(comps[0]) ;
+    bool offload_in_flight = false;
+
+    while(main_completed < total_requests){
+      next_unresumed_task_comp = &(comps[0]);
+      bool main_task_runnable = next_unresumed_task_comp->status == DSA_COMP_SUCCESS;
+      if(main_task_runnable){ /* main task runnable */
+        PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
+        /*unset comp*/
+        unreseumed_tsk_comp->status = 0;
+
+        request_xfers[next_unresumed_task_comp_idx] =
+          fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+
+        next_unresumed_task_comp_idx++;
+        offload_in_flight = false;
+      }
+      else if (! main_task_runnable && offload_in_flight ){ /* filler fill */
+        if(main_completed < 1)
+        PRINT_DBG("Filler starting\n");
+        if(!filler_started){
+          filler_state = fcontext_create(filler_task);
+          filler_started = true;
+          filler_xfer = fcontext_swap(filler_state->context,NULL);
+        } else {
+          filler_xfer = fcontext_swap(filler_xfer.prev_context,NULL);
+        }
+      }
+      /*startup a new request*/
+      else{
+        PRINT_DBG("Request %d starting\n", next_unused_task_comp_idx);
+        request_states[next_unused_task_comp_idx] = fcontext_create(main_request);
+        r_args[next_unused_task_comp_idx] = malloc(sizeof(offload_request_args));
+        r_args[next_unused_task_comp_idx]->do_yield = do_yield;
+        r_args[next_unused_task_comp_idx]->task_id = next_unused_task_comp_idx;
+        r_args[next_unused_task_comp_idx]->pre_offload_kernel_type = pre_offload_kernel_type;
+        r_args[next_unused_task_comp_idx]->pre_working_set_size = pre_working_set_size;
+        r_args[next_unused_task_comp_idx]->offload_type = offload_type;
+        r_args[next_unused_task_comp_idx]->offload_size = offload_size;
+        r_args[next_unused_task_comp_idx]->post_offload_kernel_type = post_offload_kernel_type;
+        r_args[next_unused_task_comp_idx]->offload_cycles = offload_cycles;
+        request_xfers[next_unused_task_comp_idx] =
+          fcontext_swap(request_states[next_unused_task_comp_idx]->context, r_args[next_unused_task_comp_idx]);
+        next_unused_task_comp_idx++;
+        offload_in_flight = true;
+      }
+
+    }
+    uint64_t end = sampleCoderdtsc();
+    if(do_yield){
+      total_requests_processed = next_unresumed_task_comp_idx;
+      PRINT_DBG("RequestsProcessed: %d\n", total_requests_processed);
+    }
+
+
+    if(need_check_for_completed_offload_tasks){
+      /* Complete all in-flight requests without starting up new ones*/
+      while(next_unresumed_task_comp_idx < next_unused_task_comp_idx){
+        next_unresumed_task_comp = &(comps[next_unresumed_task_comp_idx]);
+        if(next_unresumed_task_comp->status == DSA_COMP_SUCCESS){
+          PRINT_DBG("CR Received. Request %d resuming\n", next_unresumed_task_comp_idx);
+          request_xfers[next_unresumed_task_comp_idx] = /* no need for state save here for FCFS,(resumed CRs always correspond to highest priority task) but just in case */
+            fcontext_swap(request_xfers[next_unresumed_task_comp_idx].prev_context, NULL);
+          next_unresumed_task_comp_idx++;
+        }
+        else if(exists_waiting_preempted_task){
+          PRINT_DBG("Preempted Request %d resuming\n", last_preempted_task_idx);
+          exists_waiting_preempted_task = false;
+          request_xfers[last_preempted_task_idx] =
+            fcontext_swap(request_xfers[last_preempted_task_idx].prev_context, NULL);
+        }
+      }
+    }
+
+    uint64_t nanos = (end - start)/(2.1);
+    uint64_t micros = nanos / 1000;
+    double seconds = (double)nanos / 1000000000;
+
+
+
+    if (!do_yield) {
+      total_requests_processed = total_requests;
+    }
+
+
+    PRINT_DBG("OfferedLoad(RPS): %f\n", (double)((double)(total_requests_processed)/(double)seconds));
+    offered_loads[i] = (double)((double)(total_requests_processed)/(double)seconds);
+
+    /*teardonw*/
+    for(int i=0; i<total_requests; i++){
+      fcontext_destroy(request_states[i]);
+      free(r_args[i]);
+    }
+
+    free(comps);
+    fcontext_destroy(self);
+
+    if(offload_type == 1){
+      emul_ax_receptive = false;
+      pthread_join( emul_ax, NULL);
+    }
+
+    if(post_offload_kernel_type == 3) {
+      free_prepped_dsa_bufs(total_requests);
+    }
+
+    if (post_offload_kernel_type == 4)
+    {
+      /* free dst lls */
+      for(int i=0; i<total_requests; i++){
+        free(prepped_dst_lls[i]);
+      }
+      free(prepped_dst_lls);
+      if(offload_type == 3){
+        /* free host lls */
+        for(int i=0; i<total_requests * 2; i++){
+          free(prepped_host_lls[i]);
+        }
+        free(prepped_host_lls);
+      } else if(offload_type == 1){
+        /* free ax lls */
+        for(int i=0; i<total_requests; i++){
+          free(prepped_dsa_bufs[i]);
+        }
+      }
+    }
+  }
+  for(int i=0; i<iters; i++){
+    avg_offered_load += offered_loads[i];
+  }
+  avg_offered_load = avg_offered_load / iters;
+  PRINT("AvgOfferedLoad(RPS): %f\n", avg_offered_load);
+
+}
+
 
 int service_time_under_exec_model_test(bool do_yield, int total_requests, int iters, int pre_offload_kernel_type,
   int pre_working_set_size, int offload_type,
@@ -4095,7 +4457,7 @@ void do_offered_load_test(int argc, char **argv){
   /* prep the dsa bufs depending on the offload kernel type */
 
 
-  service_time_under_exec_model_test(do_yield, total_requests, iters,
+  req_service_time_with_filler(do_yield, total_requests, iters,
     pre_offload_kernel_type, pre_working_set_size,
       offload_type, offload_size, post_offload_kernel_type,
       emul_offload_cycles);
