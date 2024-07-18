@@ -3547,6 +3547,7 @@ void do_offload_offered_load_test(
         _mm_pause();
       }
       if(status == FULL){
+        PRINT_DBG("Request %d Found Ax Full\n", task_id);
         /* CPU Fallback */
         do_offload_offered_load_test(
           cpu_kernel,
@@ -3568,6 +3569,7 @@ void do_offload_offered_load_test(
         _mm_pause();
       }
       if(status == FULL){
+        PRINT_DBG("Request %d Found Ax Full\n", task_id);
         do_offload_offered_load_test(
           cpu_kernel,
           input,
