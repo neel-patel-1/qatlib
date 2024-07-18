@@ -3381,6 +3381,11 @@ int last_preempted_task_idx = 0;
 bool exists_waiting_preempted_task = false;
 
 _Atomic bool offload_pending = false;
+_Atomic int status = 0;
+#define FULL 1
+#define SUCCESS 0
+
+int cpu_kernel = 0; /*backup cpu kernel for ax full case */
 
 uint8_t **pOutBuf= NULL;
 uint64_t offloadDur = 0;
@@ -3389,6 +3394,7 @@ int submitter_task_idx = 0;
 
 bool emul_ax_receptive = true;
 int emul_ax_total_expected_offloads = 128;
+int max_inflights = 128;
 
 void *emul_ax_func(void *arg){
 
@@ -3397,23 +3403,37 @@ void *emul_ax_func(void *arg){
 
   int lastRcvdTskIdx = -1, earlUncompTskIdx = 0;
   bool processing_offload = false, offload_completed = false;
+  int num_inflights = 0;
 
   while(emul_ax_receptive){
     if(processing_offload){
       uint64_t currTime = sampleCoderdtsc();
       offload_completed = currTime >= offCompTimes[earlUncompTskIdx];
+
       if(offload_completed){
         /*notify offloader*/
         reqComps[earlUncompTskIdx]->status = DSA_COMP_SUCCESS;
+        PRINT_DBG("Request: %d Start: %ld End: %ld\n",
+          earlUncompTskIdx,
+          offCompTimes[earlUncompTskIdx],
+          currTime);
 
         earlUncompTskIdx++;
+
+        num_inflights--;
 
         if(earlUncompTskIdx > lastRcvdTskIdx){
           processing_offload = false;
         }
+
       }
     }
     if(offload_pending){ /* always check for pending offloads */
+      if(num_inflights > max_inflights){
+        /* reject */
+        status = FULL;
+      }
+      num_inflights++;
       uint64_t offStTime = sampleCoderdtsc();
       uint64_t stallTime = offloadDur;
       *pOutBuf = prepped_dsa_bufs[submitter_task_idx]; /* just set this immediately */
@@ -3526,8 +3546,41 @@ void do_offload_offered_load_test(
       while(offload_pending == true){ /* wait for submission to complete */
         _mm_pause();
       }
-      fcontext_swap(parent, NULL);
+      if(status == FULL){
+        /* CPU Fallback */
+        do_offload_offered_load_test(
+          cpu_kernel,
+          input,
+          input_size,
+          output,
+          output_size,
+          do_yield,
+          parent,
+          task_id,
+          pDstBuf,
+          cycles_to_stall
+        );
+      } else {
+        fcontext_swap(parent, NULL);
+      }
     } else {
+      while(offload_pending == true){ /* wait for submission to complete */
+        _mm_pause();
+      }
+      if(status == FULL){
+        do_offload_offered_load_test(
+          cpu_kernel,
+          input,
+          input_size,
+          output,
+          output_size,
+          do_yield,
+          parent,
+          task_id,
+          pDstBuf,
+          cycles_to_stall
+        );
+      }
       while(subComp->status == 0){
         _mm_pause();
       }
@@ -3982,7 +4035,7 @@ void do_offered_load_test(int argc, char **argv){
 
 
   int opt;
-  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:s:dt:")) != -1) {
+  while ((opt = getopt(argc, argv, "yi:r:f:o:k:l:s:dt:x:")) != -1) {
     switch (opt) {
     case 'y':
       do_yield = true;
@@ -4013,6 +4066,9 @@ void do_offered_load_test(int argc, char **argv){
       break;
     case 't':
       sscanf( optarg, "%lu", &emul_offload_cycles);
+      break;
+    case 'x':
+      cpu_kernel = atoi(optarg);
       break;
     default:
       break;
