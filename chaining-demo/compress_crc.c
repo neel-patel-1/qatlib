@@ -3381,9 +3381,10 @@ int last_preempted_task_idx = 0;
 bool exists_waiting_preempted_task = false;
 
 _Atomic bool offload_pending = false;
-_Atomic int status = 0;
 #define FULL 1
 #define SUCCESS 0
+_Atomic int status = 0;
+
 
 int cpu_kernel = 0; /*backup cpu kernel for ax full case */
 
@@ -3412,10 +3413,6 @@ void *emul_ax_func(void *arg){
       if(offload_completed){
         /*notify offloader*/
         reqComps[earlUncompTskIdx]->status = DSA_COMP_SUCCESS;
-        PRINT_DBG("Request: %d OffloadDur: %ld OffloadDur: %ld\n",
-          earlUncompTskIdx,
-          currTime - offStartTimes[earlUncompTskIdx],
-          offCompTimes[earlUncompTskIdx] - offStartTimes[earlUncompTskIdx]);
 
         earlUncompTskIdx++;
 
@@ -3432,21 +3429,23 @@ void *emul_ax_func(void *arg){
       if(num_inflights > max_inflights){
         /* reject */
         status = FULL;
+      } else {
+        num_inflights++;
+        uint64_t offStTime = sampleCoderdtsc();
+        uint64_t stallTime = offloadDur;
+        offStartTimes[submitter_task_idx] = offStTime;
+        *pOutBuf = prepped_dsa_bufs[submitter_task_idx]; /* just set this immediately */
+        reqComps[submitter_task_idx] = subComp; /* need this at cr write time*/
+        status = SUCCESS;
+
+        lastRcvdTskIdx = submitter_task_idx;
+
+        processing_offload = true;
+        offload_pending = false;
+
+        offCompTimes[submitter_task_idx] = offStTime + stallTime;
+        // PRINT_DBG("Request: %d num_inflights: %d max_inflights: %d\n", submitter_task_idx, num_inflights, max_inflights);
       }
-      num_inflights++;
-      uint64_t offStTime = sampleCoderdtsc();
-      uint64_t stallTime = offloadDur;
-      offStartTimes[submitter_task_idx] = offStTime;
-      *pOutBuf = prepped_dsa_bufs[submitter_task_idx]; /* just set this immediately */
-      reqComps[submitter_task_idx] = subComp; /* need this at cr write time*/
-
-      lastRcvdTskIdx = submitter_task_idx;
-
-      processing_offload = true;
-      offload_pending = false;
-
-      offCompTimes[submitter_task_idx] = offStTime + stallTime;
-      PRINT_DBG("Request: %d OffloadStart: %d\n", submitter_task_idx, offStTime);
     }
   }
 }
@@ -3483,6 +3482,9 @@ void pre_offload_kernel(int kernel, void *input, int input_len, int task_idx,
     }
   } else if (kernel == 2){
     create_random_chain_starting_at(input_len, &input);
+  }
+  else if(kernel == 3){
+    return; /* return immediately */
   }
 }
 
@@ -3549,8 +3551,9 @@ void do_offload_offered_load_test(
         _mm_pause();
       }
       if(status == FULL){
-        PRINT_DBG("Request %d Found Ax Full\n", task_id);
+        PRINT_DBG("Request %d Found Ax Full, CPU fallback to kernel\n", task_id, cpu_kernel);
         /* CPU Fallback */
+        status = 0;
         do_offload_offered_load_test(
           cpu_kernel,
           input,
@@ -3571,7 +3574,8 @@ void do_offload_offered_load_test(
         _mm_pause();
       }
       if(status == FULL){
-        PRINT_DBG("Request %d Found Ax Full\n", task_id);
+        PRINT_DBG("Request %d Found Ax Full, CPU fallback to kernel\n", task_id, cpu_kernel);
+        status = 0;
         do_offload_offered_load_test(
           cpu_kernel,
           input,
@@ -3795,7 +3799,7 @@ typedef struct offload_request_args_t {
   int post_offload_kernel_type;
 } offload_request_args;
 void offload_request(fcontext_transfer_t arg){
-  uint64_t ts[4];
+  uint64_t ts[6];
   ts[0] = sampleCoderdtsc();
   offload_request_args *r_arg = (offload_request_args *)(arg.data);
   fcontext_t parent = arg.prev_context;
@@ -3819,9 +3823,13 @@ void offload_request(fcontext_transfer_t arg){
 
   ts[1] = sampleCoderdtsc();
   PRINT_DBG("Request %d: %ld ", task_id, ts[1] - ts[0]);
+  ts[2] = sampleCoderdtsc();
   /*offload*/
   int dst_buf_size = offload_size;
-  void *dst_buf = malloc(dst_buf_size);
+  void *dst_buf;
+  if(offload_type != 1){
+    dst_buf = malloc(dst_buf_size);
+  }
   do_offload_offered_load_test(
     offload_type,
     pre_working_set,
@@ -3833,14 +3841,15 @@ void offload_request(fcontext_transfer_t arg){
     (uint8_t **)&dst_buf,
     offload_cycles);
 
-  ts[2] = sampleCoderdtsc();
+  ts[3] = sampleCoderdtsc();
 
-  PRINT_DBG(" %ld ", ts[2] - ts[1]);
+  PRINT_DBG(" %ld ", ts[3] - ts[2]);
+  ts[4] = sampleCoderdtsc();
   /*post offload*/
   post_offload_kernel(post_offload_kernel_type, pre_working_set,
     pre_working_set_size, dst_buf, dst_buf_size, task_id, parent, do_yield);
-  ts[3] = sampleCoderdtsc();
-  PRINT_DBG(" %ld\n",  ts[3] - ts[2]);
+  ts[5] = sampleCoderdtsc();
+  PRINT_DBG(" %ld\n",  ts[5] - ts[4]);
 
   fcontext_swap(arg.prev_context, NULL);
 }
@@ -4208,27 +4217,10 @@ int main(int argc, char **argv){
 
   acctest_alloc_multiple_tasks(dsa, num_offload_requests);
 
-  // int size = 1024;
-  // uint8_t *src = (uint8_t *)malloc(size);
-
-  // for(int i=0; i<size; i++){
-  //   src[i] = 0;
-  // }
-
-  // dsa_memcpy(src, size, src, size);
-
-  // for(int i=0; i<size; i++){
-  //   src[i] = 0;
-  // }
-
   do_offered_load_test(argc, argv);
 
   acctest_free_task(dsa);
   acctest_free(dsa);
-
-  /* scheduler thread waits for offload completion and switches tasks */
-  /* figure of merit is filler ops completed */
-  /* Want to measure the request throughput*/
 exit:
 
   icp_sal_userStop();
