@@ -3397,7 +3397,7 @@ int max_inflights = 128;
 
 void *emul_ax_func(void *arg){
 
-  uint64_t offCompTimes[g_total_requests];
+  uint64_t offCompTimes[g_total_requests], offStartTimes[g_total_requests];
   struct completion_record *reqComps[g_total_requests];
 
   int lastRcvdTskIdx = -1, earlUncompTskIdx = 0;
@@ -3412,10 +3412,10 @@ void *emul_ax_func(void *arg){
       if(offload_completed){
         /*notify offloader*/
         reqComps[earlUncompTskIdx]->status = DSA_COMP_SUCCESS;
-        PRINT_DBG("Request: %d Start: %ld End: %ld\n",
+        PRINT_DBG("Request: %d OffloadDur: %ld OffloadDur: %ld\n",
           earlUncompTskIdx,
-          offCompTimes[earlUncompTskIdx],
-          currTime);
+          currTime - offStartTimes[earlUncompTskIdx],
+          offCompTimes[earlUncompTskIdx] - offStartTimes[earlUncompTskIdx]);
 
         earlUncompTskIdx++;
 
@@ -3426,6 +3426,7 @@ void *emul_ax_func(void *arg){
         }
 
       }
+      offload_completed = false;
     }
     if(offload_pending){ /* always check for pending offloads */
       if(num_inflights > max_inflights){
@@ -3435,6 +3436,7 @@ void *emul_ax_func(void *arg){
       num_inflights++;
       uint64_t offStTime = sampleCoderdtsc();
       uint64_t stallTime = offloadDur;
+      offStartTimes[submitter_task_idx] = offStTime;
       *pOutBuf = prepped_dsa_bufs[submitter_task_idx]; /* just set this immediately */
       reqComps[submitter_task_idx] = subComp; /* need this at cr write time*/
 
@@ -3444,6 +3446,7 @@ void *emul_ax_func(void *arg){
       offload_pending = false;
 
       offCompTimes[submitter_task_idx] = offStTime + stallTime;
+      PRINT_DBG("Request: %d OffloadStart: %d\n", submitter_task_idx, offStTime);
     }
   }
 }
