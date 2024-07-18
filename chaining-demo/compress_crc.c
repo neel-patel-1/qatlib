@@ -3393,13 +3393,12 @@ struct completion_record *subComp;
 int submitter_task_idx = 0;
 
 bool emul_ax_receptive = true;
-int emul_ax_total_expected_offloads = 128;
 int max_inflights = 128;
 
 void *emul_ax_func(void *arg){
 
-  uint64_t offCompTimes[emul_ax_total_expected_offloads];
-  struct completion_record *reqComps[emul_ax_total_expected_offloads];
+  uint64_t offCompTimes[g_total_requests];
+  struct completion_record *reqComps[g_total_requests];
 
   int lastRcvdTskIdx = -1, earlUncompTskIdx = 0;
   bool processing_offload = false, offload_completed = false;
