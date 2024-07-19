@@ -1,11 +1,19 @@
 #include "idxd.h"
-#include "cpa_sample_utils.h"
+#include "thread_utils.h"
+#include "print_utils.h"
+#include "timer_utils.h"
+
+#include <stdbool.h>
+#include <x86intrin.h>
+
+bool gDebugParam = 1;
 
 typedef struct completion_record ax_comp;
 ax_comp *blocked_record;
 typedef struct _desc{
   int32_t id;
-  uint8_t rsvd[4];
+  ax_comp *comp;
+  uint8_t rsvd[52];
 } desc;
 typedef struct _ax_setup_args{
   uint64_t offload_time;
@@ -20,19 +28,31 @@ void blocking_emul_ax(void *arg){
   uint64_t start_time = 0;
   uint64_t offload_time = args->offload_time;
   desc **pp_desc = args->pp_desc;
-  int offloader_id = -1;
+
+  desc *off_desc = NULL;
+  ax_comp *comp = NULL;
+  int32_t offloader_id = -1;
 
   while(*running){
     if(offload_in_flight){
       uint64_t wait_until = start_time + offload_time;
-      while(sampleCoderdtsc() < wait_until){ }
-      PRINT_DBG("Request id: %d completed in %ld\n", offloader_id, sampleCoderdtsc() - start_time);
+      uint64_t cur;
+
+      cur = sampleCoderdtsc();
+      while( cur < wait_until){ cur = sampleCoderdtsc(); }
+      PRINT_DBG("Request id: %d completed in %ld\n", offloader_id, cur - start_time);
+      comp->status = 1;
       offload_in_flight = false;
     }
-    offload_pending = sub_desc != NULL;
+    offload_pending = (*pp_desc != NULL);
     if(offload_pending){
+      PRINT_DBG("Request id: %d accepted\n", (*pp_desc)->id);
       start_time = sampleCoderdtsc();
-      offloader_id = sub_desc->id;
+
+      off_desc = *pp_desc;
+      offloader_id = off_desc->id;
+      comp = off_desc->comp;
+
       offload_in_flight = true;
       *pp_desc = NULL;
     }
@@ -41,25 +61,6 @@ void blocking_emul_ax(void *arg){
 
 
 int main(int argc, char **argv){
-  CpaStatus status = CPA_STATUS_SUCCESS, stat;
-  stat = qaeMemInit();
-  stat = icp_sal_userStartMultiProcess("SSL", CPA_FALSE);
-  CpaInstanceHandle dcInstHandles[MAX_INSTANCES];
-  CpaDcSessionHandle sessionHandles[MAX_INSTANCES];
-
-  int tflags = TEST_FLAGS_BOF;
-	int wq_id = 0;
-	int dev_id = 2;
-  int opcode = DSA_OPCODE_MEMMOVE;
-  int wq_type = ACCFG_WQ_SHARED;
-  int rc;
-
-  int num_offload_requests = 1;
-  dsa = acctest_init(tflags);
-
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if (rc < 0)
-    return -ENOMEM;
 
   desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
   bool running_signal = true;
@@ -70,24 +71,21 @@ int main(int argc, char **argv){
   ax_args.running = &running_signal;
   ax_args.pp_desc = &sub_desc;
 
-  createThreadPinned(&ax_td, blocking_emul_ax, &ax_args, 20);
+  create_thread_pinned(&ax_td, blocking_emul_ax, &ax_args, 20);
 
+  ax_comp on_comp;
+  on_comp.status = 0;
   desc off_desc;
   off_desc.id = 0;
   sub_desc = &off_desc;
+  off_desc.comp = &on_comp;
+
+  while(on_comp.status == 0){ _mm_pause();}
+  PRINT_DBG("Request id: %d completed\n", off_desc.id);
 
   /* turn off ax */
-  ax_args.running = false;
+  running_signal = false;
   pthread_join(ax_td, NULL);
 
-
-  do_offered_load_test(argc, argv);
-
-  acctest_free_task(dsa);
-  acctest_free(dsa);
-exit:
-
-  icp_sal_userStop();
-  qaeMemDestroy();
   return 0;
 }
