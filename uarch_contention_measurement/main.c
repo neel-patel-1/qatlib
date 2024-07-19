@@ -30,6 +30,7 @@ typedef struct _offload_request_args{
 typedef struct _filler_request_args{
   ax_comp *comp;
 } filler_request_args;
+_Atomic bool offload_pending_acceptance = false;
 
 void blocking_emul_ax(void *arg){
   ax_setup_args *args = (ax_setup_args *)arg;
@@ -50,21 +51,23 @@ void blocking_emul_ax(void *arg){
 
       cur = sampleCoderdtsc();
       while( cur < wait_until){ cur = sampleCoderdtsc(); }
-      PRINT_DBG("Request id: %d completed in %ld\n", offloader_id, cur - start_time);
+      PRINT_DBG("Request id: %d completed in %ld\n",
+        offloader_id, cur - start_time);
       comp->status = 1;
       offload_in_flight = false;
     }
-    if(*pp_desc != NULL){
+    if(offload_pending_acceptance){
       start_time = sampleCoderdtsc();
 
       off_desc = *pp_desc;
       offloader_id = off_desc->id;
       comp = off_desc->comp;
 
-      PRINT_DBG("Ax accepted id: %d desc 0x%x at portal 0x%x\n", offloader_id, *pp_desc, pp_desc);
+      PRINT_DBG("Ax accepted id: %d desc 0x%p at portal 0x%p\n",
+        offloader_id, (void *)*pp_desc, (void **)pp_desc);
 
       offload_in_flight = true;
-      *pp_desc = NULL;
+      offload_pending_acceptance = false;
     }
   }
   PRINT_DBG("AX thread exiting\n");
@@ -140,8 +143,9 @@ void offload_request(fcontext_transfer_t arg){
 
   comp->status = 0;
   *pp_desc = &off_desc;
-  PRINT_DBG("Request id: %d submitting desc 0x%x to portal 0x%x\n", off_desc.id, *pp_desc, pp_desc);
-  while(*pp_desc != NULL){ _mm_pause(); }
+  offload_pending_acceptance = true;
+  PRINT_DBG("Request id: %d submitting desc 0x%p to portal 0x%p\n", off_desc.id, (void *)*pp_desc,(void **) pp_desc);
+  while(offload_pending_acceptance){ _mm_pause(); }
 
   parent_xfer = fcontext_swap(parent, NULL);
 
@@ -174,17 +178,9 @@ void nothing_filler_request(fcontext_transfer_t arg){
 }
 
 
-int main(int argc, char **argv){
-
+void polluted_execution(int num_requests){
   desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
-  bool running_signal = true;
-
-  pthread_t ax_td;
-  ax_setup_args ax_args;
-
   ax_comp on_comp;
-
-  int num_requests = 100;
 
   fcontext_state_t *self = fcontext_create_proxy();
   fcontext_transfer_t offload_req_xfer;
@@ -198,7 +194,11 @@ int main(int argc, char **argv){
   int linked_list_size = 10;
 
   linked_list *ll = ll_init();
-  populate_linked_list_ascending_values(ll, linked_list_size);
+
+  bool running_signal = true;
+
+  pthread_t ax_td;
+  ax_setup_args ax_args;
 
   ax_args.offload_time = 2100;
   ax_args.running = &running_signal;
@@ -206,11 +206,13 @@ int main(int argc, char **argv){
 
   create_thread_pinned(&ax_td, blocking_emul_ax, &ax_args, 20);
 
+  populate_linked_list_ascending_values(ll, linked_list_size);
+
   for(int i=0; i<num_requests; i++){
 
     off_args.pp_desc = &sub_desc;
     off_args.comp = &on_comp;
-    off_args.id = 0;
+    off_args.id = i;
     off_args.ll = ll;
 
     filler_args.comp = &on_comp;
@@ -234,6 +236,20 @@ int main(int argc, char **argv){
   pthread_join(ax_td, NULL);
 
   fcontext_destroy_proxy(self);
+}
+
+
+int main(int argc, char **argv){
+
+
+
+  /* pollution */
+
+  polluted_execution(1000);
+
+
+
+
 
   return 0;
 }
