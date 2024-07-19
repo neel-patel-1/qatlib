@@ -371,6 +371,32 @@ void nothing_execution(int num_requests){
   fcontext_destroy_proxy(self);
 }
 
+
+void execute_requests(
+  fcontext_transfer_t * offload_req_xfer,
+  fcontext_state_t ** off_req_state,
+  offload_request_args * off_args,
+  fcontext_transfer_t * filler_req_xfer,
+  fcontext_state_t ** filler_req_state,
+  filler_request_args * filler_args,
+  int num_requests, ax_comp * on_comp,
+  bool do_filler )
+{
+  for(int i=0; i<num_requests; i++){
+
+    offload_req_xfer[i] = fcontext_swap(off_req_state[i]->context, &(off_args[i]));
+
+    if(do_filler){
+
+      filler_req_xfer[i] = fcontext_swap(filler_req_state[i]->context, &(filler_args[i]));
+
+      offload_req_xfer[i] = fcontext_swap(offload_req_xfer[i].prev_context, NULL); // resume offload req
+
+    }
+    on_comp->status = 0;
+  }
+}
+
 void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_fn){
   desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
   ax_comp on_comp;
@@ -423,19 +449,23 @@ void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_
       filler_req_state[i] = fcontext_create(filler_fn);
   }
 
+  execute_requests(offload_req_xfer,
+    off_req_state, off_args, filler_req_xfer,
+    filler_req_state, filler_args, num_requests, &on_comp, filler_fn != NULL);
+
   for(int i=0; i<num_requests; i++){
 
-    offload_req_xfer[i] = fcontext_swap(off_req_state[i]->context, &off_args);
+    // offload_req_xfer[i] = fcontext_swap(off_req_state[i]->context, &off_args);
 
-    if(filler_fn != NULL){
+    // if(filler_fn != NULL){
 
-      filler_req_xfer[i] = fcontext_swap(filler_req_state[i]->context, &filler_args);
+    //   filler_req_xfer[i] = fcontext_swap(filler_req_state[i]->context, &filler_args);
 
-      offload_req_xfer[i] = fcontext_swap(offload_req_xfer[i].prev_context, NULL); // resume offload req
+    //   offload_req_xfer[i] = fcontext_swap(offload_req_xfer[i].prev_context, NULL); // resume offload req
 
-    }
+    // }
 
-    on_comp.status = 0;
+    // on_comp.status = 0;
 
     fcontext_destroy(off_req_state[i]);
     fcontext_destroy(filler_req_state[i]);
