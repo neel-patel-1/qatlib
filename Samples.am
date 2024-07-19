@@ -254,6 +254,38 @@ compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -lm -laccel-config libcpa_sample_c
 /home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a \
 -lnuma
 
+noinst_PROGRAMS += uarch_contention
+
+uarch_contention_SOURCES = \
+	uarch_contention_measurement/main.c \
+	$(srcdir)/idxd/test/libaccfg.c \
+	$(srcdir)/idxd/test/core.c \
+	$(srcdir)/idxd/test/dsa.c \
+	$(srcdir)/idxd/util/log.c \
+	$(srcdir)/idxd/test/accel_test.c \
+	$(srcdir)/idxd/test/dsa_prep.c \
+	$(srcdir)/fcontext/src/asm/jump_x86_64_sysv_elf_gas.S \
+	$(srcdir)/fcontext/src/asm/make_x86_64_sysv_elf_gas.S \
+	$(srcdir)/fcontext/src/asm/ontop_x86_64_sysv_elf_gas.S \
+	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
+
+uarch_contention_CFLAGS = \
+	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
+	-I$(srcdir)/chaining-demo \
+	-I$(srcdir)/idxd/test \
+	-I$(srdir)/idxd \
+	-I$(srcdir)/accfg \
+	-I$(srcdir)/fcontext/inc \
+	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
+	$(COMMON_SAMPLE_INCLUDES) \
+	$(COMMON_SAMPLE_CFLAGS) \
+	$(COMMON_FLAGS) \
+	#-fsanitize=thread,undefined -g3
+
+uarch_contention_LDADD = $(COMMON_SAMPLE_LDFLAGS) -lm -laccel-config libcpa_sample_code_s.la -lz \
+/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a \
+-lnuma
+
 noinst_PROGRAMS += preempt_timing
 
 preempt_timing_SOURCES = \
@@ -481,13 +513,14 @@ samples: $(lib_LTLIBRARIES) cpa_sample_code dc_dp_sample dc_stateless_sample \
 	cipher_sample gcm_sample hash_file_sample hash_sample ipsec_sample \
 	ssl_sample sym_dp_sample dh_sample prime_sample hkdf_sample \
 	ec_montedwds_sample eddsa_sample chaining_sample zuc_sample \
-	compress_crc preempt_timing
+	uarch_contention compress_crc preempt_timing
 
 samples-install: samples
 	@install -D -m 755 $(srcdir)/.libs/cpa_sample_code $(DESTDIR)$(bindir)/cpa_sample_code
 	@install -D -m 755 $(srcdir)/.libs/dc_dp_sample $(DESTDIR)$(bindir)/dc_dp_sample
 	@install -D -m 755 $(srcdir)/.libs/dc_stateless_sample $(DESTDIR)$(bindir)/dc_stateless_sample
 	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/chaining_sample
+	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/uarch_contention
 	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/compress_crc
 	@install -D -m 755 $(srcdir)/.libs/chaining_sample $(DESTDIR)$(bindir)/preempt_timing
 	@install -D -m 755 $(srcdir)/.libs/dc_stateless_multi_op_sample $(DESTDIR)$(bindir)/dc_stateless_multi_op_sample
