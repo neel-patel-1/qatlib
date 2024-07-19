@@ -26,6 +26,17 @@ void dsa_llc_realloc(void *dst, void *src, int size){
 
 }
 
+static inline void offload_tax(dml_job_t *dml_job_ptr, void *dst, void *src, int size){
+  dml_path_t execution_path = DML_PATH_HW;
+  dml_status_t status = dml_init_job(execution_path, dml_job_ptr);
+  dml_job_ptr->operation              = DML_OP_MEM_MOVE;
+  dml_job_ptr->source_first_ptr       = (uint8_t *)src;
+  dml_job_ptr->source_length          = size;
+  dml_job_ptr->destination_first_ptr  = (uint8_t *)dst;
+  dml_job_ptr->flags = DML_FLAG_PREFETCH_CACHE;
+  status = dml_submit_job(dml_job_ptr);
+}
+
 void gen_serialized(string *serialized, router::RouterRequest *request){
   string query = "/region/cluster/foo:key|#|etc";
   string value = "bar";
@@ -80,6 +91,26 @@ int main(){
     time_code_region(
       gen_and_deser_host(&serialized, &request),
       furc_hash(request.key().c_str(), request.key().size(), 16),
+      NULL,
+      1000
+    );
+  }
+
+  {
+    PRINT("OffloadTax: ");
+    dml_job_t *dml_job_ptr = NULL;
+    dml_path_t execution_path = DML_PATH_HW;
+
+    uint32_t job_size = 0u;
+    dml_status_t status = dml_get_job_size(execution_path, &job_size);
+    dml_job_ptr = (dml_job_t *)malloc(job_size);
+
+    char *src = (char *)serialized.c_str();
+    char *dst = (char *)malloc(serialized.size());
+
+    time_code_region(
+      NULL,
+      offload_tax(dml_job_ptr, dst, src, serialized.size()),
       NULL,
       1000
     );
