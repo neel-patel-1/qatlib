@@ -5,7 +5,7 @@ fcontext_transfer_t *bulk_alloc_fcontext_xfers(int num_xfers){
   return xfers;
 }
 
-fcontext_state_t **bulk_alloc_fcontext_state(int num_states){
+fcontext_state_t **bulk_alloc_fcontext_state_ptrs(int num_states){
   fcontext_state_t **states = (fcontext_state_t **)malloc(num_states * sizeof(fcontext_state_t *));
   return states;
 }
