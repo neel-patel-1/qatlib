@@ -45,6 +45,14 @@ static inline void gen_and_deser_host(string *serialized, router::RouterRequest 
   deserialize(serialized, request);
 }
 
+static inline void gen_and_deser_ax(char **p_desered_key){
+  string query = "/region/cluster/foo:key|#|etc";
+  char *desered_key = (char *)malloc(query.size());
+
+  dsa_llc_realloc((void *)desered_key, (void *)query.c_str(), query.size());
+  *p_desered_key = desered_key;
+}
+
 int main(){
   string serialized, desered;
   router::RouterRequest request;
@@ -72,6 +80,16 @@ int main(){
     time_code_region(
       gen_and_deser_host(&serialized, &request),
       furc_hash(request.key().c_str(), request.key().size(), 16),
+      NULL,
+      1000
+    );
+  }
+  {
+    char *desered_key;
+    PRINT("AccessOverheadHash: ");
+    time_code_region(
+      gen_and_deser_ax(&desered_key),
+      furc_hash(desered_key, request.key().size(), 16),
       NULL,
       1000
     );
