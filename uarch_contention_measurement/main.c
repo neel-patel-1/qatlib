@@ -3,6 +3,7 @@
 #include "print_utils.h"
 #include "timer_utils.h"
 #include "fcontext.h"
+#include "linked_list.h"
 
 #include <stdbool.h>
 #include <x86intrin.h>
@@ -24,6 +25,7 @@ typedef struct _offload_request_args{
   desc **pp_desc;
   ax_comp *comp;
   int32_t id;
+  linked_list *ll;
 } offload_request_args;
 typedef struct _filler_request_args{
   ax_comp *comp;
@@ -67,8 +69,16 @@ void blocking_emul_ax(void *arg){
   }
 }
 
+void nothing_kernel(ax_comp *comp, fcontext_t parent){
+  while(1){
+    if(comp->status == 1){
+      PRINT_DBG("Filler preempted\n");
+      fcontext_swap(parent, NULL);
+    }
+  }
+}
 
-void probed_kernel(ax_comp *comp, fcontext_t parent){
+void pollution_kernel(ax_comp *comp, fcontext_t parent){
   volatile int glb = 0;
   int buf_size = 48 * 1024 / sizeof(int32_t);
   int32_t buffer[buf_size];
@@ -86,6 +96,36 @@ void probed_kernel(ax_comp *comp, fcontext_t parent){
   }
 }
 
+
+void blocking_offload_request(fcontext_transfer_t arg){
+  offload_request_args *args = (offload_request_args *)arg.data;
+  desc **pp_desc = args->pp_desc;
+  fcontext_t parent = arg.prev_context;
+
+  ax_comp *comp = args->comp;
+  desc off_desc = {.comp = comp, .id = args->id};
+
+  linked_list *ll = args->ll;
+
+  comp->status = 0;
+  *pp_desc = &off_desc;
+  while(*pp_desc != NULL){ _mm_pause(); }
+  PRINT_DBG("Request id: %d submitted\n", off_desc.id);
+  while(comp->status == 0){ _mm_pause(); }
+
+  /* Execute post offload kernel */
+  /* post-process a linked list */
+  ll_print(ll);
+  node *cur_node = ll->head;
+  while(cur_node != NULL){
+    cur_node = cur_node->next;
+  }
+
+  PRINT_DBG("Request id: %d completed\n", off_desc.id);
+  fcontext_swap(parent, NULL);
+}
+
+
 void offload_request(fcontext_transfer_t arg){
   offload_request_args *args = (offload_request_args *)arg.data;
   desc **pp_desc = args->pp_desc;
@@ -94,20 +134,42 @@ void offload_request(fcontext_transfer_t arg){
   ax_comp *comp = args->comp;
   desc off_desc = {.comp = comp, .id = args->id};
 
+  linked_list *ll = args->ll;
+
   comp->status = 0;
   *pp_desc = &off_desc;
   while(*pp_desc != NULL){ _mm_pause(); }
   PRINT_DBG("Request id: %d submitted\n", off_desc.id);
+  fcontext_swap(parent, NULL);
 
+  /* Execute post offload kernel */
+  /* post-process a linked list */
+  ll_print(ll);
+  node *cur_node = ll->head;
+  while(cur_node != NULL){
+    cur_node = cur_node->next;
+  }
+
+  PRINT_DBG("Request id: %d completed\n", off_desc.id);
   fcontext_swap(parent, NULL);
 }
 
-void filler_request(fcontext_transfer_t arg){
+void pollution_filler_request(fcontext_transfer_t arg){
   filler_request_args *args = (filler_request_args *)arg.data;
   ax_comp *comp = args->comp;
 
   /* execute probed kernel */
-  probed_kernel(comp, arg.prev_context);
+  pollution_kernel(comp, arg.prev_context);
+  PRINT_DBG("Filler completed\n");
+
+}
+
+void nothing_filler_request(fcontext_transfer_t arg){
+  filler_request_args *args = (filler_request_args *)arg.data;
+  ax_comp *comp = args->comp;
+
+  /* execute probed kernel */
+  nothing_kernel(comp, arg.prev_context);
   PRINT_DBG("Filler completed\n");
 
 }
@@ -123,6 +185,9 @@ int main(int argc, char **argv){
 
   ax_comp on_comp;
 
+  int num_requests = 100;
+
+  fcontext_state_t *self = fcontext_create_proxy();
   fcontext_transfer_t offload_req_xfer;
   fcontext_state_t *off_req_state;
   fcontext_transfer_t filler_req_xfer;
@@ -131,11 +196,14 @@ int main(int argc, char **argv){
   offload_request_args off_args;
   filler_request_args filler_args;
 
-  off_args.pp_desc = &sub_desc;
-  off_args.comp = &on_comp;
-  off_args.id = 0;
+  int linked_list_size = 10;
 
-  filler_args.comp = &on_comp;
+  linked_list *ll = ll_init();
+  for(int i=0; i<linked_list_size; i++){
+    void *data = (void *)malloc(sizeof(int));
+    *(int *)data = i;
+    ll_insert(ll, data);
+  }
 
   ax_args.offload_time = 2100;
   ax_args.running = &running_signal;
@@ -143,12 +211,27 @@ int main(int argc, char **argv){
 
   create_thread_pinned(&ax_td, blocking_emul_ax, &ax_args, 20);
 
-  off_req_state = fcontext_create(offload_request);
-  offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
+  for(int i=0; i<num_requests; i++){
 
-  filler_req_state = fcontext_create(filler_request);
-  filler_req_xfer = fcontext_swap(filler_req_state->context, &filler_args);
+    off_args.pp_desc = &sub_desc;
+    off_args.comp = &on_comp;
+    off_args.id = 0;
+    off_args.ll = ll;
 
+    filler_args.comp = &on_comp;
+
+    off_req_state = fcontext_create(offload_request); // start offload req
+    offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
+
+    filler_req_state = fcontext_create(pollution_filler_request); // start filler req
+    filler_req_xfer = fcontext_swap(filler_req_state->context, &filler_args);
+
+    offload_req_xfer = fcontext_swap(offload_req_xfer.prev_context, NULL); // resume offload req
+
+    fcontext_destroy(off_req_state);
+    fcontext_destroy(filler_req_state);
+
+  }
   /* turn off ax */
   running_signal = false;
   pthread_join(ax_td, NULL);
