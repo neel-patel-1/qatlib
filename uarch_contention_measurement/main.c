@@ -2,6 +2,7 @@
 #include "thread_utils.h"
 #include "print_utils.h"
 #include "timer_utils.h"
+#include "fcontext.h"
 
 #include <stdbool.h>
 #include <x86intrin.h>
@@ -9,7 +10,6 @@
 bool gDebugParam = 1;
 
 typedef struct completion_record ax_comp;
-ax_comp *blocked_record;
 typedef struct _desc{
   int32_t id;
   ax_comp *comp;
@@ -20,6 +20,14 @@ typedef struct _ax_setup_args{
   bool *running;
   desc **pp_desc; /*pointer to the single desc submission allowed - switch to NULL once ax accepted */
 } ax_setup_args;
+typedef struct _offload_request_args{
+  desc **pp_desc;
+  ax_comp *comp;
+  int32_t id;
+} offload_request_args;
+typedef struct _filler_request_args{
+  ax_comp *comp;
+} filler_request_args;
 
 void blocking_emul_ax(void *arg){
   ax_setup_args *args = (ax_setup_args *)arg;
@@ -57,6 +65,28 @@ void blocking_emul_ax(void *arg){
       *pp_desc = NULL;
     }
   }
+}
+
+void offload_request(fcontext_transfer_t arg){
+  offload_request_args *args = (offload_request_args *)arg.data;
+  desc **pp_desc = args->pp_desc;
+
+  ax_comp *comp = args->comp;
+  desc off_desc = {.comp = comp, .id = args->id};
+
+  comp->status = 0;
+  *pp_desc = off_desc;
+  while(*pp_desc != NULL){ _mm_pause(); }
+  PRINT_DBG("Request id: %d submitted\n", off_desc.id);
+
+}
+
+void filler_request(fcontext_transfer_t arg){
+  filler_request_args *args = (filler_request_args *)arg.data;
+  ax_comp *comp = args->comp;
+
+  while(comp->status == 0){ _mm_pause();}
+  PRINT_DBG("Request completed\n");
 }
 
 
