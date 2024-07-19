@@ -250,7 +250,7 @@ static inline void execute_requests(
   }
 }
 
-void execution(int num_requests, int iterations,
+void execution(uint64_t ax_compute_cycles, int num_requests, int iterations,
   fcontext_fn_t offload_fn, fcontext_fn_t filler_fn){
   desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
   ax_comp on_comp;
@@ -273,7 +273,7 @@ void execution(int num_requests, int iterations,
   pthread_t ax_td;
   ax_setup_args ax_args;
 
-  ax_args.offload_time = 2100;
+  ax_args.offload_time = ax_compute_cycles;
   ax_args.running = &running_signal;
   ax_args.pp_desc = &sub_desc;
 
@@ -334,16 +334,16 @@ void execution(int num_requests, int iterations,
 int main(int argc, char **argv){
 
   PRINT("Blocking\n");
-  execution(1000, 100, blocking_offload_request, NULL);
+  execution(2100 * 200, 1000, 100, blocking_offload_request, NULL);
 
   PRINT("Nothing\n");
-  execution(1000, 100, offload_request, nothing_filler_request);
+  execution(2100 * 200, 1000, 100, offload_request, nothing_filler_request);
 
   PRINT("Same\n");
-  execution(1000, 100, offload_request, same_filler_request);
+  execution(2100 * 200, 1000, 100, offload_request, same_filler_request);
 
   PRINT("Pollution\n");
-  execution(1000, 100, offload_request, pollution_filler_request);
+  execution(2100 * 200, 1000, 100, offload_request, pollution_filler_request);
 
 
 
