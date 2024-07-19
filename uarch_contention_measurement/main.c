@@ -67,6 +67,25 @@ void blocking_emul_ax(void *arg){
   }
 }
 
+
+void probed_kernel(ax_comp *comp, fcontext_t parent){
+  volatile int glb = 0;
+  int buf_size = 48 * 1024 / sizeof(int32_t);
+  int32_t buffer[buf_size];
+  while(1){
+    for(int i=0; i<buf_size / sizeof(int32_t); i++){
+      if(i > 0)
+        buffer[i] = buffer[i-1] + 1;
+      /* check signal */
+      if(comp->status == 1){
+        PRINT_DBG("Filler preempted\n");
+        fcontext_swap(parent, NULL);
+      }
+    }
+    glb = buffer[buf_size - 1];
+  }
+}
+
 void offload_request(fcontext_transfer_t arg){
   offload_request_args *args = (offload_request_args *)arg.data;
   desc **pp_desc = args->pp_desc;
@@ -87,10 +106,10 @@ void filler_request(fcontext_transfer_t arg){
   filler_request_args *args = (filler_request_args *)arg.data;
   ax_comp *comp = args->comp;
 
-  while(comp->status == 0){ _mm_pause();}
-  PRINT_DBG("Request completed\n");
+  /* execute probed kernel */
+  probed_kernel(comp, arg.prev_context);
+  PRINT_DBG("Filler completed\n");
 
-  fcontext_swap(arg.prev_context, NULL);
 }
 
 
