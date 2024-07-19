@@ -1,6 +1,7 @@
 #include "router.pb.h"
 #include "ch3_hash.h"
 #include "print_utils.h"
+#include "timer_utils.h"
 
 #include <string>
 #include <dml/dml.h>
@@ -39,6 +40,11 @@ static inline void deserialize(string *serialized, router::RouterRequest *reques
   request->ParseFromString(*serialized);
 }
 
+static inline void gen_and_deser_host(string *serialized, router::RouterRequest *request){
+  gen_serialized(serialized, request);
+  deserialize(serialized, request);
+}
+
 int main(){
   string serialized, desered;
   router::RouterRequest request;
@@ -50,7 +56,25 @@ int main(){
   PRINT_DBG("Hashing key: %s\n", request.key().c_str());
 
   /* hash */
-  furc_hash(request.key().c_str(), request.key().size(), 16);
 
+  {
+    PRINT("GPCoreDeserialize: ");
+    time_code_region(
+      gen_serialized(&serialized, &request),
+      deserialize(&serialized, &request),
+      NULL,
+      1000
+    );
+  }
+
+  {
+    PRINT("GPCoreHash: ");
+    time_code_region(
+      gen_and_deser_host(&serialized, &request),
+      furc_hash(request.key().c_str(), request.key().size(), 16),
+      NULL,
+      1000
+    );
+  }
 
 }
