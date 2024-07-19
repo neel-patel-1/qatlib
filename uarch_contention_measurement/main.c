@@ -54,19 +54,20 @@ void blocking_emul_ax(void *arg){
       comp->status = 1;
       offload_in_flight = false;
     }
-    offload_pending = (*pp_desc != NULL);
-    if(offload_pending){
-      PRINT_DBG("Request id: %d accepted\n", (*pp_desc)->id);
+    if(*pp_desc != NULL){
       start_time = sampleCoderdtsc();
 
       off_desc = *pp_desc;
       offloader_id = off_desc->id;
       comp = off_desc->comp;
 
+      PRINT_DBG("Ax accepted id: %d desc 0x%x at portal 0x%x\n", offloader_id, *pp_desc, pp_desc);
+
       offload_in_flight = true;
       *pp_desc = NULL;
     }
   }
+  PRINT_DBG("AX thread exiting\n");
 }
 
 void nothing_kernel(ax_comp *comp, fcontext_t parent){
@@ -130,6 +131,7 @@ void offload_request(fcontext_transfer_t arg){
   offload_request_args *args = (offload_request_args *)arg.data;
   desc **pp_desc = args->pp_desc;
   fcontext_t parent = arg.prev_context;
+  fcontext_transfer_t parent_xfer;
 
   ax_comp *comp = args->comp;
   desc off_desc = {.comp = comp, .id = args->id};
@@ -138,9 +140,10 @@ void offload_request(fcontext_transfer_t arg){
 
   comp->status = 0;
   *pp_desc = &off_desc;
+  PRINT_DBG("Request id: %d submitting desc 0x%x to portal 0x%x\n", off_desc.id, *pp_desc, pp_desc);
   while(*pp_desc != NULL){ _mm_pause(); }
-  PRINT_DBG("Request id: %d submitted\n", off_desc.id);
-  fcontext_swap(parent, NULL);
+
+  parent_xfer = fcontext_swap(parent, NULL);
 
   /* Execute post offload kernel */
   /* post-process a linked list */
@@ -151,7 +154,7 @@ void offload_request(fcontext_transfer_t arg){
   }
 
   PRINT_DBG("Request id: %d completed\n", off_desc.id);
-  fcontext_swap(parent, NULL);
+  fcontext_swap(parent_xfer.prev_context, NULL);
 }
 
 void pollution_filler_request(fcontext_transfer_t arg){
@@ -160,8 +163,6 @@ void pollution_filler_request(fcontext_transfer_t arg){
 
   /* execute probed kernel */
   pollution_kernel(comp, arg.prev_context);
-  PRINT_DBG("Filler completed\n");
-
 }
 
 void nothing_filler_request(fcontext_transfer_t arg){
@@ -170,8 +171,6 @@ void nothing_filler_request(fcontext_transfer_t arg){
 
   /* execute probed kernel */
   nothing_kernel(comp, arg.prev_context);
-  PRINT_DBG("Filler completed\n");
-
 }
 
 
@@ -199,11 +198,7 @@ int main(int argc, char **argv){
   int linked_list_size = 10;
 
   linked_list *ll = ll_init();
-  for(int i=0; i<linked_list_size; i++){
-    void *data = (void *)malloc(sizeof(int));
-    *(int *)data = i;
-    ll_insert(ll, data);
-  }
+  populate_linked_list_ascending_values(ll, linked_list_size);
 
   ax_args.offload_time = 2100;
   ax_args.running = &running_signal;
@@ -228,6 +223,8 @@ int main(int argc, char **argv){
 
     offload_req_xfer = fcontext_swap(offload_req_xfer.prev_context, NULL); // resume offload req
 
+    on_comp.status = 0;
+
     fcontext_destroy(off_req_state);
     fcontext_destroy(filler_req_state);
 
@@ -235,6 +232,8 @@ int main(int argc, char **argv){
   /* turn off ax */
   running_signal = false;
   pthread_join(ax_td, NULL);
+
+  fcontext_destroy_proxy(self);
 
   return 0;
 }

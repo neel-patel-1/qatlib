@@ -79,7 +79,7 @@ void ll_print(linked_list *ll){
   }
 }
 
-void build_linked_list(linked_list *ll, int size){
+void populate_linked_list_ascending_values(linked_list *ll, int size){
   for(int i=0; i<size; i++){
     void *data = (void *)malloc(sizeof(int));
     *(int *)data = i;
