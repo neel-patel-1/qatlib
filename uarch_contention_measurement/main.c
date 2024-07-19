@@ -371,8 +371,24 @@ void nothing_execution(int num_requests){
   fcontext_destroy_proxy(self);
 }
 
+static inline void create_contexts_and_transfers(
+  fcontext_transfer_t * offload_req_xfer,
+  fcontext_state_t ** off_req_state,
+  fcontext_fn_t offload_fn,
+  fcontext_transfer_t * filler_req_xfer,
+  fcontext_state_t ** filler_req_state,
+  fcontext_fn_t filler_fn,
+  int num_requests,
+  bool do_filler){
+    for(int i=0; i<num_requests; i++){
+      off_req_state[i] = fcontext_create(offload_fn);
+      if(do_filler)
+        filler_req_state[i] = fcontext_create(filler_fn);
+    }
+  }
 
-void execute_requests(
+
+static inline void execute_requests(
   fcontext_transfer_t * offload_req_xfer,
   fcontext_state_t ** off_req_state,
   offload_request_args * off_args,
@@ -397,7 +413,8 @@ void execute_requests(
   }
 }
 
-void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_fn){
+void execution(int num_requests, int iterations,
+  fcontext_fn_t offload_fn, fcontext_fn_t filler_fn){
   desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
   ax_comp on_comp;
 
@@ -449,23 +466,19 @@ void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_
       filler_req_state[i] = fcontext_create(filler_fn);
   }
 
-  execute_requests(offload_req_xfer,
-    off_req_state, off_args, filler_req_xfer,
-    filler_req_state, filler_args, num_requests, &on_comp, filler_fn != NULL);
+
+  time_code_region(
+    /*setup = */ create_contexts_and_transfers(offload_req_xfer,
+      off_req_state, offload_fn, filler_req_xfer,
+      filler_req_state, filler_fn, num_requests, filler_fn != NULL),
+    /*main = */execute_requests(offload_req_xfer,
+      off_req_state, off_args, filler_req_xfer,
+      filler_req_state, filler_args, num_requests,
+      &on_comp, filler_fn != NULL),
+    NULL, iterations);
+
 
   for(int i=0; i<num_requests; i++){
-
-    // offload_req_xfer[i] = fcontext_swap(off_req_state[i]->context, &off_args);
-
-    // if(filler_fn != NULL){
-
-    //   filler_req_xfer[i] = fcontext_swap(filler_req_state[i]->context, &filler_args);
-
-    //   offload_req_xfer[i] = fcontext_swap(offload_req_xfer[i].prev_context, NULL); // resume offload req
-
-    // }
-
-    // on_comp.status = 0;
 
     fcontext_destroy(off_req_state[i]);
     fcontext_destroy(filler_req_state[i]);
@@ -481,26 +494,15 @@ void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_
 
 
 int main(int argc, char **argv){
-  {
-    PRINT("Blocking ");
-    time_code_region(NULL, blocking_execution(1000), NULL, 100);
-  }
-  {
-    time_code_region(NULL, execution(1000, blocking_offload_request, NULL), NULL, 100);
-  }
 
-  {
-  PRINT("Nothing ");
-  time_code_region(NULL, polluted_execution(1000), NULL, 100);
-  }
-  {
-  time_code_region(NULL, execution(1000, offload_request, pollution_filler_request), NULL, 100);
-  }
+  PRINT("Blocking\n");
+  execution(1000, 100, blocking_offload_request, NULL);
 
-  {
-  PRINT("Polluted ");
-  time_code_region(NULL, polluted_execution(1000), NULL, 100);
-  }
+  PRINT("Nothing\n");
+  execution(1000, 100, offload_request, nothing_filler_request);
+
+  PRINT("Pollution\n");
+  execution(1000, 100, offload_request, pollution_filler_request);
 
 
 
