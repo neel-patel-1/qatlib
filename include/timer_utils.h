@@ -43,7 +43,8 @@ static inline void gen_diff_array(uint64_t *dst_array, uint64_t* array1,  uint64
     end_times[i] = end; \
     per_run_cleanup; \
   } \
-  avg_samples_from_arrays(times, avg, end_times, start_times, iterations);
+  avg_samples_from_arrays(times, avg, end_times, start_times, iterations); \
+  PRINT("AverageCycles: %ld\n", avg);
 
 #define rerun_code_region(iterations, code) \
   for(int i=0; i<iterations; i++){ \

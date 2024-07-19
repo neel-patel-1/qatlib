@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <x86intrin.h>
 
-bool gDebugParam = 1;
+bool gDebugParam = 0;
 
 typedef struct completion_record ax_comp;
 typedef struct _desc{
@@ -113,8 +113,9 @@ void blocking_offload_request(fcontext_transfer_t arg){
 
   comp->status = 0;
   *pp_desc = &off_desc;
-  while(*pp_desc != NULL){ _mm_pause(); }
-  PRINT_DBG("Request id: %d submitted\n", off_desc.id);
+  offload_pending_acceptance = true;
+  PRINT_DBG("Request id: %d submitting desc 0x%p to portal 0x%p\n", off_desc.id, (void *)*pp_desc,(void **) pp_desc);
+  while(offload_pending_acceptance){ _mm_pause(); }
   while(comp->status == 0){ _mm_pause(); }
 
   /* Execute post offload kernel */
@@ -220,6 +221,121 @@ void polluted_execution(int num_requests){
     off_req_state = fcontext_create(offload_request); // start offload req
     offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
 
+    filler_req_state = fcontext_create(nothing_filler_request); // start filler req
+    filler_req_xfer = fcontext_swap(filler_req_state->context, &filler_args);
+
+    offload_req_xfer = fcontext_swap(offload_req_xfer.prev_context, NULL); // resume offload req
+
+    on_comp.status = 0;
+
+    fcontext_destroy(off_req_state);
+    fcontext_destroy(filler_req_state);
+
+  }
+  /* turn off ax */
+  running_signal = false;
+  pthread_join(ax_td, NULL);
+
+  fcontext_destroy_proxy(self);
+}
+
+void blocking_execution(int num_requests){
+  desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
+  ax_comp on_comp;
+
+  fcontext_state_t *self = fcontext_create_proxy();
+  fcontext_transfer_t offload_req_xfer;
+  fcontext_state_t *off_req_state;
+  fcontext_transfer_t filler_req_xfer;
+  fcontext_state_t *filler_req_state;
+
+  offload_request_args off_args;
+  filler_request_args filler_args;
+
+  int linked_list_size = 10;
+
+  linked_list *ll = ll_init();
+
+  bool running_signal = true;
+
+  pthread_t ax_td;
+  ax_setup_args ax_args;
+
+  ax_args.offload_time = 2100;
+  ax_args.running = &running_signal;
+  ax_args.pp_desc = &sub_desc;
+
+  create_thread_pinned(&ax_td, blocking_emul_ax, &ax_args, 20);
+
+  populate_linked_list_ascending_values(ll, linked_list_size);
+
+  for(int i=0; i<num_requests; i++){
+
+    off_args.pp_desc = &sub_desc;
+    off_args.comp = &on_comp;
+    off_args.id = i;
+    off_args.ll = ll;
+
+    filler_args.comp = &on_comp;
+
+    off_req_state = fcontext_create(blocking_offload_request); // start offload req
+    offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
+
+    on_comp.status = 0;
+
+    fcontext_destroy(off_req_state);
+    fcontext_destroy(filler_req_state);
+
+  }
+  /* turn off ax */
+  running_signal = false;
+  pthread_join(ax_td, NULL);
+
+  fcontext_destroy_proxy(self);
+}
+
+void nothing_execution(int num_requests){
+  desc *sub_desc = NULL; /* this is implicitly the portal, any assignments notify the accelerator*/
+  ax_comp on_comp;
+
+  fcontext_state_t *self = fcontext_create_proxy();
+  fcontext_transfer_t offload_req_xfer;
+  fcontext_state_t *off_req_state;
+  fcontext_transfer_t filler_req_xfer;
+  fcontext_state_t *filler_req_state;
+
+  offload_request_args off_args;
+  filler_request_args filler_args;
+
+  int linked_list_size = 10;
+
+  linked_list *ll = ll_init();
+
+  bool running_signal = true;
+
+  pthread_t ax_td;
+  ax_setup_args ax_args;
+
+  ax_args.offload_time = 2100;
+  ax_args.running = &running_signal;
+  ax_args.pp_desc = &sub_desc;
+
+  create_thread_pinned(&ax_td, blocking_emul_ax, &ax_args, 20);
+
+  populate_linked_list_ascending_values(ll, linked_list_size);
+
+  for(int i=0; i<num_requests; i++){
+
+    off_args.pp_desc = &sub_desc;
+    off_args.comp = &on_comp;
+    off_args.id = i;
+    off_args.ll = ll;
+
+    filler_args.comp = &on_comp;
+
+    off_req_state = fcontext_create(offload_request); // start offload req
+    offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
+
     filler_req_state = fcontext_create(pollution_filler_request); // start filler req
     filler_req_xfer = fcontext_swap(filler_req_state->context, &filler_args);
 
@@ -240,13 +356,21 @@ void polluted_execution(int num_requests){
 
 
 int main(int argc, char **argv){
+  {
+    PRINT("Blocking ");
+    time_code_region(NULL, blocking_execution(1000), NULL, 100);
+    // blocking_execution(1000);
+  }
 
+  {
+  PRINT("Nothing ");
+  time_code_region(NULL, polluted_execution(1000), NULL, 100);
+  }
 
-
-  /* pollution */
-
-  polluted_execution(1000);
-
+  {
+  PRINT("Polluted ");
+  time_code_region(NULL, polluted_execution(1000), NULL, 100);
+  }
 
 
 
