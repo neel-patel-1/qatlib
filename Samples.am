@@ -257,14 +257,9 @@ compress_crc_LDADD = $(COMMON_SAMPLE_LDFLAGS) -lm -laccel-config libcpa_sample_c
 noinst_PROGRAMS += uarch_contention
 
 uarch_contention_SOURCES = \
-	uarch_contention_measurement/main.c \
-	$(srcdir)/src/thread_utils.c
-	$(srcdir)/idxd/test/libaccfg.c \
-	$(srcdir)/idxd/test/core.c \
-	$(srcdir)/idxd/test/dsa.c \
-	$(srcdir)/idxd/util/log.c \
-	$(srcdir)/idxd/test/accel_test.c \
-	$(srcdir)/idxd/test/dsa_prep.c \
+	$(srcdir)/uarch_contention_measurement/main.c \
+	$(srcdir)/src/thread_utils.c \
+	$(srcdir)/src/context_fast.S \
 	$(srcdir)/fcontext/src/asm/jump_x86_64_sysv_elf_gas.S \
 	$(srcdir)/fcontext/src/asm/make_x86_64_sysv_elf_gas.S \
 	$(srcdir)/fcontext/src/asm/ontop_x86_64_sysv_elf_gas.S \
@@ -277,7 +272,6 @@ uarch_contention_CFLAGS = \
 	-I$(srdir)/idxd \
 	-I$(srcdir)/accfg \
 	-I$(srcdir)/fcontext/inc \
-	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/include \
 	$(COMMON_SAMPLE_INCLUDES) \
 	$(COMMON_SAMPLE_CFLAGS) \
 	$(COMMON_FLAGS) \

@@ -70,15 +70,17 @@ void blocking_emul_ax(void *arg){
 void offload_request(fcontext_transfer_t arg){
   offload_request_args *args = (offload_request_args *)arg.data;
   desc **pp_desc = args->pp_desc;
+  fcontext_t parent = arg.prev_context;
 
   ax_comp *comp = args->comp;
   desc off_desc = {.comp = comp, .id = args->id};
 
   comp->status = 0;
-  *pp_desc = off_desc;
+  *pp_desc = &off_desc;
   while(*pp_desc != NULL){ _mm_pause(); }
   PRINT_DBG("Request id: %d submitted\n", off_desc.id);
 
+  fcontext_swap(parent, NULL);
 }
 
 void filler_request(fcontext_transfer_t arg){
@@ -87,6 +89,8 @@ void filler_request(fcontext_transfer_t arg){
 
   while(comp->status == 0){ _mm_pause();}
   PRINT_DBG("Request completed\n");
+
+  fcontext_swap(arg.prev_context, NULL);
 }
 
 
@@ -97,21 +101,34 @@ int main(int argc, char **argv){
 
   pthread_t ax_td;
   ax_setup_args ax_args;
+
+  ax_comp on_comp;
+
+  fcontext_transfer_t offload_req_xfer;
+  fcontext_state_t *off_req_state;
+  fcontext_transfer_t filler_req_xfer;
+  fcontext_state_t *filler_req_state;
+
+  offload_request_args off_args;
+  filler_request_args filler_args;
+
+  off_args.pp_desc = &sub_desc;
+  off_args.comp = &on_comp;
+  off_args.id = 0;
+
+  filler_args.comp = &on_comp;
+
   ax_args.offload_time = 2100;
   ax_args.running = &running_signal;
   ax_args.pp_desc = &sub_desc;
 
   create_thread_pinned(&ax_td, blocking_emul_ax, &ax_args, 20);
 
-  ax_comp on_comp;
-  on_comp.status = 0;
-  desc off_desc;
-  off_desc.id = 0;
-  sub_desc = &off_desc;
-  off_desc.comp = &on_comp;
+  off_req_state = fcontext_create(offload_request);
+  offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
 
-  while(on_comp.status == 0){ _mm_pause();}
-  PRINT_DBG("Request id: %d completed\n", off_desc.id);
+  filler_req_state = fcontext_create(filler_request);
+  filler_req_xfer = fcontext_swap(filler_req_state->context, &filler_args);
 
   /* turn off ax */
   running_signal = false;
