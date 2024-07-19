@@ -172,7 +172,7 @@ void offload_request(fcontext_transfer_t arg){
 
   /* Execute post offload kernel */
   /* post-process a linked list */
-  ll_print(ll);
+  // ll_print(ll);
   node *cur_node = ll->head;
   while(cur_node != NULL){
     cur_node = cur_node->next;
