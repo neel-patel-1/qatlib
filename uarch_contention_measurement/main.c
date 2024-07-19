@@ -376,13 +376,13 @@ void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_
   ax_comp on_comp;
 
   fcontext_state_t *self = fcontext_create_proxy();
-  fcontext_transfer_t offload_req_xfer;
-  fcontext_state_t *off_req_state;
-  fcontext_transfer_t filler_req_xfer;
-  fcontext_state_t *filler_req_state;
+  fcontext_transfer_t *offload_req_xfer;
+  fcontext_state_t **off_req_state;
+  fcontext_transfer_t *filler_req_xfer;
+  fcontext_state_t **filler_req_state;
 
-  offload_request_args off_args;
-  filler_request_args filler_args;
+  offload_request_args off_args[num_requests];
+  filler_request_args filler_args[num_requests];
 
   int linked_list_size = 10;
 
@@ -401,27 +401,44 @@ void execution(int num_requests, fcontext_fn_t offload_fn, fcontext_fn_t filler_
 
   populate_linked_list_ascending_values(ll, linked_list_size);
 
+  /* preallocate args */
+  for(int i=0; i<num_requests; i++){
+    off_args[i].pp_desc = &sub_desc;
+    off_args[i].comp = &on_comp;
+    off_args[i].id = i;
+    off_args[i].ll = ll;
+
+    filler_args[i].comp = &on_comp;
+  }
+
+  /* Pre-create the contexts */
+  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * num_requests);
+  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * num_requests);
+  filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * num_requests);
+  filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * num_requests);
+
+  for(int i=0; i<num_requests; i++){
+    off_req_state[i] = fcontext_create(offload_fn);
+    if(filler_fn != NULL)
+      filler_req_state[i] = fcontext_create(filler_fn);
+  }
+
   for(int i=0; i<num_requests; i++){
 
-    off_args.pp_desc = &sub_desc;
-    off_args.comp = &on_comp;
-    off_args.id = i;
-    off_args.ll = ll;
+    offload_req_xfer[i] = fcontext_swap(off_req_state[i]->context, &off_args);
 
-    filler_args.comp = &on_comp;
+    if(filler_fn != NULL){
 
-    off_req_state = fcontext_create(offload_fn); // start offload req
-    offload_req_xfer = fcontext_swap(off_req_state->context, &off_args);
+      filler_req_xfer[i] = fcontext_swap(filler_req_state[i]->context, &filler_args);
 
-    filler_req_state = fcontext_create(filler_fn); // start filler req
-    filler_req_xfer = fcontext_swap(filler_req_state->context, &filler_args);
+      offload_req_xfer[i] = fcontext_swap(offload_req_xfer[i].prev_context, NULL); // resume offload req
 
-    offload_req_xfer = fcontext_swap(offload_req_xfer.prev_context, NULL); // resume offload req
+    }
 
     on_comp.status = 0;
 
-    fcontext_destroy(off_req_state);
-    fcontext_destroy(filler_req_state);
+    fcontext_destroy(off_req_state[i]);
+    fcontext_destroy(filler_req_state[i]);
 
   }
   /* turn off ax */
@@ -437,7 +454,9 @@ int main(int argc, char **argv){
   {
     PRINT("Blocking ");
     time_code_region(NULL, blocking_execution(1000), NULL, 100);
-    // blocking_execution(1000);
+  }
+  {
+    time_code_region(NULL, execution(1000, blocking_offload_request, NULL), NULL, 100);
   }
 
   {
