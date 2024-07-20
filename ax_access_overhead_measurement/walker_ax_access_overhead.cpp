@@ -97,10 +97,32 @@ static inline void ll_dynamic_rank(node *head){
 
 }
 
+static inline void intersect_posting_lists(node *intersected, node *head1, node *head2){
+  node *cur1 = head1;
+  node *cur2 = head2;
+  node *cur3 = intersected;
+  while(cur1 != NULL && cur2 != NULL){
+    if(cur1->docID == cur2->docID){
+      cur3->docID = cur1->docID;
+      cur3->next = (node *)malloc(sizeof(node));
+      cur3 = cur3->next;
+      cur1 = cur1->next;
+      cur2 = cur2->next;
+    }else if(cur1->docID < cur2->docID){
+      cur1 = cur1->next;
+    }else{
+      cur2 = cur2->next;
+    }
+  }
+  cur3->next = NULL;
+}
+
 int main(){
 
   node *head;
   int num_nodes = 512;
+
+  PRINT("LLC linked list simple \n");
   {
     time_code_region(
       head = build_llc_ll(num_nodes),
@@ -111,6 +133,7 @@ int main(){
 
   }
 
+  PRINT("Host linked list simple \n");
   {
     time_code_region(
       head = build_host_ll(num_nodes),
@@ -120,6 +143,7 @@ int main(){
     );
   }
 
+  PRINT("LLC linked list dynamic \n");
   {
     time_code_region(
       head = build_llc_ll(num_nodes),
@@ -129,12 +153,26 @@ int main(){
     );
 
   }
-
+  PRINT("Host linked list dynamic \n");
   {
     time_code_region(
       head = build_host_ll(num_nodes),
       ll_dynamic_rank(head),
       free_ll(head),
+      1000
+    );
+  }
+
+  PRINT("Intersecting posting lists\n");
+  node *head1;
+  node *head2 ; //= build_llc_ll(num_nodes);
+  node *intersected; // = (node *)malloc(sizeof(node) * num_nodes);
+  {
+    time_code_region(
+      head1 = build_host_ll(num_nodes); head2 = build_host_ll(num_nodes);
+        intersected = (node *)malloc(sizeof(node) * num_nodes),
+      intersect_posting_lists(intersected, head1, head2),
+      free_ll(intersected); free_ll(head1); free_ll(head2),
       1000
     );
   }
