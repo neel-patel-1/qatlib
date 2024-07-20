@@ -10,7 +10,7 @@
 typedef struct _node{
   int docID;
   struct _node *next;
-  uint8_t padding[512 - sizeof(int) - sizeof(struct _node *)];
+  uint8_t padding[64 - sizeof(int) - sizeof(struct _node *)];
 } node;
 
 bool gDebugParam = true;
@@ -39,7 +39,24 @@ node *build_llc_ll(int length){
   return head;
 }
 
-void free_llc_ll(node *head){
+node *build_host_ll(int length){
+  node *head = (node *)malloc(sizeof(node));
+  node *cur = head;
+  node *next = NULL;
+  int i;
+  for(i=0; i<length-1; i++){
+    cur->docID = i;
+    next = (node *)malloc(sizeof(node));
+    cur->next = next;
+    cur = next;
+  }
+  cur->docID = length-1;
+  cur->next = NULL;
+
+  return head;
+}
+
+void free_ll(node *head){
   node *cur = head;
   node *next = NULL;
   while(cur != NULL){
@@ -60,17 +77,25 @@ static inline void ll_kernel(node *head){
 int main(){
 
   node *head;
+  int num_nodes = 512;
   {
     time_code_region(
-      head = build_llc_ll(512),
+      head = build_llc_ll(num_nodes),
       ll_kernel(head),
-      free_llc_ll(head),
+      free_ll(head),
       1000
     );
 
   }
-  // head = build_llc_ll(512);
-  // ll_kernel(head);
-  // free_llc_ll(head);
+
+  {
+    time_code_region(
+      head = build_host_ll(num_nodes),
+      ll_kernel(head),
+      free_ll(head),
+      1000
+    );
+  }
+
   return 0;
 }
