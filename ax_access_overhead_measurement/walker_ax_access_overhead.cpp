@@ -31,8 +31,9 @@ int main(){
     cpy_dst = tgt;
     tgt = (node *)malloc(sizeof(node));
   }
-  tgt->docID = length -1;
-  tgt->next = NULL;
+  cpy_src->docID = length-1; /* left with a hanging tgt to cpy to*/
+  cpy_src->next = NULL;
+  dsa_llc_realloc(cpy_dst, cpy_src, sizeof(node));
 
   node *cur = head;
   while(cur != NULL){
