@@ -115,7 +115,7 @@ int main(){
       NULL,
       offload_tax(dml_job_ptr, dst, src, serialized.size()),
       NULL,
-      1000
+      10000
     );
   }
   {
@@ -125,7 +125,7 @@ int main(){
       gen_and_deser_ax(&desered_key),
       furc_hash(desered_key, request.key().size(), 16),
       NULL,
-      1000
+      10000
     );
   }
 
