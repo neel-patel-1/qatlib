@@ -1,34 +1,43 @@
 #include "dsa_alloc.h"
+#include "print_utils.h"
 
 #include <cstdlib>
+#include <cstring>
 
 
 
 typedef struct _node{
-  uint32_t docID;
+  int docID;
   struct _node *next;
+  uint8_t padding[512 - sizeof(int) - sizeof(struct _node *)];
 } node;
 
 bool gDebugParam = true;
 int main(){
 
-  node *src_node_1 = (node *)malloc(sizeof(node));
-  node *src_node_2 = (node *)malloc(sizeof(node));
-  node *dst_node_1 = (node *)malloc(sizeof(node));
-  node *dst_node_2 = (node *)malloc(sizeof(node));
+  node *cpy_src = (node *)malloc(sizeof(node));
+  node *cpy_dst = (node *)malloc(sizeof(node));
+  node *tgt = (node *)malloc(sizeof(node));
+  node *head = cpy_dst;
 
-  node *head = src_node_1;
+  int length = 10;
+  int i;
+  for(i=0; i<length-1; i++){
+    cpy_src->docID = i;
+    cpy_src->next = tgt;
 
-  src_node_1->next = dst_node_2;
-  src_node_1->docID = 1;
+    dsa_llc_realloc(cpy_dst, cpy_src, sizeof(node));
+    PRINT_DBG("docID: %d\n", cpy_dst->docID);
+    cpy_dst = tgt;
+    tgt = (node *)malloc(sizeof(node));
+  }
+  tgt->docID = length -1;
+  tgt->next = NULL;
 
-  src_node_2->next = NULL;
-  src_node_2->docID = 2;
-
-  /*traverse the llc linked_list*/
-
-  dsa_llc_realloc(dst_node_1, src_node_1, sizeof(node));
-  dsa_llc_realloc(dst_node_2, src_node_2, sizeof(node));
-
+  node *cur = head;
+  while(cur != NULL){
+    PRINT("docID: %d\n", cur->docID);
+    cur = cur->next;
+  }
   return 0;
 }

@@ -23,6 +23,9 @@ void dsa_llc_realloc(void *dst, void *src, int size){
   dml_job_ptr->destination_first_ptr  = (uint8_t *)dst;
   dml_job_ptr->flags = DML_FLAG_PREFETCH_CACHE;
   status = dml_execute_job(dml_job_ptr, DML_WAIT_MODE_BUSY_POLL);
+  if(status != DML_STATUS_OK){
+    PRINT_ERR("dml_execute_job failed: %u\n", status);
+  }
 
 }
 
