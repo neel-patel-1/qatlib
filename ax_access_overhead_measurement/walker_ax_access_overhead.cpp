@@ -66,10 +66,33 @@ void free_ll(node *head){
   }
 }
 
-static inline void ll_kernel(node *head){
+static inline void ll_simple(node *head){
   node *cur = head;
   while(cur != NULL){
     cur = cur->next;
+  }
+
+}
+
+static inline int dot_product(uint8_t *a, uint8_t *b, int size){
+  int i;
+  int sum = 0;
+  for(i=0; i<size; i++){
+    sum += a[i] * b[i];
+  }
+  return sum;
+}
+
+static inline void ll_dynamic_rank(node *head){
+  node *cur = head;
+  int sums[512];
+  int idx= 0;
+  while(cur != NULL){
+    int sum = dot_product(cur->padding,
+      cur->padding + sizeof(cur->padding)/2, sizeof(cur->padding)/2);
+    cur = cur->next;
+
+    sums[idx++] = sum;
   }
 
 }
@@ -81,7 +104,7 @@ int main(){
   {
     time_code_region(
       head = build_llc_ll(num_nodes),
-      ll_kernel(head),
+      ll_simple(head),
       free_ll(head),
       1000
     );
@@ -91,7 +114,26 @@ int main(){
   {
     time_code_region(
       head = build_host_ll(num_nodes),
-      ll_kernel(head),
+      ll_simple(head),
+      free_ll(head),
+      1000
+    );
+  }
+
+  {
+    time_code_region(
+      head = build_llc_ll(num_nodes),
+      ll_dynamic_rank(head),
+      free_ll(head),
+      1000
+    );
+
+  }
+
+  {
+    time_code_region(
+      head = build_host_ll(num_nodes),
+      ll_dynamic_rank(head),
       free_ll(head),
       1000
     );
