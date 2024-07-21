@@ -294,8 +294,6 @@ void blocking_router_request(fcontext_transfer_t arg){
   while(comp->status == COMP_STATUS_PENDING){
     _mm_pause();
   }
-
-  PRINT_DBG("Hashing payload:%s %s\n", dst_payload, query.c_str());
   furc_hash((const char *)dst_payload, query.size(), 16);
 
   offloads_completed ++;
@@ -497,6 +495,7 @@ int main(){
   offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
   off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
+
   create_contexts(off_req_state, total_requests, blocking_router_request);
 
   execute_blocking_requests_closed_system_with_sampling(
@@ -513,6 +512,7 @@ int main(){
 
   /* teardown */
   free_contexts(off_req_state, total_requests);
+  free(offload_req_xfer);
   free(comps);
   for(int i=0; i<total_requests; i++){
     free(off_args[i]);
@@ -520,44 +520,48 @@ int main(){
   }
   free(off_args);
   free(dst_bufs);
-  free(offload_req_xfer);
 
 
   /* switch to fill router requests */
   /* Pre-allocate the CRs */
   /* Pre-allocate the payloads */
-  // allocate_pre_deserialized_payloads(total_requests, dst_bufs, query);
+  allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
 
-  // /* Pre-allocate the CRs */
-  // allocate_crs(total_requests, comps);
+  /* Pre-allocate the CRs */
+  allocate_crs(total_requests, &comps);
 
-  // /* Pre-allocate the request args */
-  // allocate_offload_requests(total_requests, off_args, comps);
+  /* Pre-allocate the request args */
+  allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
 
-  // offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-  // create_contexts(off_req_state, total_requests, yielding_router_request);
+  /* Pre-create the contexts */
+  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
+  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
-  // execute_yielding_requests_closed_system_with_sampling(
-  //   requests_sampling_interval, total_requests,
-  //   sampling_interval_completion_times, sampling_interval_timestamps,
-  //   comps, off_args,
-  //   offload_req_xfer, off_req_state);
 
-  // calculate_rps_from_samples(
-  //   sampling_interval_completion_times,
-  //   sampling_intervals,
-  //   requests_sampling_interval,
-  //   2100000000);
+  create_contexts(off_req_state, total_requests, blocking_router_request);
 
-  // /* teardown */
-  // free_contexts(off_req_state, total_requests);
-  // free(comps);
-  // for(int i=0; i<total_requests; i++){
-  //   free(off_args[i]);
-  //   free(dst_bufs[i]);
-  // }
-  // free(off_args);
-  // free(dst_bufs);
+  execute_yielding_requests_closed_system_with_sampling(
+    requests_sampling_interval, total_requests,
+    sampling_interval_completion_times, sampling_interval_timestamps,
+    comps, off_args,
+    offload_req_xfer, off_req_state);
+
+  calculate_rps_from_samples(
+    sampling_interval_completion_times,
+    sampling_intervals,
+    requests_sampling_interval,
+    2100000000);
+
+  /* teardown */
+  free_contexts(off_req_state, total_requests);
+  free(offload_req_xfer);
+  free(comps);
+  for(int i=0; i<total_requests; i++){
+    free(off_args[i]);
+    free(dst_bufs[i]);
+  }
+  free(off_args);
+  free(dst_bufs);
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
