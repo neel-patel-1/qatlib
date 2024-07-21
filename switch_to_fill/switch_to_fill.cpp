@@ -574,14 +574,14 @@ int main(){
       2100000000);
 
     // free_contexts(cpu_req_state, total_requests);
-    // for(int i=0; i<total_requests; i++){
-    //   delete serializedMCReqs[i];
-    //   delete serializedMCReqStrings[i];
-    //   free(cpu_args[i]);
-    // }
-    // free(cpu_args);
-    // free(serializedMCReqs);
-    // free(serializedMCReqStrings);
+    for(int i=0; i<total_requests; i++){
+      delete serializedMCReqs[i];
+      delete serializedMCReqStrings[i];
+      free(cpu_args[i]);
+    }
+    free(cpu_args);
+    free(serializedMCReqs);
+    free(serializedMCReqStrings);
     // fcontext_destroy(self);
   }
 
