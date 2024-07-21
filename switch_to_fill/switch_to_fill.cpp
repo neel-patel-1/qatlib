@@ -151,6 +151,11 @@ void *nonblocking_emul_ax(void *arg){
   ax_comp *next_completed_offload_comp = NULL;
   bool *keep_running = args->ax_running;
 
+  /* Debugging offload duration */
+  uint64_t offloadDurationSum = 0;
+  uint64_t totalOffloads = 0;
+  uint64_t rejected_offloads = 0;
+
   while(*keep_running){
 
     if(offload_in_flight){
@@ -163,11 +168,12 @@ void *nonblocking_emul_ax(void *arg){
         next_completed_offload_comp = offload_in_flight_list.front()->comp;
         next_completed_offload_comp->status = COMP_STATUS_COMPLETED;
         in_flight--;
-        PRINT_DBG("Offload duration: %ld\n",
-          cur_time - offload_in_flight_list.front()->start_time);
-        PRINT_DBG("next_offload_completion_time: %ld comp_time: %ld cur_time: %ld start_time %ld\n"
-          , next_offload_completion_time,
-          offload_in_flight_list.front()->comp_time,  cur_time, offload_in_flight_list.front()->start_time);
+
+        if( true == gDebugParam){
+          offloadDurationSum += cur_time - offload_in_flight_list.front()->start_time;
+        }
+
+
           /*
             if we have any other offloads in flight
               make sure we let ourselves know
@@ -175,7 +181,6 @@ void *nonblocking_emul_ax(void *arg){
           */
         offload_in_flight_list.pop_front();
         if( offload_in_flight_list.size() > 0 ){
-          PRINT_DBG("Next offload in flight\n");
           offload_in_flight = true;
           next_offload_completion_time = offload_in_flight_list.front()->comp_time;
         } else {
@@ -207,15 +212,18 @@ void *nonblocking_emul_ax(void *arg){
         if(offload_in_flight_list.size()  == 1 ){
           next_offload_completion_time = comp_time;
         }
-        PRINT_DBG("Offload accepted\n");
+        totalOffloads++;
       } else {
         submit_status = SUBMIT_FAIL;
         submit_flag = OFFLOAD_RECEIVED; /*received submission*/
-        PRINT_DBG("Failed to accept offload\n");
+        rejected_offloads++;
       }
 
     }
   }
+
+  PRINT_DBG("Avg_Offload_Duration: %ld Rejected_Offloads: %ld\n",
+          offloadDurationSum / totalOffloads, rejected_offloads );
   return NULL;
 }
 
