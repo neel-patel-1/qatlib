@@ -338,8 +338,7 @@ void execute_yielding_requests_closed_system_with_sampling(
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state, fcontext_transfer_t *filler_req_xfer,
-  fcontext_state_t **filler_req_state)
+  fcontext_state_t **off_req_state)
 {
 
   int next_unstarted_req_idx = 0;
@@ -367,22 +366,21 @@ void execute_yielding_requests_closed_system_with_sampling(
 
   fcontext_destroy(self);
 
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
-
 }
 
 void execute_blocking_requests_closed_system_with_sampling(
   int requests_sampling_interval, int total_requests,
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, offload_request_args **off_args,
-  fcontext_state_t *self, fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state, fcontext_transfer_t *filler_req_xfer,
-  fcontext_state_t **filler_req_state)
+  fcontext_transfer_t *offload_req_xfer,
+  fcontext_state_t **off_req_state)
 {
 
   int next_unstarted_req_idx = 0;
   int next_request_offload_to_complete_idx = 0;
   int sampling_interval = 0;
+
+  fcontext_state_t *self = fcontext_create_proxy();
 
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
   sampling_interval++;
@@ -401,6 +399,12 @@ void execute_blocking_requests_closed_system_with_sampling(
       next_unstarted_req_idx++;
     }
   }
+  if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
+    sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
+    sampling_interval++;
+  }
+
+  fcontext_destroy(self);
 
   PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
 
@@ -441,8 +445,6 @@ int main(){
   offload_request_args **off_args;
   fcontext_transfer_t *offload_req_xfer;
   fcontext_state_t **off_req_state;
-  fcontext_transfer_t *filler_req_xfer;
-  fcontext_state_t **filler_req_state;
 
 
   int next_unstarted_req_idx = 0;
@@ -473,22 +475,20 @@ int main(){
   /* Pre-create the contexts */
   offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
   off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-  filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-  filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
   create_contexts(off_req_state, total_requests, blocking_router_request);
 
-  // execute_blocking_requests_closed_system_with_sampling(
-  //   requests_sampling_interval, total_requests,
-  //   sampling_interval_completion_times, sampling_interval_timestamps,
-  //   comps, off_args,
-  //   self, offload_req_xfer, off_req_state, filler_req_xfer, filler_req_state);
+  execute_blocking_requests_closed_system_with_sampling(
+    requests_sampling_interval, total_requests,
+    sampling_interval_completion_times, sampling_interval_timestamps,
+    comps, off_args,
+    offload_req_xfer, off_req_state);
 
-  // calculate_rps_from_samples(
-  //   sampling_interval_completion_times,
-  //   sampling_intervals,
-  //   requests_sampling_interval,
-  //   2100000000);
+  calculate_rps_from_samples(
+    sampling_interval_completion_times,
+    sampling_intervals,
+    requests_sampling_interval,
+    2100000000);
   // stop_non_blocking_ax(&ax_td, &ax_running);
 
 
@@ -496,17 +496,17 @@ int main(){
   // start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
   create_contexts(off_req_state, total_requests, yielding_router_request);
 
-  execute_yielding_requests_closed_system_with_sampling(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    offload_req_xfer, off_req_state, filler_req_xfer, filler_req_state);
+  // execute_yielding_requests_closed_system_with_sampling(
+  //   requests_sampling_interval, total_requests,
+  //   sampling_interval_completion_times, sampling_interval_timestamps,
+  //   comps, off_args,
+  //   offload_req_xfer, off_req_state);
 
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
+  // calculate_rps_from_samples(
+  //   sampling_interval_completion_times,
+  //   sampling_intervals,
+  //   requests_sampling_interval,
+  //   2100000000);
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
