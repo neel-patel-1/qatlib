@@ -71,6 +71,7 @@ typedef struct _ax_params {
 typedef struct _offload_request_args{
   ax_comp *comp;
   char *dst_payload;
+  int id;
 } offload_request_args;
 typedef struct _cpu_request_args{
   router::RouterRequest *request;
@@ -271,6 +272,7 @@ void yielding_router_request(fcontext_transfer_t arg){
   offload_request_args *args = (offload_request_args *)arg.data;
   struct completion_record * comp = args->comp;
   char *dst_payload = args->dst_payload;
+  int id = args->id;
   string query = "/region/cluster/foo:key|#|etc";
 
   int status = submit_offload(comp, dst_payload);
@@ -402,15 +404,14 @@ void execute_blocking_requests_closed_system_with_sampling(
 
   while(offloads_completed < total_requests){
     if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
-      // fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
       next_request_offload_to_complete_idx++;
       if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
         sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
         sampling_interval++;
       }
     } else if(next_unstarted_req_idx < total_requests){
-      offload_req_xfer[next_unstarted_req_idx] =
-        fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+
+      fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
       next_unstarted_req_idx++;
     }
   }
@@ -473,6 +474,9 @@ void allocate_crs(int total_requests, ax_comp **p_comps){
     PRINT_DBG("Error allocating completion records\n");
     exit(1);
   }
+  for(int i=0; i<total_requests; i++){
+    (*p_comps)[i].status = COMP_STATUS_PENDING;
+  }
 }
 
 void allocate_offload_requests(int total_requests, offload_request_args ***p_off_args, ax_comp *comps, char **dst_bufs){
@@ -481,6 +485,7 @@ void allocate_offload_requests(int total_requests, offload_request_args ***p_off
     (*p_off_args)[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
     (*p_off_args)[i]->comp = &(comps[i]);
     (*p_off_args)[i]->dst_payload = dst_bufs[i];
+    (*p_off_args)[i]->id = i;
   }
 }
 
@@ -500,8 +505,8 @@ void calculate_rps_from_samples(
   uint64_t avg, sum =0 ;
 
   for(int i=0; i<sampling_intervals; i++){
-    // PRINT_DBG("Sampling Interval %d: %ld\n", i,
-      // sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
+    PRINT_DBG("Sampling Interval %d: %ld\n", i,
+      sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
     sum += sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i];
   }
   avg = sum / (sampling_intervals);
@@ -522,16 +527,19 @@ int main(){
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
   int sampling_interval = 0;
 
+  fcontext_state_t *self = fcontext_create_proxy();
+  char**dst_bufs;
+  ax_comp *comps;
+  offload_request_args **off_args;
+  fcontext_transfer_t *offload_req_xfer;
+  fcontext_state_t **off_req_state;
+
 
   string query = "/region/cluster/foo:key|#|etc";
   string value = "bar";
-  {
-    fcontext_state_t *self = fcontext_create_proxy();
-    char**dst_bufs;
-    ax_comp *comps;
-    offload_request_args **off_args;
-    fcontext_transfer_t *offload_req_xfer;
-    fcontext_state_t **off_req_state;
+
+    self = fcontext_create_proxy();
+
     /*
       Pre-allocate all serialized requests used by the cpu requests
 
@@ -583,15 +591,9 @@ int main(){
     free(serializedMCReqs);
     free(serializedMCReqStrings);
     // fcontext_destroy(self);
-  }
 
-  {
-    fcontext_state_t *self = fcontext_create_proxy();
-    char**dst_bufs;
-    ax_comp *comps;
-    offload_request_args **off_args;
-    fcontext_transfer_t *offload_req_xfer;
-    fcontext_state_t **off_req_state;
+
+
 
     offloads_completed = 0;
     allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
@@ -603,7 +605,6 @@ int main(){
     allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
 
     /* Pre-create the contexts */
-    offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
     off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
     create_contexts(off_req_state, total_requests, blocking_router_request);
@@ -612,7 +613,7 @@ int main(){
       requests_sampling_interval, total_requests,
       sampling_interval_completion_times, sampling_interval_timestamps,
       comps, off_args,
-      offload_req_xfer, off_req_state, self);
+      NULL, off_req_state, self);
 
     calculate_rps_from_samples(
       sampling_interval_completion_times,
@@ -622,7 +623,6 @@ int main(){
 
     /* teardown */
     free_contexts(off_req_state, total_requests);
-    free(offload_req_xfer);
     free(comps);
     for(int i=0; i<total_requests; i++){
       free(off_args[i]);
@@ -630,18 +630,13 @@ int main(){
     }
     free(off_args);
     free(dst_bufs);
-    fcontext_destroy(self);
-  }
+    // fcontext_destroy(self);
 
-  {
+
+
     /* switch to fill router requests */
     /*reset offload counter*/
-    fcontext_state_t *self = fcontext_create_proxy();
-    char**dst_bufs;
-    ax_comp *comps;
-    offload_request_args **off_args;
-    fcontext_transfer_t *offload_req_xfer;
-    fcontext_state_t **off_req_state;
+    self = fcontext_create_proxy();
 
     offloads_completed = 0;
 
@@ -683,7 +678,7 @@ int main(){
     free(off_args);
     free(dst_bufs);
     fcontext_destroy(self);
-  }
+
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
