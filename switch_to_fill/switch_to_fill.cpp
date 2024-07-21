@@ -232,32 +232,69 @@ void blocking_offload(){
   comp->status = COMP_STATUS_PENDING;
   compl_addr = (uint64_t)comp;
   submit_flag = OFFLOAD_REQUESTED;
+  int num_retries = 3, retries_remaining = num_retries;
+
+retry:
   while(submit_flag.load() == OFFLOAD_REQUESTED){
     _mm_pause();
   }
 
+  if(submit_status == SUBMIT_FAIL && retries_remaining > 0){
+    retries_remaining --;
+    goto retry;
+  } else if(retries_remaining == 0){
+    PRINT_DBG("Offload request failed after %d retries\n", num_retries);
+    goto end;
+  }
+  retries_remaining = num_retries;
+
   while(comp->status == COMP_STATUS_PENDING){
     _mm_pause();
   }
+
+end:
+  free(comp);
+  return;
+}
+
+void non_blocking_offload(){
+  struct completion_record * comp = (struct completion_record *)malloc(sizeof(struct completion_record));
+  comp->status = COMP_STATUS_PENDING;
+  compl_addr = (uint64_t)comp;
+  submit_flag = OFFLOAD_REQUESTED;
+  while(submit_flag.load() == OFFLOAD_REQUESTED){
+    _mm_pause();
+  }
+}
+
+void start_non_blocking_ax(pthread_t *ax_td, bool *ax_running_flag, uint64_t offload_duration, int max_inflights){
+  *ax_running_flag = true;
+  ax_params *params = (ax_params *)malloc(sizeof(ax_params));
+  params->max_inflights = max_inflights;
+  params->offload_time = offload_duration;
+  params->ax_running = ax_running_flag;
+  create_thread_pinned(ax_td, nonblocking_emul_ax, (void *)params, 0);
+
+}
+
+void stop_non_blocking_ax(pthread_t *ax_td, bool *ax_running_flag){
+  *ax_running_flag = false;
+  pthread_join(*ax_td, NULL);
 }
 
 int main(){
   gDebugParam = true;
   pthread_t ax_td;
-
   bool ax_running = true;
-  ax_params *params = (ax_params *)malloc(sizeof(ax_params));
-  params->max_inflights = 2;
-  params->offload_time = 2100;
-  params->ax_running = &ax_running;
-  create_thread_pinned(&ax_td, nonblocking_emul_ax, (void *)params, 0);
+  int offload_time = 2100;
+  start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
 
   for(int i=0; i<1000; i++)
-    blocking_offload();
+    non_blocking_offload();
 
-  ax_running = false;
+  blocking_offload();
 
-  pthread_join(ax_td, NULL);
+  stop_non_blocking_ax(&ax_td, &ax_running);
 
   return 0;
 }
