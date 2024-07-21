@@ -403,22 +403,11 @@ void execute_blocking_requests_closed_system_with_sampling(
   sampling_interval++;
 
   while(offloads_completed < total_requests){
-    if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
-      next_request_offload_to_complete_idx++;
-      if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
-        sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-        sampling_interval++;
-      }
-    } else if(next_unstarted_req_idx < total_requests){
+    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+    next_unstarted_req_idx++;
+  }
+  sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
 
-      fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
-      next_unstarted_req_idx++;
-    }
-  }
-  if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
-    sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-    sampling_interval++;
-  }
 
 
   PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
@@ -441,19 +430,11 @@ void execute_cpu_requests_closed_system_with_sampling(
 
   while(offloads_completed < total_requests){
 
-    if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
-      sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-      sampling_interval++;
-    }
-    if(next_unstarted_req_idx < total_requests){
-      fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
-      next_unstarted_req_idx++;
-    }
+    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+    next_unstarted_req_idx++;
+
   }
-  if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
-    sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-    sampling_interval++;
-  }
+  sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
 
 
   PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
@@ -567,6 +548,9 @@ int main(){
     cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
     create_contexts(cpu_req_state, total_requests, cpu_router_request);
 
+    requests_sampling_interval = 10000, total_requests = 10000;
+    sampling_intervals = (total_requests / requests_sampling_interval);
+    sampling_interval_timestamps = sampling_intervals + 1;
     offloads_completed = 0;
 
     execute_cpu_requests_closed_system_with_sampling(
@@ -590,10 +574,11 @@ int main(){
     free(cpu_args);
     free(serializedMCReqs);
     free(serializedMCReqStrings);
-    // fcontext_destroy(self);
 
 
-
+    requests_sampling_interval = 10000, total_requests = 10000;
+    sampling_intervals = (total_requests / requests_sampling_interval);
+    sampling_interval_timestamps = sampling_intervals + 1;
 
     offloads_completed = 0;
     allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
@@ -630,13 +615,14 @@ int main(){
     }
     free(off_args);
     free(dst_bufs);
-    // fcontext_destroy(self);
 
 
 
     /* switch to fill router requests */
     /*reset offload counter*/
-    self = fcontext_create_proxy();
+    requests_sampling_interval = 1000, total_requests = 10000;
+    sampling_intervals = (total_requests / requests_sampling_interval);
+    sampling_interval_timestamps = sampling_intervals + 1;
 
     offloads_completed = 0;
 
