@@ -40,6 +40,7 @@
 #define OFFLOAD_REQUESTED 0
 std::atomic<int> submit_flag;
 std::atomic<int> submit_status;
+typedef struct completion_record ax_comp;
 typedef struct _offload_entry{
   uint64_t start_time;
   uint64_t comp_time;
@@ -54,7 +55,7 @@ typedef struct _ax_params {
 void nonblocking_emul_ax(void *arg){
   ax_params *args = (ax_params *)arg;
   bool offload_in_flight = false;
-  offload_entry *in_flight_ents = NULL;
+  offload_entry *earliest_inflight_ent = NULL;
   offload_entry *last_offload_ent = NULL;
   uint64_t next_offload_completion_time = 0;
   int max_inflight = args->max_inflights;
@@ -65,14 +66,23 @@ void nonblocking_emul_ax(void *arg){
     /*
       if time is up for the earliest submitted offload
         notify the offloader
+    */
+    uint64_t cur_time = sampleCoderdtsc();
+    if(cur_time >= next_offload_completion_time){
+      in_flight--;
+    }
+
+    /*
       if we have any other offloads in flight
         make sure we let ourselves know
         make sure we start checking the current time against the time for the next earliest submitted offload
     */
-    in_flight_ents = in_flight_ents->next;
-    if( in_flight_ents != NULL ){
+    earliest_inflight_ent = earliest_inflight_ent->next;
+    if( earliest_inflight_ent != NULL ){
       offload_in_flight = true;
-      next_offload_completion_time = in_flight_ents->comp_time;
+      next_offload_completion_time = earliest_inflight_ent->comp_time;
+    } else {
+      offload_in_flight = false;
     }
 
   }
