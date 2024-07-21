@@ -270,12 +270,11 @@ void yielding_router_request(fcontext_transfer_t arg){
 
   int status = submit_offload(comp, dst_payload);
   if(status == STATUS_FAIL){
+    PRINT_ERR("Offload request failed\n");
     return;
   }
-  while(comp->status == COMP_STATUS_PENDING){
-    _mm_pause();
-  }
   fcontext_swap(arg.prev_context, NULL);
+
 
   furc_hash((const char *)dst_payload, query.size(), 16);
 
@@ -296,7 +295,6 @@ void blocking_router_request(fcontext_transfer_t arg){
   while(comp->status == COMP_STATUS_PENDING){
     _mm_pause();
   }
-  fcontext_swap(arg.prev_context, NULL);
 
   furc_hash((const char *)dst_payload, query.size(), 16);
 
@@ -382,7 +380,7 @@ void calculate_rps_from_samples(
     sum += sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i];
   }
   avg = sum / (sampling_intervals);
-  PRINT_DBG("Average Sampling Interval: %ld\n", avg);
+  PRINT_DBG("AverageExeTimeFor%dRequests: %ld\n", requests_sampling_interval, avg);
   PRINT_DBG("AveRPS: %f\n", (double)(requests_sampling_interval * cycles_per_sec )/ avg);
 }
 
@@ -439,6 +437,7 @@ int main(){
   filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
   filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
+  /* switch to fill router requests */
   create_contexts(off_req_state, total_requests, yielding_router_request);
 
   execute_requests_closed_system_with_sampling(
@@ -452,8 +451,27 @@ int main(){
     sampling_intervals,
     requests_sampling_interval,
     2100000000);
+  // stop_non_blocking_ax(&ax_td, &ax_running);
+
+
+  /* blocking router requests */
+  // start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
+  // create_contexts(off_req_state, total_requests, blocking_router_request);
+
+  // execute_requests_closed_system_with_sampling(
+  //   requests_sampling_interval, total_requests,
+  //   sampling_interval_completion_times, sampling_interval_timestamps,
+  //   comps, off_args,
+  //   self, offload_req_xfer, off_req_state, filler_req_xfer, filler_req_state);
+
+  // calculate_rps_from_samples(
+  //   sampling_interval_completion_times,
+  //   sampling_intervals,
+  //   requests_sampling_interval,
+  //   2100000000);
 
   stop_non_blocking_ax(&ax_td, &ax_running);
+
 
   return 0;
 }
