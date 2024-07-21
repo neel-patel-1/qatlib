@@ -6,6 +6,7 @@
 #include <atomic>
 #include <list>
 #include <cstring>
+#include <x86intrin.h>
 
 /*
   End-to-End Evaluation
@@ -64,11 +65,6 @@ class offload_entry{
   int32_t id;
   ax_comp *comp;
 };
-typedef struct _desc{
-  int32_t id;
-  ax_comp *comp;
-  uint8_t rsvd[52];
-} desc;
 typedef struct _ax_params {
   int max_inflights;
   uint64_t offload_time;
@@ -196,9 +192,11 @@ void *nonblocking_emul_ax(void *arg){
 
       offload_entry *new_ent = new offload_entry(start_time, start_time + offload_time, comp_addr);
       in_flight++;
+      PRINT_DBG("Offload accepted\n");
     } else {
       submit_status = SUBMIT_FAIL;
       submit_flag = OFFLOAD_RECEIVED; /*received submission*/
+      PRINT_DBG("Failed to accept offload\n");
     }
 
   }
@@ -207,7 +205,20 @@ void *nonblocking_emul_ax(void *arg){
 
 int main(){
   pthread_t ax_td;
+
+  ax_params *params = (ax_params *)malloc(sizeof(ax_params));
+  params->max_inflights = 2;
+  params->offload_time = 2100;
   create_thread_pinned(&ax_td, nonblocking_emul_ax, NULL, 0);
+
+  struct completion_record * comp = (struct completion_record *)malloc(sizeof(struct completion_record));
+  comp->status = COMP_STATUS_PENDING;
+  compl_addr = (uint64_t)comp;
+  submit_flag = OFFLOAD_REQUESTED;
+  while(submit_flag.load() == OFFLOAD_REQUESTED){
+    _mm_pause();
+  }
+
   pthread_join(ax_td, NULL);
 
   return 0;
