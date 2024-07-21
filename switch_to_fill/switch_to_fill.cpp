@@ -160,6 +160,8 @@ void *nonblocking_emul_ax(void *arg){
   uint64_t totalOffloads = 0;
   uint64_t rejected_offloads = 0;
 
+  submit_flag = OFFLOAD_RECEIVED;
+
   while(*keep_running){
 
     if(offload_in_flight){
@@ -170,6 +172,7 @@ void *nonblocking_emul_ax(void *arg){
       uint64_t cur_time = sampleCoderdtsc();
       if(cur_time >= next_offload_completion_time){
         next_completed_offload_comp = offload_in_flight_list.front()->comp;
+
         next_completed_offload_comp->status = COMP_STATUS_COMPLETED;
         in_flight--;
 
@@ -206,10 +209,12 @@ void *nonblocking_emul_ax(void *arg){
       if(in_flight < max_inflight ){
         submit_status = SUBMIT_SUCCESS;
         struct completion_record *comp_addr = (struct completion_record *)compl_addr.load();
+
         submit_flag = OFFLOAD_RECEIVED; /*received submission*/
 
         uint64_t comp_time = start_time + offload_time;
         offload_entry *new_ent = new offload_entry(start_time, comp_time, comp_addr);
+
         offload_in_flight_list.push_back(new_ent);
         in_flight++;
         offload_in_flight = true;
@@ -237,6 +242,8 @@ int submit_offload(ax_comp *comp, char *dst_payload){
   compl_addr = (uint64_t)comp;
   submit_flag = OFFLOAD_REQUESTED;
   p_dst_buf = (uint64_t)dst_payload;
+
+
 
 retry:
   while(submit_flag.load() == OFFLOAD_REQUESTED){
@@ -268,8 +275,12 @@ void router_request(fcontext_transfer_t arg){
   while(comp->status == COMP_STATUS_PENDING){
     _mm_pause();
   }
+  fcontext_swap(arg.prev_context, NULL);
+
   furc_hash((const char *)dst_payload, query.size(), 16);
-  return;
+
+  offloads_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
 }
 
 void non_blocking_offload(){
@@ -315,13 +326,14 @@ int main(){
   fcontext_state_t **filler_req_state;
 
   int next_unstarted_req_idx = 0;
+  int next_request_offload_to_complete_idx = 0;
 
   /* Pre-allocate the payloads */
   string query = "/region/cluster/foo:key|#|etc";
   dst_bufs = (char **)malloc(sizeof(char *) * num_requests);
   for(int i=0; i<num_requests; i++){
     dst_bufs[i] = (char *)malloc(sizeof(char) * query.size());
-    memset(dst_bufs[i], 0, query.size());
+    memcpy(dst_bufs[i], query.c_str(), query.size());
   }
 
   /* Pre-allocate the CRs */
@@ -332,7 +344,9 @@ int main(){
     malloc(sizeof(offload_request_args *) * num_requests);
   for(int i=0; i<num_requests; i++){
     off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
-    off_args[i]->comp = &comps[i];
+    off_args[i]->comp = &(comps[i]);
+
+    off_args[i]->comp->status = COMP_STATUS_PENDING;
     off_args[i]->dst_payload = dst_bufs[i];
   }
 
@@ -347,7 +361,14 @@ int main(){
   }
 
   while(offloads_completed < num_requests){
-    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+    if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
+      fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
+      next_request_offload_to_complete_idx++;
+    } else if(next_unstarted_req_idx < num_requests){
+      offload_req_xfer[next_unstarted_req_idx] =
+        fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+      next_unstarted_req_idx++;
+    }
   }
 
   stop_non_blocking_ax(&ax_td, &ax_running);

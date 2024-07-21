@@ -1,10 +1,3 @@
-
-FCONTEXT_SRCS=src/jump_x86_64_sysv_elf_gas.S \
-							src/make_x86_64_sysv_elf_gas.S \
-							src/ontop_x86_64_sysv_elf_gas.S \
-							src/context_fast.S
-
-
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
 	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
 
