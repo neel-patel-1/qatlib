@@ -74,6 +74,7 @@ typedef struct _offload_request_args{
 } offload_request_args;
 typedef struct _cpu_request_args{
   router::RouterRequest *request;
+  std::string *serialized;
 } cpu_request_args;
 
 
@@ -304,14 +305,23 @@ void blocking_router_request(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
-void cpu_router_request(fcontext_transfer_t arg, router::RouterRequest *request){
-  offload_request_args *args = (offload_request_args *)arg.data;
-  struct completion_record * comp = args->comp;
-  char *dst_payload = args->dst_payload;
-  string serialized = "/region/cluster/foo:key|#|etc";
+void serialize_request(router::RouterRequest *req, string *serialized){
+  string query = "/region/cluster/foo:key|#|etc";
+  string value = "bar";
+  req->set_key(query);
+  req->set_value(value);
+  req->set_operation(0);
+  req->SerializeToString(serialized);
+}
 
-  request->ParseFromString(serialized);
-  furc_hash(request->key().c_str(), request->key().size(), 16);
+void cpu_router_request(fcontext_transfer_t arg){
+  cpu_request_args *args = (cpu_request_args *)arg.data;
+  router::RouterRequest *req = args->request;
+  string *serialized = args->serialized;
+  req->ParseFromString(*serialized);
+
+  PRINT_DBG("Hashing: %s\n", req->key().c_str());
+  furc_hash(req->key().c_str(), req->key().size(), 16);
 
   offloads_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -483,19 +493,42 @@ int main(){
   fcontext_state_t **off_req_state;
 
   string query = "/region/cluster/foo:key|#|etc";
-
+  string value = "bar";
   {
     /*
       Pre-allocate all serialized requests used by the cpu requests
 
       execute_cpu_requests_closed_system_with_sampling
     */
-   router::RouterRequest **serializedMCReqs;
-   serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+    router::RouterRequest **serializedMCReqs;
+    serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+    string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
     for(int i=0; i<total_requests; i++){
-      serializedMCReqs[i] = new router::RouterRequest();
-      serializedMCReqs[i]->set_key(query);
+      serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
+      // serializedMCReqs[i]->set_key(query);
+      // serializedMCReqs[i]->set_value(value);
+      // serializedMCReqs[i]->set_operation(0);
+      serializedMCReqStrings[i] = new string();
+      // serializedMCReqs[i]->SerializeToString(serializedMCReqStrings[i]);
+      serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
+      PRINT_DBG("Serialized: %s\n", serializedMCReqStrings[i]->c_str());
     }
+
+    cpu_request_args **cpu_args;
+    cpu_args = (cpu_request_args **)malloc(sizeof(cpu_request_args *) * total_requests);
+    for(int i=0; i<total_requests; i++){
+      cpu_args[i] = (cpu_request_args *)malloc(sizeof(cpu_request_args));
+      cpu_args[i]->request = serializedMCReqs[i];
+      cpu_args[i]->serialized = serializedMCReqStrings[i];
+    }
+
+    fcontext_state_t *self = fcontext_create_proxy();
+    fcontext_state_t **cpu_req_state;
+    cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+    create_contexts(cpu_req_state, total_requests, cpu_router_request);
+
+    fcontext_swap(cpu_req_state[0]->context, cpu_args[0]);
+
 
   }
 
