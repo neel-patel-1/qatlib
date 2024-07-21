@@ -1,12 +1,18 @@
 #include "timer_utils.h"
 #include <pthread.h>
 #include "print_utils.h"
+#include "ch3_hash.h"
 #include "status.h"
+
+extern "C"{
+#include "fcontext.h"
+}
 #include <cstdlib>
 #include <atomic>
 #include <list>
 #include <cstring>
 #include <x86intrin.h>
+#include <string>
 
 /*
   End-to-End Evaluation
@@ -23,17 +29,6 @@
 
   Switch-To-Fill Scheduling:
   - Count completed requests to know when to terminate
-
-  RPS: completed_requests / exe_time
-
-  buffers that will be divied up upon request -- these can be pre-allocated
-  We do care about data access overhead
-
-
-
-
-  emul_non_blocking_ax -- meets offload times we specify?
-
 */
 #define SUBMIT_SUCCESS 0
 #define SUBMIT_FAIL 1
@@ -44,6 +39,8 @@
 std::atomic<int> submit_flag;
 std::atomic<int> submit_status;
 std::atomic<uint64_t> compl_addr;
+std::atomic<uint64_t> p_dst_buf;
+int offloads_completed = 0;
 bool gDebugParam = false;
 typedef struct completion_record{
   int status;
@@ -70,6 +67,13 @@ typedef struct _ax_params {
   uint64_t offload_time;
   bool *ax_running;
 } ax_params;
+typedef struct _offload_request_args{
+  ax_comp *comp;
+  char *dst_payload;
+} offload_request_args;
+
+
+using namespace std;
 
 int create_thread_pinned(pthread_t *thread, void *(*func)(void*), void *arg, int coreId){
     pthread_attr_t attr;
@@ -227,12 +231,12 @@ void *nonblocking_emul_ax(void *arg){
   return NULL;
 }
 
-void blocking_offload(){
-  struct completion_record * comp = (struct completion_record *)malloc(sizeof(struct completion_record));
+int submit_offload(ax_comp *comp, char *dst_payload){
+  int num_retries = 3, retries_remaining = num_retries;
   comp->status = COMP_STATUS_PENDING;
   compl_addr = (uint64_t)comp;
   submit_flag = OFFLOAD_REQUESTED;
-  int num_retries = 3, retries_remaining = num_retries;
+  p_dst_buf = (uint64_t)dst_payload;
 
 retry:
   while(submit_flag.load() == OFFLOAD_REQUESTED){
@@ -244,16 +248,27 @@ retry:
     goto retry;
   } else if(retries_remaining == 0){
     PRINT_DBG("Offload request failed after %d retries\n", num_retries);
-    goto end;
+    return STATUS_FAIL;
   }
   retries_remaining = num_retries;
 
+  return STATUS_SUCCESS;
+}
+
+void router_request(fcontext_transfer_t arg){
+  offload_request_args *args = (offload_request_args *)arg.data;
+  struct completion_record * comp = args->comp;
+  char *dst_payload = args->dst_payload;
+  string query = "/region/cluster/foo:key|#|etc";
+
+  int status = submit_offload(comp, dst_payload);
+  if(status == STATUS_FAIL){
+    return;
+  }
   while(comp->status == COMP_STATUS_PENDING){
     _mm_pause();
   }
-
-end:
-  free(comp);
+  furc_hash((const char *)dst_payload, query.size(), 16);
   return;
 }
 
@@ -289,10 +304,51 @@ int main(){
   int offload_time = 2100;
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
 
-  for(int i=0; i<1000; i++)
-    non_blocking_offload();
+  int num_requests = 1;
+  char**dst_bufs;
+  ax_comp *comps;
+  offload_request_args **off_args;
+  fcontext_state_t *self = fcontext_create_proxy();
+  fcontext_transfer_t *offload_req_xfer;
+  fcontext_state_t **off_req_state;
+  fcontext_transfer_t *filler_req_xfer;
+  fcontext_state_t **filler_req_state;
 
-  blocking_offload();
+  int next_unstarted_req_idx = 0;
+
+  /* Pre-allocate the payloads */
+  string query = "/region/cluster/foo:key|#|etc";
+  dst_bufs = (char **)malloc(sizeof(char *) * num_requests);
+  for(int i=0; i<num_requests; i++){
+    dst_bufs[i] = (char *)malloc(sizeof(char) * query.size());
+    memset(dst_bufs[i], 0, query.size());
+  }
+
+  /* Pre-allocate the CRs */
+  comps = (ax_comp *)malloc(sizeof(ax_comp) * num_requests);
+
+  /* Pre-allocate the request args */
+  off_args = (offload_request_args **)
+    malloc(sizeof(offload_request_args *) * num_requests);
+  for(int i=0; i<num_requests; i++){
+    off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+    off_args[i]->comp = &comps[i];
+    off_args[i]->dst_payload = dst_bufs[i];
+  }
+
+  /* Pre-create the contexts */
+  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * num_requests);
+  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * num_requests);
+  filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * num_requests);
+  filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * num_requests);
+
+  for(int i=0; i<num_requests; i++){
+    off_req_state[i] = fcontext_create(router_request);
+  }
+
+  while(offloads_completed < num_requests){
+    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+  }
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
