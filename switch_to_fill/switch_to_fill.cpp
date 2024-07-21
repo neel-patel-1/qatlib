@@ -163,7 +163,8 @@ void *nonblocking_emul_ax(void *arg){
       next_completed_offload_comp = offload_in_flight_list.front()->comp;
       next_completed_offload_comp->status = COMP_STATUS_COMPLETED;
       in_flight--;
-      PRINT_DBG("Offload");
+      PRINT_DBG("Offload duration: %ld\n",
+        offload_in_flight_list.front()->comp_time - offload_in_flight_list.front()->start_time);
     }
 
     /*
