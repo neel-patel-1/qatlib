@@ -38,14 +38,24 @@
 #define STATUS_FAIL 1
 #define OFFLOAD_RECEIVED 1
 #define OFFLOAD_REQUESTED 0
+#define COMP_STATUS_COMPLETED 1
+#define COMP_STATUS_PENDING 0
 std::atomic<int> submit_flag;
 std::atomic<int> submit_status;
-typedef struct completion_record ax_comp;
+typedef struct completion_record{
+  int status;
+} ax_comp;
 typedef struct _offload_entry{
   uint64_t start_time;
   uint64_t comp_time;
   struct _offload_entry *next;
+  ax_comp *comp;
 } offload_entry;
+typedef struct _desc{
+  int32_t id;
+  ax_comp *comp;
+  uint8_t rsvd[52];
+} desc;
 typedef struct _ax_params {
   int max_inflights;
   uint64_t offload_time;
@@ -61,6 +71,7 @@ void nonblocking_emul_ax(void *arg){
   int max_inflight = args->max_inflights;
   uint64_t offload_time = args->offload_time;
   int in_flight = 0;
+  ax_comp *next_completed_offload_comp = NULL;
 
   if(offload_in_flight){
     /*
@@ -69,6 +80,7 @@ void nonblocking_emul_ax(void *arg){
     */
     uint64_t cur_time = sampleCoderdtsc();
     if(cur_time >= next_offload_completion_time){
+      next_completed_offload_comp->status = COMP_STATUS_COMPLETED;
       in_flight--;
     }
 
