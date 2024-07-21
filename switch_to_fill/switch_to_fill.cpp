@@ -144,7 +144,7 @@ void *nonblocking_emul_ax(void *arg){
   ax_params *args = (ax_params *)arg;
   bool offload_in_flight = false;
   std::list<offload_entry*> offload_in_flight_list;
-  uint64_t next_offload_completion_time = 0;
+  uint64_t next_offload_completion_time = UINT64_MAX;
   int max_inflight = args->max_inflights;
   uint64_t offload_time = args->offload_time;
   int in_flight = 0;
@@ -165,20 +165,25 @@ void *nonblocking_emul_ax(void *arg){
         in_flight--;
         PRINT_DBG("Offload duration: %ld\n",
           cur_time - offload_in_flight_list.front()->start_time);
+        PRINT_DBG("next_offload_completion_time: %ld comp_time: %ld cur_time: %ld start_time %ld\n"
+          , next_offload_completion_time,
+          offload_in_flight_list.front()->comp_time,  cur_time, offload_in_flight_list.front()->start_time);
+          /*
+            if we have any other offloads in flight
+              make sure we let ourselves know
+              make sure we start checking the current time against the time for the next earliest submitted offload
+          */
+        offload_in_flight_list.pop_front();
+        if( offload_in_flight_list.size() > 0 ){
+          PRINT_DBG("Next offload in flight\n");
+          offload_in_flight = true;
+          next_offload_completion_time = offload_in_flight_list.front()->comp_time;
+        } else {
+          offload_in_flight = false;
+        }
       }
 
-      /*
-        if we have any other offloads in flight
-          make sure we let ourselves know
-          make sure we start checking the current time against the time for the next earliest submitted offload
-      */
-      offload_in_flight_list.pop_front();
-      if( ! offload_in_flight_list.empty() ){
-        offload_in_flight = true;
-        next_offload_completion_time = offload_in_flight_list.front()->comp_time;
-      } else {
-        offload_in_flight = false;
-      }
+
 
     }
     if(submit_flag.load() == OFFLOAD_REQUESTED){
@@ -194,10 +199,14 @@ void *nonblocking_emul_ax(void *arg){
         struct completion_record *comp_addr = (struct completion_record *)compl_addr.load();
         submit_flag = OFFLOAD_RECEIVED; /*received submission*/
 
-        offload_entry *new_ent = new offload_entry(start_time, start_time + offload_time, comp_addr);
+        uint64_t comp_time = start_time + offload_time;
+        offload_entry *new_ent = new offload_entry(start_time, comp_time, comp_addr);
         offload_in_flight_list.push_back(new_ent);
         in_flight++;
         offload_in_flight = true;
+        if(offload_in_flight_list.size()  == 1 ){
+          next_offload_completion_time = comp_time;
+        }
         PRINT_DBG("Offload accepted\n");
       } else {
         submit_status = SUBMIT_FAIL;
@@ -235,7 +244,7 @@ int main(){
   params->ax_running = &ax_running;
   create_thread_pinned(&ax_td, nonblocking_emul_ax, (void *)params, 0);
 
-  for(int i=0; i<10; i++)
+  for(int i=0; i<1000; i++)
     blocking_offload();
 
   ax_running = false;
