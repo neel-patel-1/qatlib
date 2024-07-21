@@ -14,8 +14,11 @@ obj/context_fast.o: src/context_fast.S
 switch_to_fill.o: switch_to_fill.cpp
 	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
 
-switch_to_fill: switch_to_fill.o obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o
-	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^
+router.pb.o: src/router.pb.cc
+	$(CXX) -g -c -o $@ $^ -I ../include -I./inc `pkg-config --cflags --libs protobuf`
+
+switch_to_fill: switch_to_fill.o router.pb.o obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o
+	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf`
 
 clean:
 	rm -f switch_to_fill switch_to_fill.o obj/jump_x86_64_sysv_elf_gas.o
