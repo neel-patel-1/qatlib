@@ -424,6 +424,41 @@ void execute_blocking_requests_closed_system_with_sampling(
 
 }
 
+void execute_cpu_requests_closed_system_with_sampling(
+  int requests_sampling_interval, int total_requests,
+  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
+  ax_comp *comps, cpu_request_args **off_args,
+  fcontext_state_t **off_req_state, fcontext_state_t *self)
+{
+
+  int next_unstarted_req_idx = 0;
+  int next_request_offload_to_complete_idx = 0;
+  int sampling_interval = 0;
+
+  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
+  sampling_interval++;
+
+  while(offloads_completed < total_requests){
+
+    if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
+      sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
+      sampling_interval++;
+    }
+    if(next_unstarted_req_idx < total_requests){
+      fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+      next_unstarted_req_idx++;
+    }
+  }
+  if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
+    sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
+    sampling_interval++;
+  }
+
+
+  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
+
+}
+
 void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, string query){
   *p_dst_bufs = (char **)malloc(sizeof(char *) * total_requests);
   for(int i=0; i<total_requests; i++){
@@ -505,13 +540,9 @@ int main(){
     string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
     for(int i=0; i<total_requests; i++){
       serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
-      // serializedMCReqs[i]->set_key(query);
-      // serializedMCReqs[i]->set_value(value);
-      // serializedMCReqs[i]->set_operation(0);
       serializedMCReqStrings[i] = new string();
-      // serializedMCReqs[i]->SerializeToString(serializedMCReqStrings[i]);
       serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
-      PRINT_DBG("Serialized: %s\n", serializedMCReqStrings[i]->c_str());
+      // PRINT_DBG("Serialized: %s\n", serializedMCReqStrings[i]->c_str());
     }
 
     cpu_request_args **cpu_args;
@@ -527,12 +558,20 @@ int main(){
     cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
     create_contexts(cpu_req_state, total_requests, cpu_router_request);
 
-    fcontext_swap(cpu_req_state[0]->context, cpu_args[0]);
+    offloads_completed = 0;
 
 
+    // free_contexts(cpu_req_state, total_requests);
+    // for(int i=0; i<total_requests; i++){
+    //   delete serializedMCReqs[i];
+    //   delete serializedMCReqStrings[i];
+    //   free(cpu_args[i]);
+    // }
+    // free(cpu_args);
+    // free(serializedMCReqs);
+    // free(serializedMCReqStrings);
+    // fcontext_destroy(self);
   }
-
-  // return 0;
 
   {
     offloads_completed = 0;
