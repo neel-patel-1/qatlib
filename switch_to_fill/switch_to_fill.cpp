@@ -315,7 +315,11 @@ int main(){
   int offload_time = 2100;
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
 
-  int num_requests = 1;
+  int requests_sampling_interval = 1000, total_requests = 10000;
+  int sampling_intervals = (total_requests / requests_sampling_interval);
+  int sampling_interval_timestamps = sampling_intervals + 1;
+  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
+  int sampling_interval = 0;
   char**dst_bufs;
   ax_comp *comps;
   offload_request_args **off_args;
@@ -325,24 +329,25 @@ int main(){
   fcontext_transfer_t *filler_req_xfer;
   fcontext_state_t **filler_req_state;
 
+
   int next_unstarted_req_idx = 0;
   int next_request_offload_to_complete_idx = 0;
 
   /* Pre-allocate the payloads */
   string query = "/region/cluster/foo:key|#|etc";
-  dst_bufs = (char **)malloc(sizeof(char *) * num_requests);
-  for(int i=0; i<num_requests; i++){
+  dst_bufs = (char **)malloc(sizeof(char *) * total_requests);
+  for(int i=0; i<total_requests; i++){
     dst_bufs[i] = (char *)malloc(sizeof(char) * query.size());
     memcpy(dst_bufs[i], query.c_str(), query.size());
   }
 
   /* Pre-allocate the CRs */
-  comps = (ax_comp *)malloc(sizeof(ax_comp) * num_requests);
+  comps = (ax_comp *)malloc(sizeof(ax_comp) * total_requests);
 
   /* Pre-allocate the request args */
   off_args = (offload_request_args **)
-    malloc(sizeof(offload_request_args *) * num_requests);
-  for(int i=0; i<num_requests; i++){
+    malloc(sizeof(offload_request_args *) * total_requests);
+  for(int i=0; i<total_requests; i++){
     off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
     off_args[i]->comp = &(comps[i]);
 
@@ -351,24 +356,36 @@ int main(){
   }
 
   /* Pre-create the contexts */
-  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * num_requests);
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * num_requests);
-  filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * num_requests);
-  filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * num_requests);
+  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
+  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+  filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
+  filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
-  for(int i=0; i<num_requests; i++){
+  for(int i=0; i<total_requests; i++){
     off_req_state[i] = fcontext_create(router_request);
   }
 
-  while(offloads_completed < num_requests){
+  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
+  sampling_interval++;
+
+  while(offloads_completed < total_requests){
     if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
       fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
       next_request_offload_to_complete_idx++;
-    } else if(next_unstarted_req_idx < num_requests){
+      if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
+        sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
+        sampling_interval++;
+      }
+    } else if(next_unstarted_req_idx < total_requests){
       offload_req_xfer[next_unstarted_req_idx] =
         fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
       next_unstarted_req_idx++;
     }
+  }
+
+  for(int i=0; i<sampling_intervals; i++){
+    PRINT_DBG("Sampling Interval %d: %ld\n", i,
+      sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
   }
 
   stop_non_blocking_ax(&ax_td, &ax_running);
