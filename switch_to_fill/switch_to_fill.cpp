@@ -336,13 +336,14 @@ void execute_yielding_requests_closed_system_with_sampling(
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state)
+  fcontext_state_t **off_req_state,
+  fcontext_state_t *self)
 {
 
   int next_unstarted_req_idx = 0;
   int next_request_offload_to_complete_idx = 0;
   int sampling_interval = 0;
-  fcontext_state_t *self = fcontext_create_proxy();
+
 
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
   sampling_interval++;
@@ -362,7 +363,7 @@ void execute_yielding_requests_closed_system_with_sampling(
     }
   }
 
-  fcontext_destroy(self);
+
 
   PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
 }
@@ -372,14 +373,12 @@ void execute_blocking_requests_closed_system_with_sampling(
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state)
+  fcontext_state_t **off_req_state, fcontext_state_t *self)
 {
 
   int next_unstarted_req_idx = 0;
   int next_request_offload_to_complete_idx = 0;
   int sampling_interval = 0;
-
-  fcontext_state_t *self = fcontext_create_proxy();
 
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
   sampling_interval++;
@@ -403,7 +402,6 @@ void execute_blocking_requests_closed_system_with_sampling(
     sampling_interval++;
   }
 
-  fcontext_destroy(self);
 
   PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
 
@@ -478,8 +476,8 @@ int main(){
   fcontext_state_t **off_req_state;
 
 
-  int next_unstarted_req_idx = 0;
-  int next_request_offload_to_complete_idx = 0;
+  /*reset offload counter*/
+  offloads_completed = 0;
 
   /* Pre-allocate the payloads */
   string query = "/region/cluster/foo:key|#|etc";
@@ -495,14 +493,14 @@ int main(){
   offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
   off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
-
+  fcontext_state_t *self = fcontext_create_proxy();
   create_contexts(off_req_state, total_requests, blocking_router_request);
 
   execute_blocking_requests_closed_system_with_sampling(
     requests_sampling_interval, total_requests,
     sampling_interval_completion_times, sampling_interval_timestamps,
     comps, off_args,
-    offload_req_xfer, off_req_state);
+    offload_req_xfer, off_req_state, self);
 
   calculate_rps_from_samples(
     sampling_interval_completion_times,
@@ -512,6 +510,7 @@ int main(){
 
   /* teardown */
   free_contexts(off_req_state, total_requests);
+  fcontext_destroy(self);
   free(offload_req_xfer);
   free(comps);
   for(int i=0; i<total_requests; i++){
@@ -523,8 +522,10 @@ int main(){
 
 
   /* switch to fill router requests */
-  /* Pre-allocate the CRs */
-  /* Pre-allocate the payloads */
+  /*reset offload counter*/
+  offloads_completed = 0;
+
+   /* Pre-allocate the payloads */
   allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
 
   /* Pre-allocate the CRs */
@@ -537,14 +538,14 @@ int main(){
   offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
   off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
-
-  create_contexts(off_req_state, total_requests, blocking_router_request);
+  self = fcontext_create_proxy();
+  create_contexts(off_req_state, total_requests, yielding_router_request);
 
   execute_yielding_requests_closed_system_with_sampling(
     requests_sampling_interval, total_requests,
     sampling_interval_completion_times, sampling_interval_timestamps,
     comps, off_args,
-    offload_req_xfer, off_req_state);
+    offload_req_xfer, off_req_state, self);
 
   calculate_rps_from_samples(
     sampling_interval_completion_times,
@@ -554,6 +555,7 @@ int main(){
 
   /* teardown */
   free_contexts(off_req_state, total_requests);
+  fcontext_destroy(self);
   free(offload_req_xfer);
   free(comps);
   for(int i=0; i<total_requests; i++){
