@@ -72,6 +72,9 @@ typedef struct _offload_request_args{
   ax_comp *comp;
   char *dst_payload;
 } offload_request_args;
+typedef struct _cpu_request_args{
+  router::RouterRequest *request;
+} cpu_request_args;
 
 
 using namespace std;
@@ -480,6 +483,23 @@ int main(){
   fcontext_state_t **off_req_state;
 
   string query = "/region/cluster/foo:key|#|etc";
+
+  {
+    /*
+      Pre-allocate all serialized requests used by the cpu requests
+
+      execute_cpu_requests_closed_system_with_sampling
+    */
+   router::RouterRequest **serializedMCReqs;
+   serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+    for(int i=0; i<total_requests; i++){
+      serializedMCReqs[i] = new router::RouterRequest();
+      serializedMCReqs[i]->set_key(query);
+    }
+
+  }
+
+  return 0;
 
   {
     offloads_completed = 0;
