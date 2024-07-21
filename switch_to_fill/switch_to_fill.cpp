@@ -235,7 +235,8 @@ int main(){
   params->ax_running = &ax_running;
   create_thread_pinned(&ax_td, nonblocking_emul_ax, (void *)params, 0);
 
-  blocking_offload();
+  for(int i=0; i<10; i++)
+    blocking_offload();
 
   ax_running = false;
 
