@@ -573,7 +573,7 @@ int main(){
       requests_sampling_interval,
       2100000000);
 
-    // free_contexts(cpu_req_state, total_requests);
+    free_contexts(cpu_req_state, total_requests);
     for(int i=0; i<total_requests; i++){
       delete serializedMCReqs[i];
       delete serializedMCReqStrings[i];
