@@ -262,7 +262,28 @@ retry:
   return STATUS_SUCCESS;
 }
 
-void router_request(fcontext_transfer_t arg){
+void yielding_router_request(fcontext_transfer_t arg){
+  offload_request_args *args = (offload_request_args *)arg.data;
+  struct completion_record * comp = args->comp;
+  char *dst_payload = args->dst_payload;
+  string query = "/region/cluster/foo:key|#|etc";
+
+  int status = submit_offload(comp, dst_payload);
+  if(status == STATUS_FAIL){
+    return;
+  }
+  while(comp->status == COMP_STATUS_PENDING){
+    _mm_pause();
+  }
+  fcontext_swap(arg.prev_context, NULL);
+
+  furc_hash((const char *)dst_payload, query.size(), 16);
+
+  offloads_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void blocking_router_request(fcontext_transfer_t arg){
   offload_request_args *args = (offload_request_args *)arg.data;
   struct completion_record * comp = args->comp;
   char *dst_payload = args->dst_payload;
@@ -306,6 +327,63 @@ void start_non_blocking_ax(pthread_t *ax_td, bool *ax_running_flag, uint64_t off
 void stop_non_blocking_ax(pthread_t *ax_td, bool *ax_running_flag){
   *ax_running_flag = false;
   pthread_join(*ax_td, NULL);
+}
+
+void create_contexts(fcontext_state_t **states, int num_contexts, void (*func)(fcontext_transfer_t)){
+  for(int i=0; i<num_contexts; i++){
+    states[i] = fcontext_create(func);
+  }
+}
+
+void execute_requests_closed_system_with_sampling(
+  int requests_sampling_interval, int total_requests,
+  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
+  ax_comp *comps, offload_request_args **off_args,
+  fcontext_state_t *self, fcontext_transfer_t *offload_req_xfer,
+  fcontext_state_t **off_req_state, fcontext_transfer_t *filler_req_xfer,
+  fcontext_state_t **filler_req_state)
+{
+
+  int next_unstarted_req_idx = 0;
+  int next_request_offload_to_complete_idx = 0;
+  int sampling_interval = 0;
+
+  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
+  sampling_interval++;
+
+  while(offloads_completed < total_requests){
+    if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
+      fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
+      next_request_offload_to_complete_idx++;
+      if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
+        sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
+        sampling_interval++;
+      }
+    } else if(next_unstarted_req_idx < total_requests){
+      offload_req_xfer[next_unstarted_req_idx] =
+        fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+      next_unstarted_req_idx++;
+    }
+  }
+
+}
+
+void calculate_rps_from_samples(
+  uint64_t *sampling_interval_completion_times,
+  int sampling_intervals,
+  int requests_sampling_interval,
+  uint64_t cycles_per_sec)
+{
+  uint64_t avg, sum =0 ;
+
+  for(int i=0; i<sampling_intervals; i++){
+    PRINT_DBG("Sampling Interval %d: %ld\n", i,
+      sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
+    sum += sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i];
+  }
+  avg = sum / (sampling_intervals);
+  PRINT_DBG("Average Sampling Interval: %ld\n", avg);
+  PRINT_DBG("AveRPS: %f\n", (double)(requests_sampling_interval * cycles_per_sec )/ avg);
 }
 
 int main(){
@@ -361,32 +439,19 @@ int main(){
   filler_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
   filler_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
-  for(int i=0; i<total_requests; i++){
-    off_req_state[i] = fcontext_create(router_request);
-  }
+  create_contexts(off_req_state, total_requests, yielding_router_request);
 
-  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
-  sampling_interval++;
+  execute_requests_closed_system_with_sampling(
+    requests_sampling_interval, total_requests,
+    sampling_interval_completion_times, sampling_interval_timestamps,
+    comps, off_args,
+    self, offload_req_xfer, off_req_state, filler_req_xfer, filler_req_state);
 
-  while(offloads_completed < total_requests){
-    if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
-      fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
-      next_request_offload_to_complete_idx++;
-      if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
-        sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-        sampling_interval++;
-      }
-    } else if(next_unstarted_req_idx < total_requests){
-      offload_req_xfer[next_unstarted_req_idx] =
-        fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
-      next_unstarted_req_idx++;
-    }
-  }
-
-  for(int i=0; i<sampling_intervals; i++){
-    PRINT_DBG("Sampling Interval %d: %ld\n", i,
-      sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
-  }
+  calculate_rps_from_samples(
+    sampling_interval_completion_times,
+    sampling_intervals,
+    requests_sampling_interval,
+    2100000000);
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 

@@ -1,3 +1,4 @@
+all: switch_to_fill
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
 	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
 
