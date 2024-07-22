@@ -40,6 +40,7 @@ void yielding_router_request(fcontext_transfer_t arg);
 void yielding_router_request_stamp(fcontext_transfer_t arg);
 
 void blocking_router_request(fcontext_transfer_t arg);
+void blocking_router_request_stamp(fcontext_transfer_t arg);
 
 void cpu_router_request(fcontext_transfer_t arg);
 

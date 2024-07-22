@@ -77,6 +77,37 @@ void blocking_router_request(fcontext_transfer_t arg){
    fcontext_swap(arg.prev_context, NULL);
 }
 
+void blocking_router_request_stamp(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+
+  struct completion_record * comp = args->comp;
+  char *dst_payload = args->dst_payload;
+
+  std::string query = "/region/cluster/foo:key|#|etc";
+
+  ts0[id] = sampleCoderdtsc();
+
+  int status = submit_offload(comp, dst_payload);
+  if(status == STATUS_FAIL){
+    return;
+  }
+  ts1[id] = sampleCoderdtsc();
+  while(comp->status == COMP_STATUS_PENDING){
+    _mm_pause();
+  }
+  ts2[id] = sampleCoderdtsc();
+  furc_hash((const char *)dst_payload, query.size(), 16);
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
 void cpu_router_request(fcontext_transfer_t arg){
   cpu_request_args *args = (cpu_request_args *)arg.data;
   router::RouterRequest *req = args->request;
