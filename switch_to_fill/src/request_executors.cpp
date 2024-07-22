@@ -43,22 +43,10 @@ void execute_blocking_requests_closed_system_with_sampling(
 {
 
   int next_unstarted_req_idx = 0;
-  int next_request_offload_to_complete_idx = 0;
-  // int sampling_interval = 0;
-
-  // sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
-  // sampling_interval++;
-
   while(requests_completed < total_requests){
     fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
     next_unstarted_req_idx++;
   }
-  // sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-
-
-
-  // PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
-
 }
 
 void execute_cpu_requests_closed_system_with_sampling(
@@ -69,21 +57,8 @@ void execute_cpu_requests_closed_system_with_sampling(
 {
 
   int next_unstarted_req_idx = 0;
-  int next_request_offload_to_complete_idx = 0;
-  int sampling_interval = 0;
-
-  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
-  sampling_interval++;
-
   while(requests_completed < total_requests){
-
     fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
     next_unstarted_req_idx++;
-
   }
-  sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-
-
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
-
 }
