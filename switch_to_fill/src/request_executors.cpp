@@ -151,7 +151,8 @@ void execute_cpu_requests_closed_system_with_sampling(
   int requests_sampling_interval, int total_requests,
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, cpu_request_args **off_args,
-  fcontext_state_t **off_req_state, fcontext_state_t *self)
+  fcontext_state_t **off_req_state, fcontext_state_t *self,
+  uint64_t *rps, int idx)
 {
 
   int next_unstarted_req_idx = 0;
@@ -169,8 +170,10 @@ void execute_cpu_requests_closed_system_with_sampling(
   }
   sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
 
-
-  LOG_PRINT( LOG_DEBUG, "Sampling_Interval: %d\n", sampling_interval);
+  uint64_t this_rps = total_requests /
+    (sampling_interval_completion_times[sampling_interval] - sampling_interval_completion_times[0]);
+  rps[idx] = this_rps;
+  LOG_PRINT( LOG_DEBUG, "RPS: %ld\n", this_rps);
 
 }
 

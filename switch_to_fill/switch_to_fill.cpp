@@ -222,7 +222,7 @@ void blocking_ax_router_closed_loop_test(int requests_sampling_interval, int tot
 }
 
 
-void cpu_router_closed_loop_test(int requests_sampling_interval, int total_requests){
+void cpu_router_closed_loop_test(int requests_sampling_interval, int total_requests, uint64_t *rps, int idx){
   int sampling_intervals = (total_requests / requests_sampling_interval);
   int sampling_interval_timestamps = sampling_intervals + 1;
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
@@ -254,7 +254,8 @@ void cpu_router_closed_loop_test(int requests_sampling_interval, int total_reque
     requests_sampling_interval, total_requests,
     sampling_interval_completion_times, sampling_interval_timestamps,
     NULL, cpu_args,
-    cpu_req_state, self);
+    cpu_req_state, self,
+    rps, idx);
 
   calculate_rps_from_samples(
     sampling_interval_completion_times,
