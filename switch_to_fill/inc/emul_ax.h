@@ -44,5 +44,6 @@ typedef struct _ax_params {
   bool *ax_running;
 } ax_params;
 
+void *nonblocking_emul_ax(void *arg);
 
 #endif
