@@ -7,12 +7,13 @@ void execute_yielding_requests_closed_system_with_sampling(
   ax_comp *comps, offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
   fcontext_state_t **off_req_state,
-  fcontext_state_t *self)
+  fcontext_state_t *self, uint64_t *exetime, int idx)
 {
 
   int next_unstarted_req_idx = 0;
   int next_request_offload_to_complete_idx = 0;
   int sampling_interval = 0;
+  int exetime_samples = total_requests / requests_sampling_interval;
 
 
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
@@ -31,6 +32,10 @@ void execute_yielding_requests_closed_system_with_sampling(
         fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
       next_unstarted_req_idx++;
     }
+  }
+  for(int i=0; i<exetime_samples; i++){
+    exetime[idx + i] = (sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
+    LOG_PRINT( LOG_DEBUG, "ExeTime: %ld\n", exetime[i]);
   }
 }
 
@@ -67,11 +72,12 @@ void execute_yielding_requests_closed_system_request_breakdown(
     }
   }
 
+
   uint64_t *ts0 = off_args[0]->ts0;
   uint64_t *ts1 = off_args[0]->ts1;
   uint64_t *ts2 = off_args[0]->ts2;
   uint64_t *ts3 = off_args[0]->ts3;
-  uint64_t avg, diff[total_requests];
+  uint64_t diff[total_requests];
   avg_samples_from_arrays(diff, off_times[idx], ts1, ts0, requests_completed);
   LOG_PRINT( LOG_DEBUG, "Offload time: %lu\n", off_times[idx]);
   avg_samples_from_arrays(diff, yield_to_resume_times[idx], ts2, ts1, requests_completed);

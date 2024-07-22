@@ -47,8 +47,20 @@ using namespace std;
 bool gDebugParam = false;
 int gLogLevel = LOG_PERF;
 
+/*
+  exetime needs to be (total_requests / requests_sampling_interval) x test_iterations
+
+  the caller needs to ensure the "early yielder underutilization" problem does not
+  impact the reported offered load.
+
+  caller must tune the sampling interval and choose the exetime samples that are not impacted
+  by underutilization
+
+  indexing into the array: caller must ensure they increment the start_idx by
+    (total_requests / requests_sampling_interval)
+*/
 void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
-  int total_requests){
+  int total_requests, uint64_t *exetime, int start_idx){
   fcontext_state_t *self = fcontext_create_proxy();
   char**dst_bufs;
   ax_comp *comps;
@@ -80,13 +92,9 @@ void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
     requests_sampling_interval, total_requests,
     sampling_interval_completion_times, sampling_interval_timestamps,
     comps, off_args,
-    offload_req_xfer, off_req_state, self);
+    offload_req_xfer, off_req_state, self,
+    exetime, start_idx);
 
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
 
   /* teardown */
   free_contexts(off_req_state, total_requests);
