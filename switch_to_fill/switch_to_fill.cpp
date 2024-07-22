@@ -70,144 +70,137 @@ int main(){
   string value = "bar";
     /* switch to fill router requests */
     /*reset offload counter*/
-    requests_sampling_interval = 1000, total_requests = 10000;
-    sampling_intervals = (total_requests / requests_sampling_interval);
-    sampling_interval_timestamps = sampling_intervals + 1;
+    // requests_sampling_interval = 1000, total_requests = 10000;
+    // sampling_intervals = (total_requests / requests_sampling_interval);
+    // sampling_interval_timestamps = sampling_intervals + 1;
 
-    requests_completed = 0;
+    // requests_completed = 0;
 
-    /* Pre-allocate the payloads */
-    allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+    // /* Pre-allocate the payloads */
+    // allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
 
-    /* Pre-allocate the CRs */
-    allocate_crs(total_requests, &comps);
+    // /* Pre-allocate the CRs */
+    // allocate_crs(total_requests, &comps);
 
-    /* Pre-allocate the request args */
-    allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
+    // /* Pre-allocate the request args */
+    // allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
 
-    /* Pre-create the contexts */
-    offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-    off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+    // /* Pre-create the contexts */
+    // offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
+    // off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
 
-    create_contexts(off_req_state, total_requests, yielding_router_request);
+    // create_contexts(off_req_state, total_requests, yielding_router_request);
 
-    execute_yielding_requests_closed_system_with_sampling(
-      requests_sampling_interval, total_requests,
-      sampling_interval_completion_times, sampling_interval_timestamps,
-      comps, off_args,
-      offload_req_xfer, off_req_state, self);
+    // execute_yielding_requests_closed_system_with_sampling(
+    //   requests_sampling_interval, total_requests,
+    //   sampling_interval_completion_times, sampling_interval_timestamps,
+    //   comps, off_args,
+    //   offload_req_xfer, off_req_state, self);
 
-    calculate_rps_from_samples(
-      sampling_interval_completion_times,
-      sampling_intervals,
-      requests_sampling_interval,
-      2100000000);
+    // calculate_rps_from_samples(
+    //   sampling_interval_completion_times,
+    //   sampling_intervals,
+    //   requests_sampling_interval,
+    //   2100000000);
 
-    /* teardown */
-    free_contexts(off_req_state, total_requests);
-    free(offload_req_xfer);
-    free(comps);
-    for(int i=0; i<total_requests; i++){
-      free(off_args[i]);
-      free(dst_bufs[i]);
-    }
-    free(off_args);
-    free(dst_bufs);
+    // /* teardown */
+    // free_contexts(off_req_state, total_requests);
+    // free(offload_req_xfer);
+    // free(comps);
+    // for(int i=0; i<total_requests; i++){
+    //   free(off_args[i]);
+    //   free(dst_bufs[i]);
+    // }
+    // free(off_args);
+    // free(dst_bufs);
 
-    /*
-      Pre-allocate all serialized requests used by the cpu requests
+    // /*
+    //   Pre-allocate all serialized requests used by the cpu requests
 
-      execute_cpu_requests_closed_system_with_sampling
-    */
-    router::RouterRequest **serializedMCReqs;
-    serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
-    string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
-    for(int i=0; i<total_requests; i++){
-      serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
-      serializedMCReqStrings[i] = new string();
-      serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
-      // PRINT_DBG("Serialized: %s\n", serializedMCReqStrings[i]->c_str());
-    }
+    //   execute_cpu_requests_closed_system_with_sampling
+    // */
+    // router::RouterRequest **serializedMCReqs;
+    // serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+    // string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
+    // for(int i=0; i<total_requests; i++){
+    //   serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
+    //   serializedMCReqStrings[i] = new string();
+    //   serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
+    //   // PRINT_DBG("Serialized: %s\n", serializedMCReqStrings[i]->c_str());
+    // }
 
-    cpu_request_args **cpu_args;
-    cpu_args = (cpu_request_args **)malloc(sizeof(cpu_request_args *) * total_requests);
-    for(int i=0; i<total_requests; i++){
-      cpu_args[i] = (cpu_request_args *)malloc(sizeof(cpu_request_args));
-      cpu_args[i]->request = serializedMCReqs[i];
-      cpu_args[i]->serialized = serializedMCReqStrings[i];
-    }
+    // cpu_request_args **cpu_args;
+    // cpu_args = (cpu_request_args **)malloc(sizeof(cpu_request_args *) * total_requests);
+    // for(int i=0; i<total_requests; i++){
+    //   cpu_args[i] = (cpu_request_args *)malloc(sizeof(cpu_request_args));
+    //   cpu_args[i]->request = serializedMCReqs[i];
+    //   cpu_args[i]->serialized = serializedMCReqStrings[i];
+    // }
 
-    fcontext_state_t **cpu_req_state;
-    cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-    create_contexts(cpu_req_state, total_requests, cpu_router_request);
+    // fcontext_state_t **cpu_req_state;
+    // cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+    // create_contexts(cpu_req_state, total_requests, cpu_router_request);
 
-    requests_sampling_interval = 10000, total_requests = 10000;
-    sampling_intervals = (total_requests / requests_sampling_interval);
-    sampling_interval_timestamps = sampling_intervals + 1;
-    requests_completed = 0;
+    // requests_sampling_interval = 10000, total_requests = 10000;
+    // sampling_intervals = (total_requests / requests_sampling_interval);
+    // sampling_interval_timestamps = sampling_intervals + 1;
+    // requests_completed = 0;
 
-    execute_cpu_requests_closed_system_with_sampling(
-      requests_sampling_interval, total_requests,
-      sampling_interval_completion_times, sampling_interval_timestamps,
-      comps, cpu_args,
-      cpu_req_state, self);
+    // execute_cpu_requests_closed_system_with_sampling(
+    //   requests_sampling_interval, total_requests,
+    //   sampling_interval_completion_times, sampling_interval_timestamps,
+    //   comps, cpu_args,
+    //   cpu_req_state, self);
 
-    calculate_rps_from_samples(
-      sampling_interval_completion_times,
-      sampling_intervals,
-      requests_sampling_interval,
-      2100000000);
+    // calculate_rps_from_samples(
+    //   sampling_interval_completion_times,
+    //   sampling_intervals,
+    //   requests_sampling_interval,
+    //   2100000000);
 
-    free_contexts(cpu_req_state, total_requests);
-    for(int i=0; i<total_requests; i++){
-      delete serializedMCReqs[i];
-      delete serializedMCReqStrings[i];
-      free(cpu_args[i]);
-    }
-    free(cpu_args);
-    free(serializedMCReqs);
-    free(serializedMCReqStrings);
+    // free_contexts(cpu_req_state, total_requests);
+    // for(int i=0; i<total_requests; i++){
+    //   delete serializedMCReqs[i];
+    //   delete serializedMCReqStrings[i];
+    //   free(cpu_args[i]);
+    // }
+    // free(cpu_args);
+    // free(serializedMCReqs);
+    // free(serializedMCReqStrings);
 
 
-    requests_sampling_interval = 10000, total_requests = 10000;
-    sampling_intervals = (total_requests / requests_sampling_interval);
-    sampling_interval_timestamps = sampling_intervals + 1;
+    time_code_region(
+      requests_sampling_interval = 10000; total_requests = 10000;
+      sampling_intervals = (total_requests / requests_sampling_interval);
+      sampling_interval_timestamps = sampling_intervals + 1;
+      requests_completed = 0;
+      allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+      /* Pre-allocate the CRs */
+      allocate_crs(total_requests, &comps);
+      /* Pre-allocate the request args */
+      allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
+      /* Pre-create the contexts */
+      off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+      create_contexts(off_req_state, total_requests, blocking_router_request);,
 
-    requests_completed = 0;
-    allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+      execute_blocking_requests_closed_system_with_sampling(
+        requests_sampling_interval, total_requests,
+        sampling_interval_completion_times, sampling_interval_timestamps,
+        comps, off_args,
+        NULL, off_req_state, self);,
 
-    /* Pre-allocate the CRs */
-    allocate_crs(total_requests, &comps);
+      /* teardown */
+      free_contexts(off_req_state, total_requests);
+      free(comps);
+      for(int i=0; i<total_requests; i++){
+        free(off_args[i]);
+        free(dst_bufs[i]);
+      }
+      free(off_args);
+      free(dst_bufs);,
 
-    /* Pre-allocate the request args */
-    allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
-
-    /* Pre-create the contexts */
-    off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-    create_contexts(off_req_state, total_requests, blocking_router_request);
-
-    execute_blocking_requests_closed_system_with_sampling(
-      requests_sampling_interval, total_requests,
-      sampling_interval_completion_times, sampling_interval_timestamps,
-      comps, off_args,
-      NULL, off_req_state, self);
-
-    calculate_rps_from_samples(
-      sampling_interval_completion_times,
-      sampling_intervals,
-      requests_sampling_interval,
-      2100000000);
-
-    /* teardown */
-    free_contexts(off_req_state, total_requests);
-    free(comps);
-    for(int i=0; i<total_requests; i++){
-      free(off_args[i]);
-      free(dst_bufs[i]);
-    }
-    free(off_args);
-    free(dst_bufs);
+      1000
+    );
 
 
 
