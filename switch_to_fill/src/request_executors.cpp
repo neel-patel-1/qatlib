@@ -87,7 +87,9 @@ void execute_blocking_requests_closed_system_with_sampling(
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state, fcontext_state_t *self)
+  fcontext_state_t **off_req_state, fcontext_state_t *self,
+  uint64_t *exetime, int idx)
+    /* pass in the times we measure and idx to populate */
 {
 
   int next_unstarted_req_idx = 0;
@@ -104,9 +106,8 @@ void execute_blocking_requests_closed_system_with_sampling(
   sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
 
 
-
-  LOG_PRINT( LOG_DEBUG, "Sampling_Interval: %d\n", sampling_interval);
-
+  exetime[idx] = (sampling_interval_completion_times[sampling_interval] - sampling_interval_completion_times[0]);
+  LOG_PRINT( LOG_DEBUG, "ExeTime: %ld\n", exetime[idx]);
 }
 
 void execute_blocking_requests_closed_system_request_breakdown(

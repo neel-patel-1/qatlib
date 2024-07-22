@@ -167,60 +167,6 @@ void yielding_ax_router_request_breakdown_closed_loop_test(int requests_sampling
   fcontext_destroy(self);
 }
 
-void blocking_ax_router_closed_loop_test(int requests_sampling_interval, int total_requests){
-  fcontext_state_t *self = fcontext_create_proxy();
-  char**dst_bufs;
-  ax_comp *comps;
-  offload_request_args **off_args;
-  fcontext_transfer_t *offload_req_xfer;
-  fcontext_state_t **off_req_state;
-  string query = "/region/cluster/foo:key|#|etc";
-
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-
-
-  requests_completed = 0;
-  allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
-
-  /* Pre-allocate the CRs */
-  allocate_crs(total_requests, &comps);
-
-  /* Pre-allocate the request args */
-  allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
-
-  /* Pre-create the contexts */
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-  create_contexts(off_req_state, total_requests, blocking_router_request);
-
-  execute_blocking_requests_closed_system_with_sampling(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    NULL, off_req_state, self);
-
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
-
-  /* teardown */
-  free_contexts(off_req_state, total_requests);
-  free(comps);
-  for(int i=0; i<total_requests; i++){
-    free(off_args[i]);
-    free(dst_bufs[i]);
-  }
-  free(off_args);
-  free(dst_bufs);
-
-  fcontext_destroy(self);
-}
-
 
 
 int main(){
@@ -239,20 +185,31 @@ int main(){
   uint64_t *off_times, *wait_times, *hash_times;
   uint64_t *deser_times;
 
-  uint64_t *cpu_rps;
+  uint64_t *exetime;
 
-  cpu_rps = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  exetime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
   for(int i=0; i<iter; i++)
-    cpu_router_closed_loop_test(total_requests, total_requests, cpu_rps, i);
+    cpu_router_closed_loop_test(total_requests, total_requests, exetime, i);
 
-  uint64_t exetimemean = avg_from_array(cpu_rps, iter);
-  uint64_t exetimemedian = median_from_array(cpu_rps, iter);
-  uint64_t exetimestddev = stddev_from_array(cpu_rps, iter);
-  uint64_t rpsmean = total_requests * 2100000000 / exetimemean;
-  uint64_t rpsmedian = total_requests * 2100000000 / exetimemedian;
-  uint64_t rpsstddev = total_requests * 2100000000 / exetimestddev;
+  uint64_t exetimemean = avg_from_array(exetime, iter);
+  uint64_t exetimemedian = median_from_array(exetime, iter);
+  uint64_t exetimestddev = stddev_from_array(exetime, iter);
+  double rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
+  double rpsmedian = (double)total_requests / (exetimemedian / 2100000000.0);
 
-  LOG_PRINT( LOG_PERF, "RPS Mean: %lu Median: %lu Stddev: %lu\n", rpsmean, rpsmedian, rpsstddev);
+  LOG_PRINT( LOG_PERF, "ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
+  LOG_PRINT( LOG_PERF, "RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
+
+  for(int i=0; i<iter; i++)
+    blocking_ax_router_closed_loop_test(requests_sampling_interval, total_requests, exetime, i);
+  exetimemean = avg_from_array(exetime, iter);
+  exetimemedian = median_from_array(exetime, iter);
+  exetimestddev = stddev_from_array(exetime, iter);
+  rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
+  rpsmedian = (double)total_requests / (exetimemedian / 2100000000.0);
+
+  LOG_PRINT( LOG_PERF, "ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
+  LOG_PRINT( LOG_PERF, "RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
 
   // for(int i=0; i<iter; i++)
   //   yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);

@@ -30,7 +30,8 @@ void execute_blocking_requests_closed_system_with_sampling(
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state, fcontext_state_t *self);
+  fcontext_state_t **off_req_state, fcontext_state_t *self,
+  uint64_t *exetime, int idx);
 void execute_blocking_requests_closed_system_request_breakdown(
   int requests_sampling_interval, int total_requests,
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
