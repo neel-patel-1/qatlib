@@ -13,7 +13,11 @@ typedef struct _node{
 } node;
 
 node *build_llc_ll(int length);
+node *build_host_ll(int length);
+void free_ll(node *head);
 
+void allocate_pre_intersected_posting_lists_llc(int total_requests, node **p_head_ptrs, int length);
+static void ll_simple(node *head);
 
 #include "inline/posting_list.ipp"
 #endif

@@ -23,3 +23,37 @@ node *build_llc_ll(int length){
 
   return head;
 }
+
+node *build_host_ll(int length){
+  node *head = (node *)malloc(sizeof(node));
+  node *cur = head;
+  node *next = NULL;
+  int i;
+  for(i=0; i<length-1; i++){
+    cur->docID = i;
+    next = (node *)malloc(sizeof(node));
+    cur->next = next;
+    cur = next;
+  }
+  cur->docID = length-1;
+  cur->next = NULL;
+
+  return head;
+}
+
+void free_ll(node *head){
+  node *cur = head;
+  node *next = NULL;
+  while(cur != NULL){
+    next = cur->next;
+    free(cur);
+    cur = next;
+  }
+}
+
+void allocate_pre_intersected_posting_lists_llc(int total_requests, node **p_head_ptrs, int length){
+  int i;
+  for(i=0; i<total_requests; i++){
+    p_head_ptrs[i] = build_llc_ll(length);
+  }
+}
