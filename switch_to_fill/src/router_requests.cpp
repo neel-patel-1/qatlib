@@ -101,6 +101,7 @@ void blocking_router_request_stamp(fcontext_transfer_t arg){
     _mm_pause();
   }
   ts2[id] = sampleCoderdtsc();
+  // PRINT_DBG("Hashing: %s %ld\n", dst_payload, query.size());
   furc_hash((const char *)dst_payload, query.size(), 16);
   ts3[id] = sampleCoderdtsc();
 
@@ -125,18 +126,21 @@ void cpu_router_request_stamp(fcontext_transfer_t arg){
   timed_cpu_request_args *args = (timed_cpu_request_args *)arg.data;
   router::RouterRequest *req = args->request;
   std::string *serialized = args->serialized;
+  int id = args->id;
 
   uint64_t *ts0 = args->ts0;
   uint64_t *ts1 = args->ts1;
   uint64_t *ts2 = args->ts2;
 
-  ts0[0] = sampleCoderdtsc();
+  ts0[id] = sampleCoderdtsc();
   req->ParseFromString(*serialized);
-  ts1[0] = sampleCoderdtsc();
+  const char *key = req->key().c_str();
+  uint64_t size = req->key().size();
+  ts1[id] = sampleCoderdtsc();
 
-  // PRINT_DBG("Hashing: %s\n", req->key().c_str());
-  furc_hash(req->key().c_str(), req->key().size(), 16);
-  ts2[0] = sampleCoderdtsc();
+  // PRINT_DBG("Hashing: %s %ld\n", req->key().c_str(), size);
+  furc_hash(key, size, 16);
+  ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);

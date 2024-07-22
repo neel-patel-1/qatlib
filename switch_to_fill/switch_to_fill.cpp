@@ -377,6 +377,7 @@ void cpu_router_request_breakdown(int requests_sampling_interval, int total_requ
     cpu_args[i]->ts0 = ts0;
     cpu_args[i]->ts1 = ts1;
     cpu_args[i]->ts2 = ts2;
+    cpu_args[i]->id = i;
   }
 
   fcontext_state_t **cpu_req_state;
@@ -429,8 +430,8 @@ int main(){
   for(int i=0; i<10; i++)
     blocking_ax_router_request_breakdown_test(total_requests, total_requests);
 
-  // for(int i=0; i<10; i++)
-  //   cpu_router_closed_loop_test(total_requests, total_requests);
+  for(int i=0; i<10; i++)
+    cpu_router_request_breakdown(total_requests, total_requests);
 
 
 

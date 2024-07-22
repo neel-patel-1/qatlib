@@ -39,6 +39,7 @@ typedef struct _timed_cpu_request_args{
   uint64_t *ts0;
   uint64_t *ts1;
   uint64_t *ts2;
+  int id;
 } timed_cpu_request_args;
 
 void allocate_offload_requests(int total_requests, offload_request_args ***p_off_args, ax_comp *comps, char **dst_bufs);
