@@ -320,13 +320,13 @@ void cpu_router_request_breakdown(int requests_sampling_interval,
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
 
   fcontext_state_t *self = fcontext_create_proxy();
-  router::RouterRequest **serializedMCReqs;
-  serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+  router::RouterRequest **deserializeIntoThisRequest;
+  deserializeIntoThisRequest = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
   std::string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
   for(int i=0; i<total_requests; i++){
-    serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
+    deserializeIntoThisRequest[i] = new router::RouterRequest(); /*preallocated request obj*/
     serializedMCReqStrings[i] = new string();
-    serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
+    serialize_request(deserializeIntoThisRequest[i], serializedMCReqStrings[i]);
   }
 
   timed_cpu_request_args **cpu_args;
@@ -337,7 +337,7 @@ void cpu_router_request_breakdown(int requests_sampling_interval,
   cpu_args = (timed_cpu_request_args **)malloc(sizeof(timed_cpu_request_args *) * total_requests);
   for(int i=0; i<total_requests; i++){
     cpu_args[i] = (timed_cpu_request_args *)malloc(sizeof(timed_cpu_request_args));
-    cpu_args[i]->request = serializedMCReqs[i];
+    cpu_args[i]->request = deserializeIntoThisRequest[i];
     cpu_args[i]->serialized = serializedMCReqStrings[i];
 
     cpu_args[i]->ts0 = ts0;
@@ -360,12 +360,12 @@ void cpu_router_request_breakdown(int requests_sampling_interval,
 
   free_contexts(cpu_req_state, total_requests);
   for(int i=0; i<total_requests; i++){
-    delete serializedMCReqs[i];
+    delete deserializeIntoThisRequest[i];
     delete serializedMCReqStrings[i];
     free(cpu_args[i]);
   }
   free(cpu_args);
-  free(serializedMCReqs);
+  free(deserializeIntoThisRequest);
   free(serializedMCReqStrings);
 
   fcontext_destroy(self);
@@ -379,20 +379,20 @@ void cpu_router_closed_loop_test(int requests_sampling_interval, int total_reque
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
 
   fcontext_state_t *self = fcontext_create_proxy();
-  router::RouterRequest **serializedMCReqs;
-  serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+  router::RouterRequest **deserializeIntoThisRequest;
+  deserializeIntoThisRequest = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
   string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
   for(int i=0; i<total_requests; i++){
-    serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
+    deserializeIntoThisRequest[i] = new router::RouterRequest(); /*preallocated request obj*/
     serializedMCReqStrings[i] = new string();
-    serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
+    serialize_request(deserializeIntoThisRequest[i], serializedMCReqStrings[i]);
   }
 
   cpu_request_args **cpu_args;
   cpu_args = (cpu_request_args **)malloc(sizeof(cpu_request_args *) * total_requests);
   for(int i=0; i<total_requests; i++){
     cpu_args[i] = (cpu_request_args *)malloc(sizeof(cpu_request_args));
-    cpu_args[i]->request = serializedMCReqs[i];
+    cpu_args[i]->request = deserializeIntoThisRequest[i];
     cpu_args[i]->serialized = serializedMCReqStrings[i];
   }
 
@@ -410,12 +410,12 @@ void cpu_router_closed_loop_test(int requests_sampling_interval, int total_reque
 
   free_contexts(cpu_req_state, total_requests);
   for(int i=0; i<total_requests; i++){
-    delete serializedMCReqs[i];
+    delete deserializeIntoThisRequest[i];
     delete serializedMCReqStrings[i];
     free(cpu_args[i]);
   }
   free(cpu_args);
-  free(serializedMCReqs);
+  free(deserializeIntoThisRequest);
   free(serializedMCReqStrings);
 
   fcontext_destroy(self);
