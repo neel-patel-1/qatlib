@@ -1,4 +1,7 @@
 #include "thread_utils.h"
+#include "print_utils.h"
+#include "status.h"
+#include <cstring>
 
 int create_thread_pinned(pthread_t *thread, void *(*func)(void*), void *arg, int coreId){
     pthread_attr_t attr;

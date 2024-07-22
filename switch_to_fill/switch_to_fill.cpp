@@ -18,6 +18,8 @@ extern "C"{
 #include <x86intrin.h>
 #include <string>
 
+#include "router_requests.h"
+
 /*
   End-to-End Evaluation
   - Blocking vs. Switch to Fill
@@ -38,61 +40,7 @@ extern "C"{
 
 using namespace std;
 
-int offloads_completed = 0;
 bool gDebugParam = false;
-
-
-
-typedef struct _offload_request_args{
-  ax_comp *comp;
-  char *dst_payload;
-  int id;
-} offload_request_args;
-typedef struct _cpu_request_args{
-  router::RouterRequest *request;
-  std::string *serialized;
-} cpu_request_args;
-
-
-
-void yielding_router_request(fcontext_transfer_t arg){
-  offload_request_args *args = (offload_request_args *)arg.data;
-  struct completion_record * comp = args->comp;
-  char *dst_payload = args->dst_payload;
-  int id = args->id;
-  string query = "/region/cluster/foo:key|#|etc";
-
-  int status = submit_offload(comp, dst_payload);
-  if(status == STATUS_FAIL){
-    PRINT_ERR("Offload request failed\n");
-    return;
-  }
-  fcontext_swap(arg.prev_context, NULL);
-
-  furc_hash((const char *)dst_payload, query.size(), 16);
-
-  offloads_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
-
-void blocking_router_request(fcontext_transfer_t arg){
-  offload_request_args *args = (offload_request_args *)arg.data;
-  struct completion_record * comp = args->comp;
-  char *dst_payload = args->dst_payload;
-  string query = "/region/cluster/foo:key|#|etc";
-
-  int status = submit_offload(comp, dst_payload);
-  if(status == STATUS_FAIL){
-    return;
-  }
-  while(comp->status == COMP_STATUS_PENDING){
-    _mm_pause();
-  }
-  furc_hash((const char *)dst_payload, query.size(), 16);
-
-  offloads_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
 
 void serialize_request(router::RouterRequest *req, string *serialized){
   string query = "/region/cluster/foo:key|#|etc";
@@ -102,20 +50,6 @@ void serialize_request(router::RouterRequest *req, string *serialized){
   req->set_operation(0);
   req->SerializeToString(serialized);
 }
-
-void cpu_router_request(fcontext_transfer_t arg){
-  cpu_request_args *args = (cpu_request_args *)arg.data;
-  router::RouterRequest *req = args->request;
-  string *serialized = args->serialized;
-  req->ParseFromString(*serialized);
-
-  // PRINT_DBG("Hashing: %s\n", req->key().c_str());
-  furc_hash(req->key().c_str(), req->key().size(), 16);
-
-  offloads_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
-
 
 void create_contexts(fcontext_state_t **states, int num_contexts, void (*func)(fcontext_transfer_t)){
   for(int i=0; i<num_contexts; i++){
@@ -140,11 +74,11 @@ void execute_yielding_requests_closed_system_with_sampling(
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
   sampling_interval++;
 
-  while(offloads_completed < total_requests){
+  while(requests_completed < total_requests){
     if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
       fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
       next_request_offload_to_complete_idx++;
-      if(offloads_completed % requests_sampling_interval == 0 && offloads_completed > 0){
+      if(requests_completed % requests_sampling_interval == 0 && requests_completed > 0){
         sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
         sampling_interval++;
       }
@@ -175,7 +109,7 @@ void execute_blocking_requests_closed_system_with_sampling(
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
   sampling_interval++;
 
-  while(offloads_completed < total_requests){
+  while(requests_completed < total_requests){
     fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
     next_unstarted_req_idx++;
   }
@@ -201,7 +135,7 @@ void execute_cpu_requests_closed_system_with_sampling(
   sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
   sampling_interval++;
 
-  while(offloads_completed < total_requests){
+  while(requests_completed < total_requests){
 
     fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
     next_unstarted_req_idx++;
@@ -222,26 +156,7 @@ void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, 
   }
 }
 
-void allocate_crs(int total_requests, ax_comp **p_comps){
-  *p_comps = (ax_comp *)malloc(sizeof(ax_comp) * total_requests);
-  if(*p_comps == NULL){
-    PRINT_DBG("Error allocating completion records\n");
-    exit(1);
-  }
-  for(int i=0; i<total_requests; i++){
-    (*p_comps)[i].status = COMP_STATUS_PENDING;
-  }
-}
 
-void allocate_offload_requests(int total_requests, offload_request_args ***p_off_args, ax_comp *comps, char **dst_bufs){
-  *p_off_args = (offload_request_args **)malloc(sizeof(offload_request_args *) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    (*p_off_args)[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
-    (*p_off_args)[i]->comp = &(comps[i]);
-    (*p_off_args)[i]->dst_payload = dst_bufs[i];
-    (*p_off_args)[i]->id = i;
-  }
-}
 
 void free_contexts(fcontext_state_t **states, int num_contexts){
   for(int i=0; i<num_contexts; i++){
@@ -300,7 +215,7 @@ int main(){
     sampling_intervals = (total_requests / requests_sampling_interval);
     sampling_interval_timestamps = sampling_intervals + 1;
 
-    offloads_completed = 0;
+    requests_completed = 0;
 
     /* Pre-allocate the payloads */
     allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
@@ -370,7 +285,7 @@ int main(){
     requests_sampling_interval = 10000, total_requests = 10000;
     sampling_intervals = (total_requests / requests_sampling_interval);
     sampling_interval_timestamps = sampling_intervals + 1;
-    offloads_completed = 0;
+    requests_completed = 0;
 
     execute_cpu_requests_closed_system_with_sampling(
       requests_sampling_interval, total_requests,
@@ -399,7 +314,7 @@ int main(){
     sampling_intervals = (total_requests / requests_sampling_interval);
     sampling_interval_timestamps = sampling_intervals + 1;
 
-    offloads_completed = 0;
+    requests_completed = 0;
     allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
 
     /* Pre-allocate the CRs */

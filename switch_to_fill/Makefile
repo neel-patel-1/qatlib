@@ -22,11 +22,12 @@ obj/%.o: src/%.cpp
 
 OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o router.pb.o \
-	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o obj/router_requests.o \
+	obj/ch3_hash.o \
 	switch_to_fill.o
 
 switch_to_fill: $(OBJS)
 	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf`
 
 clean:
-	rm -f objs/*.o switch_to_fill switch_to_fill.o
+	rm -f obj/*.o switch_to_fill switch_to_fill.o

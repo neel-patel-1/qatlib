@@ -28,3 +28,24 @@ retry:
 
   return STATUS_SUCCESS;
 }
+
+void allocate_crs(int total_requests, ax_comp **p_comps){
+  *p_comps = (ax_comp *)malloc(sizeof(ax_comp) * total_requests);
+  if(*p_comps == NULL){
+    PRINT_DBG("Error allocating completion records\n");
+    exit(1);
+  }
+  for(int i=0; i<total_requests; i++){
+    (*p_comps)[i].status = COMP_STATUS_PENDING;
+  }
+}
+
+void allocate_offload_requests(int total_requests, offload_request_args ***p_off_args, ax_comp *comps, char **dst_bufs){
+  *p_off_args = (offload_request_args **)malloc(sizeof(offload_request_args *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    (*p_off_args)[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+    (*p_off_args)[i]->comp = &(comps[i]);
+    (*p_off_args)[i]->dst_payload = dst_bufs[i];
+    (*p_off_args)[i]->id = i;
+  }
+}
