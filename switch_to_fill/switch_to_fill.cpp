@@ -102,72 +102,6 @@ void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
   fcontext_destroy(self);
 }
 
-void yielding_ax_router_request_breakdown_closed_loop_test(int requests_sampling_interval,
-  int total_requests){
-  fcontext_state_t *self = fcontext_create_proxy();
-  char**dst_bufs;
-  ax_comp *comps;
-  timed_offload_request_args **off_args;
-  fcontext_transfer_t *offload_req_xfer;
-  fcontext_state_t **off_req_state;
-  string query = "/region/cluster/foo:key|#|etc";
-
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-  requests_completed = 0;
-  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
-
-  /* Pre-allocate the CRs */
-  allocate_crs(total_requests, &comps);
-
-  /* Pre-allocate the request args */
-  off_args = (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
-  uint64_t *ts0, *ts1, *ts2, *ts3;
-  ts0 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts3 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-
-  for(int i=0; i<total_requests; i++){
-    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
-    off_args[i]->comp = &comps[i];
-    off_args[i]->dst_payload = dst_bufs[i];
-    off_args[i]->id = i;
-    off_args[i]->ts0 = ts0;
-    off_args[i]->ts1 = ts1;
-    off_args[i]->ts2 = ts2;
-    off_args[i]->ts3 = ts3;
-  }
-
-  /* Pre-create the contexts */
-  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-  create_contexts(off_req_state, total_requests, yielding_router_request_stamp);
-
-  execute_yielding_requests_closed_system_request_breakdown(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    offload_req_xfer, off_req_state, self);
-
-  /* teardown */
-  free_contexts(off_req_state, total_requests);
-  free(offload_req_xfer);
-  free(comps);
-  for(int i=0; i<total_requests; i++){
-    free(off_args[i]);
-    free(dst_bufs[i]);
-  }
-  free(off_args);
-  free(dst_bufs);
-
-  fcontext_destroy(self);
-}
-
-
 
 int main(){
   gDebugParam = true;
@@ -211,8 +145,6 @@ int main(){
   LOG_PRINT( LOG_PERF, "ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
   LOG_PRINT( LOG_PERF, "RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
 
-  // for(int i=0; i<iter; i++)
-  //   yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);
 
   off_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
   wait_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
@@ -231,9 +163,27 @@ int main(){
   uint64_t hash_median = median_from_array(hash_times, iter);
   uint64_t hash_stddev = stddev_from_array(hash_times, iter);
 
-  LOG_PRINT( LOG_PERF, "Offload Mean: %lu Median: %lu Stddev: %lu\n", off_mean, off_median, off_stddev);
-  LOG_PRINT( LOG_PERF, "Wait Mean: %lu Median: %lu Stddev: %lu\n", wait_mean, wait_median, wait_stddev);
-  LOG_PRINT( LOG_PERF, "Hash Mean: %lu Median: %lu Stddev: %lu\n", hash_mean, hash_median, hash_stddev);
+  LOG_PRINT( LOG_PERF, "Blocking Offload Mean: %lu Median: %lu Stddev: %lu\n", off_mean, off_median, off_stddev);
+  LOG_PRINT( LOG_PERF, "Blocking Wait Mean: %lu Median: %lu Stddev: %lu\n", wait_mean, wait_median, wait_stddev);
+  LOG_PRINT( LOG_PERF, "Blocking Hash Mean: %lu Median: %lu Stddev: %lu\n", hash_mean, hash_median, hash_stddev);
+
+  for(int i=0; i<iter; i++)
+    yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests,
+      off_times, wait_times, hash_times, i);
+
+  off_mean = avg_from_array(off_times, iter);
+  off_median = median_from_array(off_times, iter);
+  off_stddev = stddev_from_array(off_times, iter);
+  wait_mean = avg_from_array(wait_times, iter);
+  wait_median = median_from_array(wait_times, iter);
+  wait_stddev = stddev_from_array(wait_times, iter);
+  hash_mean = avg_from_array(hash_times, iter);
+  hash_median = median_from_array(hash_times, iter);
+  hash_stddev = stddev_from_array(hash_times, iter);
+
+  LOG_PRINT( LOG_PERF, "Yielding Offload Mean: %lu Median: %lu Stddev: %lu\n", off_mean, off_median, off_stddev);
+  LOG_PRINT( LOG_PERF, "Yielding YieldToResumeDelay Mean: %lu Median: %lu Stddev: %lu\n", wait_mean, wait_median, wait_stddev);
+  LOG_PRINT( LOG_PERF, "Yielding Hash Mean: %lu Median: %lu Stddev: %lu\n", hash_mean, hash_median, hash_stddev);
 
   free(off_times);
   free(wait_times);

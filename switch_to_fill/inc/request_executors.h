@@ -23,7 +23,8 @@ void execute_yielding_requests_closed_system_request_breakdown(
   ax_comp *comps, timed_offload_request_args **off_args,
   fcontext_transfer_t *offload_req_xfer,
   fcontext_state_t **off_req_state,
-  fcontext_state_t *self);
+  fcontext_state_t *self,
+  uint64_t *off_times, uint64_t *yield_to_resume_times, uint64_t *hash_times, int idx);
 
 void execute_blocking_requests_closed_system_with_sampling(
   int requests_sampling_interval, int total_requests,
