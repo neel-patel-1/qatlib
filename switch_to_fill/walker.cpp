@@ -40,6 +40,8 @@ void blocking_simple_ranker_request(fcontext_transfer_t arg){
   }
 
   ll_simple(head);
+
+  requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
 }
 
@@ -63,7 +65,7 @@ int main(){
     blocking_simple_ranker_request,
     allocate_pre_intersected_posting_lists_llc,
     free_pre_intersected_posting_lists_llc,
-    total_requests, total_requests, NULL, 0
+    total_requests, total_requests, exetime, 0
   );
 
   stop_non_blocking_ax(&ax_td, &ax_running);
