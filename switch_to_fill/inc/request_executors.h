@@ -42,5 +42,9 @@ void execute_cpu_requests_closed_system_with_sampling(
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, cpu_request_args **off_args,
   fcontext_state_t **off_req_state, fcontext_state_t *self);
-
+void execute_cpu_requests_closed_system_request_breakdown(
+  int requests_sampling_interval, int total_requests,
+  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
+  ax_comp *comps, timed_cpu_request_args **off_args,
+  fcontext_state_t **off_req_state, fcontext_state_t *self);
 #endif

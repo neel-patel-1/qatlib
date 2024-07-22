@@ -121,6 +121,27 @@ void cpu_router_request(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void cpu_router_request_stamp(fcontext_transfer_t arg){
+  timed_cpu_request_args *args = (timed_cpu_request_args *)arg.data;
+  router::RouterRequest *req = args->request;
+  std::string *serialized = args->serialized;
+
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+
+  ts0[0] = sampleCoderdtsc();
+  req->ParseFromString(*serialized);
+  ts1[0] = sampleCoderdtsc();
+
+  // PRINT_DBG("Hashing: %s\n", req->key().c_str());
+  furc_hash(req->key().c_str(), req->key().size(), 16);
+  ts2[0] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
 void serialize_request(router::RouterRequest *req, std::string *serialized){
   std::string query = "/region/cluster/foo:key|#|etc";
   std::string value = "bar";
