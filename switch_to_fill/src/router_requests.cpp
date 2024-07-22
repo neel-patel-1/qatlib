@@ -301,3 +301,53 @@ void cpu_router_request_breakdown(int requests_sampling_interval,
   fcontext_destroy(self);
 
 }
+
+void cpu_router_closed_loop_test(int requests_sampling_interval, int total_requests, uint64_t *exetimes, int idx){
+  using namespace std;
+  int sampling_intervals = (total_requests / requests_sampling_interval);
+  int sampling_interval_timestamps = sampling_intervals + 1;
+  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
+
+  fcontext_state_t *self = fcontext_create_proxy();
+  router::RouterRequest **serializedMCReqs;
+  serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
+  string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
+    serializedMCReqStrings[i] = new string();
+    serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
+  }
+
+  cpu_request_args **cpu_args;
+  cpu_args = (cpu_request_args **)malloc(sizeof(cpu_request_args *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    cpu_args[i] = (cpu_request_args *)malloc(sizeof(cpu_request_args));
+    cpu_args[i]->request = serializedMCReqs[i];
+    cpu_args[i]->serialized = serializedMCReqStrings[i];
+  }
+
+  fcontext_state_t **cpu_req_state;
+  cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+  create_contexts(cpu_req_state, total_requests, cpu_router_request);
+
+  requests_completed = 0;
+  execute_cpu_requests_closed_system_with_sampling(
+    requests_sampling_interval, total_requests,
+    sampling_interval_completion_times, sampling_interval_timestamps,
+    NULL, cpu_args,
+    cpu_req_state, self,
+    exetimes, idx);
+
+  free_contexts(cpu_req_state, total_requests);
+  for(int i=0; i<total_requests; i++){
+    delete serializedMCReqs[i];
+    delete serializedMCReqStrings[i];
+    free(cpu_args[i]);
+  }
+  free(cpu_args);
+  free(serializedMCReqs);
+  free(serializedMCReqStrings);
+
+  fcontext_destroy(self);
+
+}

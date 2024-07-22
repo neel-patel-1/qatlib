@@ -222,63 +222,6 @@ void blocking_ax_router_closed_loop_test(int requests_sampling_interval, int tot
 }
 
 
-void cpu_router_closed_loop_test(int requests_sampling_interval, int total_requests, uint64_t *rps, int idx){
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-  fcontext_state_t *self = fcontext_create_proxy();
-  router::RouterRequest **serializedMCReqs;
-  serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
-  string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
-    serializedMCReqStrings[i] = new string();
-    serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
-  }
-
-  cpu_request_args **cpu_args;
-  cpu_args = (cpu_request_args **)malloc(sizeof(cpu_request_args *) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    cpu_args[i] = (cpu_request_args *)malloc(sizeof(cpu_request_args));
-    cpu_args[i]->request = serializedMCReqs[i];
-    cpu_args[i]->serialized = serializedMCReqStrings[i];
-  }
-
-  fcontext_state_t **cpu_req_state;
-  cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-  create_contexts(cpu_req_state, total_requests, cpu_router_request);
-
-  requests_completed = 0;
-  execute_cpu_requests_closed_system_with_sampling(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    NULL, cpu_args,
-    cpu_req_state, self,
-    rps, idx);
-
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
-
-  free_contexts(cpu_req_state, total_requests);
-  for(int i=0; i<total_requests; i++){
-    delete serializedMCReqs[i];
-    delete serializedMCReqStrings[i];
-    free(cpu_args[i]);
-  }
-  free(cpu_args);
-  free(serializedMCReqs);
-  free(serializedMCReqStrings);
-
-  fcontext_destroy(self);
-
-}
-
-
-
 
 int main(){
   gDebugParam = true;
@@ -295,6 +238,21 @@ int main(){
   string query = "/region/cluster/foo:key|#|etc";
   uint64_t *off_times, *wait_times, *hash_times;
   uint64_t *deser_times;
+
+  uint64_t *cpu_rps;
+
+  cpu_rps = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++)
+    cpu_router_closed_loop_test(total_requests, total_requests, cpu_rps, i);
+
+  uint64_t exetimemean = avg_from_array(cpu_rps, iter);
+  uint64_t exetimemedian = median_from_array(cpu_rps, iter);
+  uint64_t exetimestddev = stddev_from_array(cpu_rps, iter);
+  uint64_t rpsmean = total_requests * 2100000000 / exetimemean;
+  uint64_t rpsmedian = total_requests * 2100000000 / exetimemedian;
+  uint64_t rpsstddev = total_requests * 2100000000 / exetimestddev;
+
+  LOG_PRINT( LOG_PERF, "RPS Mean: %lu Median: %lu Stddev: %lu\n", rpsmean, rpsmedian, rpsstddev);
 
   // for(int i=0; i<iter; i++)
   //   yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);

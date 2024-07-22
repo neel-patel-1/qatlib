@@ -34,6 +34,9 @@ void cpu_router_request(fcontext_transfer_t arg);
 void cpu_router_request_stamp(fcontext_transfer_t arg);
 void cpu_router_request_breakdown(int requests_sampling_interval,
   int total_requests, uint64_t *deser_times, uint64_t *hash_times, int idx);
+void cpu_router_closed_loop_test(int requests_sampling_interval,
+  int total_requests, uint64_t *exetimes, int idx);
+
 
 void serialize_request(router::RouterRequest *req, std::string *serialized);
 
