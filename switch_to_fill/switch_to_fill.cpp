@@ -19,6 +19,8 @@ extern "C"{
 #include <string>
 
 #include "router_requests.h"
+#include "request_executors.h"
+#include "context_management.h"
 
 /*
   End-to-End Evaluation
@@ -41,129 +43,6 @@ extern "C"{
 using namespace std;
 
 bool gDebugParam = false;
-
-void serialize_request(router::RouterRequest *req, string *serialized){
-  string query = "/region/cluster/foo:key|#|etc";
-  string value = "bar";
-  req->set_key(query);
-  req->set_value(value);
-  req->set_operation(0);
-  req->SerializeToString(serialized);
-}
-
-void create_contexts(fcontext_state_t **states, int num_contexts, void (*func)(fcontext_transfer_t)){
-  for(int i=0; i<num_contexts; i++){
-    states[i] = fcontext_create(func);
-  }
-}
-
-void execute_yielding_requests_closed_system_with_sampling(
-  int requests_sampling_interval, int total_requests,
-  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
-  ax_comp *comps, offload_request_args **off_args,
-  fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state,
-  fcontext_state_t *self)
-{
-
-  int next_unstarted_req_idx = 0;
-  int next_request_offload_to_complete_idx = 0;
-  int sampling_interval = 0;
-
-
-  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
-  sampling_interval++;
-
-  while(requests_completed < total_requests){
-    if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
-      fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
-      next_request_offload_to_complete_idx++;
-      if(requests_completed % requests_sampling_interval == 0 && requests_completed > 0){
-        sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-        sampling_interval++;
-      }
-    } else if(next_unstarted_req_idx < total_requests){
-      offload_req_xfer[next_unstarted_req_idx] =
-        fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
-      next_unstarted_req_idx++;
-    }
-  }
-
-
-
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
-}
-
-void execute_blocking_requests_closed_system_with_sampling(
-  int requests_sampling_interval, int total_requests,
-  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
-  ax_comp *comps, offload_request_args **off_args,
-  fcontext_transfer_t *offload_req_xfer,
-  fcontext_state_t **off_req_state, fcontext_state_t *self)
-{
-
-  int next_unstarted_req_idx = 0;
-  int next_request_offload_to_complete_idx = 0;
-  int sampling_interval = 0;
-
-  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
-  sampling_interval++;
-
-  while(requests_completed < total_requests){
-    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
-    next_unstarted_req_idx++;
-  }
-  sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-
-
-
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
-
-}
-
-void execute_cpu_requests_closed_system_with_sampling(
-  int requests_sampling_interval, int total_requests,
-  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
-  ax_comp *comps, cpu_request_args **off_args,
-  fcontext_state_t **off_req_state, fcontext_state_t *self)
-{
-
-  int next_unstarted_req_idx = 0;
-  int next_request_offload_to_complete_idx = 0;
-  int sampling_interval = 0;
-
-  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
-  sampling_interval++;
-
-  while(requests_completed < total_requests){
-
-    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
-    next_unstarted_req_idx++;
-
-  }
-  sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
-
-
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
-
-}
-
-void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, string query){
-  *p_dst_bufs = (char **)malloc(sizeof(char *) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    (*p_dst_bufs)[i] = (char *)malloc(sizeof(char) * query.size());
-    memcpy((*p_dst_bufs)[i], query.c_str(), query.size());
-  }
-}
-
-
-
-void free_contexts(fcontext_state_t **states, int num_contexts){
-  for(int i=0; i<num_contexts; i++){
-    fcontext_destroy(states[i]);
-  }
-}
-
 
 void calculate_rps_from_samples(
   uint64_t *sampling_interval_completion_times,
