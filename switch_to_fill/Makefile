@@ -1,24 +1,32 @@
 all: switch_to_fill
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
-	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
+	$(CXX) -g -c -o $@ $^  -I./inc
 
 obj/make_x86_64_sysv_elf_gas.o: src/make_x86_64_sysv_elf_gas.S
-	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
+	$(CXX) -g -c -o $@ $^  -I./inc
 
 obj/ontop_x86_64_sysv_elf_gas.o: src/ontop_x86_64_sysv_elf_gas.S
-	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
+	$(CXX) -g -c -o $@ $^  -I./inc
 
 obj/context_fast.o: src/context_fast.S
-	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
+	$(CXX) -g -c -o $@ $^  -I./inc
 
 switch_to_fill.o: switch_to_fill.cpp
-	$(CXX) -g -c -o $@ $^ -I ../include -I./inc
+	$(CXX) -g -c -o $@ $^  -I./inc
 
 router.pb.o: src/router.pb.cc
-	$(CXX) -g -c -o $@ $^ -I ../include -I./inc `pkg-config --cflags --libs protobuf`
+	$(CXX) -g -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
 
-switch_to_fill: switch_to_fill.o router.pb.o obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o
+obj/%.o: src/%.cpp
+	$(CXX) -g -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
+
+OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o router.pb.o \
+	obj/emul_ax.o obj/thread_utils.o  \
+	switch_to_fill.o
+
+switch_to_fill: $(OBJS)
 	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf`
 
 clean:
-	rm -f switch_to_fill switch_to_fill.o obj/jump_x86_64_sysv_elf_gas.o
+	rm -f objs/*.o switch_to_fill switch_to_fill.o

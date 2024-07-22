@@ -4,6 +4,8 @@
 #include "ch3_hash.h"
 #include "status.h"
 #include "router.pb.h"
+#include "emul_ax.h"
+#include "thread_utils.h"
 
 extern "C"{
 #include "fcontext.h"
@@ -31,43 +33,14 @@ extern "C"{
   Switch-To-Fill Scheduling:
   - Count completed requests to know when to terminate
 */
-#define SUBMIT_SUCCESS 0
-#define SUBMIT_FAIL 1
-#define OFFLOAD_RECEIVED 1
-#define OFFLOAD_REQUESTED 0
-#define COMP_STATUS_COMPLETED 1
-#define COMP_STATUS_PENDING 0
-std::atomic<int> submit_flag;
-std::atomic<int> submit_status;
-std::atomic<uint64_t> compl_addr;
-std::atomic<uint64_t> p_dst_buf;
+
+
+
 int offloads_completed = 0;
 bool gDebugParam = false;
-typedef struct completion_record{
-  int status;
-} ax_comp;
-class offload_entry{
-  public:
-  offload_entry(){
-    start_time = 0;
-    comp_time = 0;
-    comp = NULL;
-  }
-  offload_entry(uint64_t start, uint64_t compl_time, ax_comp *c){
-    start_time = start;
-    comp_time = compl_time;
-    comp = c;
-  }
-  uint64_t start_time;
-  uint64_t comp_time;
-  int32_t id;
-  ax_comp *comp;
-};
-typedef struct _ax_params {
-  int max_inflights;
-  uint64_t offload_time;
-  bool *ax_running;
-} ax_params;
+
+
+
 typedef struct _offload_request_args{
   ax_comp *comp;
   char *dst_payload;
@@ -81,73 +54,7 @@ typedef struct _cpu_request_args{
 
 using namespace std;
 
-int create_thread_pinned(pthread_t *thread, void *(*func)(void*), void *arg, int coreId){
-    pthread_attr_t attr;
-  cpu_set_t cpuset;
-  struct sched_param param;
 
-  int status = pthread_attr_init(&attr);
-
-  if(status != 0){
-    PRINT_DBG( "Error initializing thread attributes\n");
-    return STATUS_FAIL;
-  }
-
-  CPU_ZERO(&cpuset);
-  CPU_SET(coreId, &cpuset);
-  status = pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpuset);
-  if(status != 0){
-    PRINT_DBG( "Error setting thread affinity\n");
-    pthread_attr_destroy(&attr);
-    return STATUS_FAIL;
-  }
-
-  status = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
-  if(status != 0){
-    PRINT_DBG( "Error setting thread scheduling inheritance\n");
-    pthread_attr_destroy(&attr);
-    return STATUS_FAIL;
-  }
-
-  if (pthread_attr_setschedpolicy(
-        &attr, SCHED_RR) != 0)
-  {
-      PRINT_DBG(
-              "Failed to set scheduling policy for thread!\n");
-      pthread_attr_destroy(&attr);
-      return STATUS_FAIL;
-  }
-
-  memset(&param, 0, sizeof(param));
-  param.sched_priority = 15;
-  if (pthread_attr_setschedparam(&attr, &param) != 0)
-  {
-      PRINT_DBG(
-              "Failed to set the sched parameters attribute!\n");
-      pthread_attr_destroy(&attr);
-      return STATUS_FAIL;
-  }
-
-  if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) != 0)
-  {
-      PRINT_DBG(
-              "Failed to set the dettachState attribute!\n");
-      pthread_attr_destroy(&attr);
-      return STATUS_FAIL;
-  }
-  if (pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM) != 0)
-  {
-      PRINT_DBG("Failed to set the attribute!\n");
-      pthread_attr_destroy(&attr);
-      return STATUS_FAIL;
-  }
-  if(pthread_create(thread, &attr, func, arg) != 0){
-    PRINT_DBG( "Error creating thread\n");
-    PRINT_DBG( "Creating thread with NULL attributes\n");
-    pthread_create(thread, NULL, func, arg);
-  }
-  return STATUS_SUCCESS;
-}
 
 
 void *nonblocking_emul_ax(void *arg){
@@ -521,6 +428,52 @@ int main(){
 
     self = fcontext_create_proxy();
 
+    /* switch to fill router requests */
+    /*reset offload counter*/
+    requests_sampling_interval = 1000, total_requests = 10000;
+    sampling_intervals = (total_requests / requests_sampling_interval);
+    sampling_interval_timestamps = sampling_intervals + 1;
+
+    offloads_completed = 0;
+
+    /* Pre-allocate the payloads */
+    allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+
+    /* Pre-allocate the CRs */
+    allocate_crs(total_requests, &comps);
+
+    /* Pre-allocate the request args */
+    allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
+
+    /* Pre-create the contexts */
+    offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
+    off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+
+    create_contexts(off_req_state, total_requests, yielding_router_request);
+
+    execute_yielding_requests_closed_system_with_sampling(
+      requests_sampling_interval, total_requests,
+      sampling_interval_completion_times, sampling_interval_timestamps,
+      comps, off_args,
+      offload_req_xfer, off_req_state, self);
+
+    calculate_rps_from_samples(
+      sampling_interval_completion_times,
+      sampling_intervals,
+      requests_sampling_interval,
+      2100000000);
+
+    /* teardown */
+    free_contexts(off_req_state, total_requests);
+    free(offload_req_xfer);
+    free(comps);
+    for(int i=0; i<total_requests; i++){
+      free(off_args[i]);
+      free(dst_bufs[i]);
+    }
+    free(off_args);
+    free(dst_bufs);
+
     /*
       Pre-allocate all serialized requests used by the cpu requests
 
@@ -618,51 +571,7 @@ int main(){
 
 
 
-    /* switch to fill router requests */
-    /*reset offload counter*/
-    requests_sampling_interval = 1000, total_requests = 10000;
-    sampling_intervals = (total_requests / requests_sampling_interval);
-    sampling_interval_timestamps = sampling_intervals + 1;
 
-    offloads_completed = 0;
-
-    /* Pre-allocate the payloads */
-    allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
-
-    /* Pre-allocate the CRs */
-    allocate_crs(total_requests, &comps);
-
-    /* Pre-allocate the request args */
-    allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
-
-    /* Pre-create the contexts */
-    offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-    off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-    create_contexts(off_req_state, total_requests, yielding_router_request);
-
-    execute_yielding_requests_closed_system_with_sampling(
-      requests_sampling_interval, total_requests,
-      sampling_interval_completion_times, sampling_interval_timestamps,
-      comps, off_args,
-      offload_req_xfer, off_req_state, self);
-
-    calculate_rps_from_samples(
-      sampling_interval_completion_times,
-      sampling_intervals,
-      requests_sampling_interval,
-      2100000000);
-
-    /* teardown */
-    free_contexts(off_req_state, total_requests);
-    free(offload_req_xfer);
-    free(comps);
-    for(int i=0; i<total_requests; i++){
-      free(off_args[i]);
-      free(dst_bufs[i]);
-    }
-    free(off_args);
-    free(dst_bufs);
     fcontext_destroy(self);
 
 
