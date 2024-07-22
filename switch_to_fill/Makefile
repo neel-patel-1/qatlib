@@ -35,7 +35,8 @@ WALKER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
 	obj/context_management.o obj/posting_list.o \
-	obj/rps.o obj/dsa_alloc.o obj/stats.o
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/request_executors.o
 walker: $(WALKER_OBJS) walker.o
 	$(CXX) -g -o $@ $^ -ldml
 

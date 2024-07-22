@@ -18,6 +18,11 @@ void free_ll(node *head);
 
 void allocate_pre_intersected_posting_lists_llc(int total_requests,
   char ***p_posting_list_heads_arr);
+void free_pre_intersected_posting_lists_llc(
+  int total_requests,
+  char ***p_posting_list_heads_arr
+  );
+
 static void ll_simple(node *head);
 
 #include "inline/posting_list.ipp"

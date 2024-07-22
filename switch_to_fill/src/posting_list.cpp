@@ -62,3 +62,14 @@ void allocate_pre_intersected_posting_lists_llc(
   }
 
 }
+
+void free_pre_intersected_posting_lists_llc(
+  int total_requests,
+  char ***p_posting_list_heads_arr
+  )
+{
+  for(int i=0; i<total_requests; i++){
+    free_ll((node *)((*p_posting_list_heads_arr)[i]));
+  }
+  free(*p_posting_list_heads_arr);
+}

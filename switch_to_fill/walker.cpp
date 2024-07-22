@@ -17,13 +17,7 @@ extern "C"{
 
 
 #include "posting_list.h"
-
-typedef struct _ranker_offload_args{
-  node *list_head;
-  ax_comp *comp;
-} ranker_offload_args;
-
-
+#include "test_harness.h"
 /*
   blocking linked list merge request:
     (same as router)
@@ -31,10 +25,11 @@ typedef struct _ranker_offload_args{
     ll_dynamic
 
 */
-void blocking_simple_ranker_request(ranker_offload_args *arg){
-  ranker_offload_args *args = (ranker_offload_args *)arg;
-  node *head = args->list_head; /* get, but wait to touch */
+void blocking_simple_ranker_request(fcontext_transfer_t arg){
+  offload_request_args *args = (offload_request_args *)arg.data;
+  node *head = (node *)args->dst_payload;
   ax_comp *comp = args->comp;
+  int id = args->id;
 
   int status = submit_offload(comp, (char *)head);
   if(status == STATUS_FAIL){
@@ -45,10 +40,8 @@ void blocking_simple_ranker_request(ranker_offload_args *arg){
   }
 
   ll_simple(head);
+  fcontext_swap(arg.prev_context, NULL);
 }
-
-
-
 
 
 int gLogLevel = LOG_DEBUG;
@@ -59,19 +52,19 @@ int main(){
   int offload_time = 1200;
   int max_inflight = 128;
 
+  int sampling_interval = 1000;
+  int total_requests = 10000;
+  uint64_t *exetime;
+
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
-  node *head = build_llc_ll(10);
-  ranker_offload_args *args = (ranker_offload_args *)malloc(sizeof(ranker_offload_args));
-  args->list_head = head;
-
-  ax_comp *comp = (ax_comp *)malloc(sizeof(ax_comp));
-  comp->status = COMP_STATUS_PENDING;
-  args->comp = comp;
-
-  blocking_simple_ranker_request(args);
-
-  free_ll(head);
+  exetime = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
+  blocking_ax_closed_loop_test(
+    blocking_simple_ranker_request,
+    allocate_pre_intersected_posting_lists_llc,
+    free_pre_intersected_posting_lists_llc,
+    total_requests, total_requests, NULL, 0
+  );
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
