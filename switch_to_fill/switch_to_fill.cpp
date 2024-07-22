@@ -115,7 +115,7 @@ void yielding_ax_router_request_breakdown_closed_loop_test(int requests_sampling
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
 
   requests_completed = 0;
-  allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
 
   /* Pre-allocate the CRs */
   allocate_crs(total_requests, &comps);
@@ -241,7 +241,7 @@ void blocking_ax_router_request_breakdown_test(int requests_sampling_interval, i
 
 
   requests_completed = 0;
-  allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
 
   /* Pre-allocate the CRs */
   allocate_crs(total_requests, &comps);
@@ -422,8 +422,6 @@ int main(){
 
   char**dst_bufs;
   string query = "/region/cluster/foo:key|#|etc";
-
-  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
 
   for(int i=0; i<10; i++)
     yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);

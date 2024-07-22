@@ -21,7 +21,8 @@ void yielding_router_request(fcontext_transfer_t arg){
    }
    fcontext_swap(arg.prev_context, NULL);
 
-   furc_hash((const char *)dst_payload, query.size(), 16);
+   uint32_t hashed = furc_hash((const char *)dst_payload, query.size(), 16);
+   PRINT_DBG("Hashing: %s %ld\n", dst_payload, query.size());
 
    requests_completed ++;
    fcontext_swap(arg.prev_context, NULL);
@@ -51,8 +52,9 @@ void yielding_router_request_stamp(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 
   ts2[id] = sampleCoderdtsc();
-  furc_hash((const char *)dst_payload, query.size(), 16);
+  uint32_t hashed = furc_hash((const char *)dst_payload, query.size(), 16);
   ts3[id] = sampleCoderdtsc();
+  PRINT_DBG("Hashing: %s %ld\n", dst_payload, query.size());
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -71,7 +73,8 @@ void blocking_router_request(fcontext_transfer_t arg){
    while(comp->status == COMP_STATUS_PENDING){
      _mm_pause();
    }
-   furc_hash((const char *)dst_payload, query.size(), 16);
+   PRINT_DBG("Hashing: %s %ld\n", dst_payload, query.size());
+   uint32_t hashed = furc_hash((const char *)dst_payload, query.size(), 16);
 
    requests_completed ++;
    fcontext_swap(arg.prev_context, NULL);
@@ -101,8 +104,8 @@ void blocking_router_request_stamp(fcontext_transfer_t arg){
     _mm_pause();
   }
   ts2[id] = sampleCoderdtsc();
-  // PRINT_DBG("Hashing: %s %ld\n", dst_payload, query.size());
-  furc_hash((const char *)dst_payload, query.size(), 16);
+  PRINT_DBG("Hashing: %s %ld\n", dst_payload, query.size());
+  uint32_t hashed = furc_hash((const char *)dst_payload, query.size(), 16);
   ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -115,8 +118,8 @@ void cpu_router_request(fcontext_transfer_t arg){
   std::string *serialized = args->serialized;
   req->ParseFromString(*serialized);
 
-  // PRINT_DBG("Hashing: %s\n", req->key().c_str());
-  furc_hash(req->key().c_str(), req->key().size(), 16);
+  PRINT_DBG("Hashing: %s\n", req->key().c_str());
+  uint32_t hashed = furc_hash(req->key().c_str(), req->key().size(), 16);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -138,8 +141,8 @@ void cpu_router_request_stamp(fcontext_transfer_t arg){
   uint64_t size = req->key().size();
   ts1[id] = sampleCoderdtsc();
 
-  // PRINT_DBG("Hashing: %s %ld\n", req->key().c_str(), size);
-  furc_hash(key, size, 16);
+  PRINT_DBG("Hashing: %s %ld\n", req->key().c_str(), size);
+  uint32_t hashed = furc_hash(key, size, 16);
   ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
