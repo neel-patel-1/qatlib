@@ -47,69 +47,6 @@ using namespace std;
 bool gDebugParam = false;
 int gLogLevel = LOG_PERF;
 
-/*
-  exetime needs to be (total_requests / requests_sampling_interval) x test_iterations
-
-  the caller needs to ensure the "early yielder underutilization" problem does not
-  impact the reported offered load.
-
-  caller must tune the sampling interval and choose the exetime samples that are not impacted
-  by underutilization
-
-  indexing into the array: caller must ensure they increment the start_idx by
-    (total_requests / requests_sampling_interval)
-*/
-void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
-  int total_requests, uint64_t *exetime, int start_idx){
-  fcontext_state_t *self = fcontext_create_proxy();
-  char**dst_bufs;
-  ax_comp *comps;
-  offload_request_args **off_args;
-  fcontext_transfer_t *offload_req_xfer;
-  fcontext_state_t **off_req_state;
-  string query = "/region/cluster/foo:key|#|etc";
-
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-  requests_completed = 0;
-  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
-
-  /* Pre-allocate the CRs */
-  allocate_crs(total_requests, &comps);
-
-  /* Pre-allocate the request args */
-  allocate_offload_requests(total_requests, &off_args, comps, dst_bufs);
-
-  /* Pre-create the contexts */
-  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-  create_contexts(off_req_state, total_requests, yielding_router_request);
-
-  execute_yielding_requests_closed_system_with_sampling(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    offload_req_xfer, off_req_state, self,
-    exetime, start_idx);
-
-
-  /* teardown */
-  free_contexts(off_req_state, total_requests);
-  free(offload_req_xfer);
-  free(comps);
-  for(int i=0; i<total_requests; i++){
-    free(off_args[i]);
-    free(dst_bufs[i]);
-  }
-  free(off_args);
-  free(dst_bufs);
-
-  fcontext_destroy(self);
-}
-
 
 int main(){
   gDebugParam = true;
@@ -119,7 +56,7 @@ int main(){
   int max_inflight = 128;
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
-  int iter = 10;
+  int iter = 1000;
   int requests_sampling_interval = 1000, total_requests = 10000;
 
   char**dst_bufs;

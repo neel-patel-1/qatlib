@@ -25,6 +25,8 @@ void yielding_router_request(fcontext_transfer_t arg);
 void yielding_router_request_stamp(fcontext_transfer_t arg);
 void yielding_ax_router_request_breakdown_closed_loop_test(int requests_sampling_interval,
   int total_requests, uint64_t *off_times, uint64_t *yield_to_resume_times, uint64_t *hash_times, int idx);
+void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
+  int total_requests, uint64_t *exetime, int start_idx);
 
 void blocking_router_request(fcontext_transfer_t arg);
 void blocking_router_request_stamp(fcontext_transfer_t arg);
