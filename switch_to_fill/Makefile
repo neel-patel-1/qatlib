@@ -24,6 +24,7 @@ OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o router.pb.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o obj/router_requests.o \
 	obj/ch3_hash.o obj/request_executors.o obj/context_management.o \
+	obj/rps.o \
 	switch_to_fill.o
 
 switch_to_fill: $(OBJS)
