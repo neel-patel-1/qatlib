@@ -3,6 +3,7 @@
 #include <string>
 #include "print_utils.h"
 #include "offload.h"
+#include "timer_utils.h"
 
 int requests_completed = 0;
 
@@ -21,6 +22,35 @@ void yielding_router_request(fcontext_transfer_t arg){
    fcontext_swap(arg.prev_context, NULL);
 
    furc_hash((const char *)dst_payload, query.size(), 16);
+
+   requests_completed ++;
+   fcontext_swap(arg.prev_context, NULL);
+}
+
+void yielding_router_request_stamp(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+    int id = args->id;
+    uint64_t *ts0 = args->ts0;
+    uint64_t *ts1 = args->ts1;
+    uint64_t *ts2 = args->ts2;
+
+   struct completion_record * comp = args->comp;
+   char *dst_payload = args->dst_payload;
+
+   std::string query = "/region/cluster/foo:key|#|etc";
+
+   ts0[id] = sampleCoderdtsc();
+
+   int status = submit_offload(comp, dst_payload);
+   if(status == STATUS_FAIL){
+     PRINT_ERR("Offload request failed\n");
+     return;
+   }
+   fcontext_swap(arg.prev_context, NULL);
+
+    ts1[id] = sampleCoderdtsc();
+   furc_hash((const char *)dst_payload, query.size(), 16);
+      ts2[id] = sampleCoderdtsc();
 
    requests_completed ++;
    fcontext_swap(arg.prev_context, NULL);

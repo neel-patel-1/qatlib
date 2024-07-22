@@ -19,6 +19,15 @@ typedef struct _offload_request_args{
   int id;
 } offload_request_args;
 
+typedef struct _timed_offload_request_args{
+  ax_comp *comp;
+  char *dst_payload;
+  int id;
+  uint64_t *ts0;
+  uint64_t *ts1;
+  uint64_t *ts2;
+} timed_offload_request_args;
+
 typedef struct _cpu_request_args{
   router::RouterRequest *request;
   std::string *serialized;
@@ -27,6 +36,7 @@ typedef struct _cpu_request_args{
 void allocate_offload_requests(int total_requests, offload_request_args ***p_off_args, ax_comp *comps, char **dst_bufs);
 
 void yielding_router_request(fcontext_transfer_t arg);
+void yielding_router_request_stamp(fcontext_transfer_t arg);
 
 void blocking_router_request(fcontext_transfer_t arg);
 
