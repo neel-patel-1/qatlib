@@ -217,3 +217,37 @@ void execute_cpu_requests_closed_system_request_breakdown(
   avg_samples_from_arrays(diff, hash_times[idx], ts2, ts1, requests_completed);
   LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
 }
+
+void execute_gpcore_requests_closed_system_request_breakdown(
+  int requests_sampling_interval, int total_requests,
+  uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
+  ax_comp *comps, timed_gpcore_request_args **off_args,
+  fcontext_state_t **off_req_state, fcontext_state_t *self,
+  uint64_t *kernel1, uint64_t *kernel2, int idx)
+{
+
+  int next_unstarted_req_idx = 0;
+  int next_request_offload_to_complete_idx = 0;
+  int sampling_interval = 0;
+
+  sampling_interval_completion_times[0] = sampleCoderdtsc(); /* start time */
+  sampling_interval++;
+
+  while(requests_completed < total_requests){
+
+    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+    next_unstarted_req_idx++;
+
+  }
+  sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
+
+  uint64_t *ts0 = off_args[0]->ts0;
+  uint64_t *ts1 = off_args[0]->ts1;
+  uint64_t *ts2 = off_args[0]->ts2;
+
+  uint64_t avg, diff[total_requests];
+  avg_samples_from_arrays(diff, kernel1[idx], ts1, ts0, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Kernel1Time: %lu\n", kernel1[idx]);
+  avg_samples_from_arrays(diff, kernel2[idx], ts2, ts1, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Kernel2Time: %lu\n", kernel2[idx]);
+}
