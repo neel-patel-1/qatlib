@@ -65,6 +65,21 @@ void execute_yielding_requests_closed_system_request_breakdown(
       next_unstarted_req_idx++;
     }
   }
+
+  uint64_t *ts0 = off_args[0]->ts0;
+  uint64_t *ts1 = off_args[0]->ts1;
+  uint64_t *ts2 = off_args[0]->ts2;
+  uint64_t *ts3 = off_args[0]->ts3;
+  uint64_t avg, diff[total_requests];
+  avg_samples_from_arrays(diff, avg, ts1, ts0, total_requests);
+  PRINT_DBG("Offload time: %lu\n", avg);
+
+  avg_samples_from_arrays(diff, avg, ts2, ts1, total_requests);
+  PRINT_DBG("FillerTime: %lu\n", avg);
+
+  avg_samples_from_arrays(diff, avg, ts3, ts2, total_requests);
+  PRINT_DBG("HashTime: %lu\n", avg);
+
 }
 
 void execute_blocking_requests_closed_system_with_sampling(

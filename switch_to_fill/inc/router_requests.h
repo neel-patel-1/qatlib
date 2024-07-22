@@ -26,6 +26,7 @@ typedef struct _timed_offload_request_args{
   uint64_t *ts0;
   uint64_t *ts1;
   uint64_t *ts2;
+  uint64_t *ts3;
 } timed_offload_request_args;
 
 typedef struct _cpu_request_args{
