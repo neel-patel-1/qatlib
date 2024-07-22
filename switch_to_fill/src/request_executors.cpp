@@ -72,13 +72,13 @@ void execute_yielding_requests_closed_system_request_breakdown(
   uint64_t *ts3 = off_args[0]->ts3;
   uint64_t avg, diff[total_requests];
   avg_samples_from_arrays(diff, avg, ts1, ts0, total_requests);
-  PRINT_DBG("Offload time: %lu\n", avg);
+  LOG_PRINT( LOG_PERF, "Offload time: %lu\n", avg);
 
   avg_samples_from_arrays(diff, avg, ts2, ts1, total_requests);
-  PRINT_DBG("FillerTime: %lu\n", avg);
+  LOG_PRINT( LOG_PERF, "FillerTime: %lu\n", avg);
 
   avg_samples_from_arrays(diff, avg, ts3, ts2, total_requests);
-  PRINT_DBG("HashTime: %lu\n", avg);
+  LOG_PRINT( LOG_PERF, "HashTime: %lu\n", avg);
 
 }
 
@@ -105,7 +105,7 @@ void execute_blocking_requests_closed_system_with_sampling(
 
 
 
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
+  LOG_PRINT( LOG_PERF, "Sampling_Interval: %d\n", sampling_interval);
 
 }
 
@@ -138,13 +138,13 @@ void execute_blocking_requests_closed_system_request_breakdown(
   uint64_t *ts3 = off_args[0]->ts3;
   uint64_t avg, diff[total_requests];
   avg_samples_from_arrays(diff, off_times[idx], ts1, ts0, requests_completed);
-  PRINT_DBG("Offload time: %lu\n", off_times[idx]);
+  LOG_PRINT( LOG_PERF, "Offload time: %lu\n", off_times[idx]);
 
   avg_samples_from_arrays(diff, wait_times[idx], ts2, ts1, requests_completed);
-  PRINT_DBG("WaitTime: %lu\n", wait_times[idx]);
+  LOG_PRINT( LOG_PERF, "WaitTime: %lu\n", wait_times[idx]);
 
   avg_samples_from_arrays(diff, hash_times[idx], ts3, ts2, requests_completed);
-  PRINT_DBG("HashTime: %lu\n", hash_times[idx]);
+  LOG_PRINT( LOG_PERF, "HashTime: %lu\n", hash_times[idx]);
 }
 
 void execute_cpu_requests_closed_system_with_sampling(
@@ -170,7 +170,7 @@ void execute_cpu_requests_closed_system_with_sampling(
   sampling_interval_completion_times[sampling_interval] = sampleCoderdtsc();
 
 
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
+  LOG_PRINT( LOG_PERF, "Sampling_Interval: %d\n", sampling_interval);
 
 }
 
@@ -178,7 +178,8 @@ void execute_cpu_requests_closed_system_request_breakdown(
   int requests_sampling_interval, int total_requests,
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
   ax_comp *comps, timed_cpu_request_args **off_args,
-  fcontext_state_t **off_req_state, fcontext_state_t *self)
+  fcontext_state_t **off_req_state, fcontext_state_t *self,
+  uint64_t *deser_times, uint64_t *hash_times, int idx)
 {
 
   int next_unstarted_req_idx = 0;
@@ -201,8 +202,8 @@ void execute_cpu_requests_closed_system_request_breakdown(
   uint64_t *ts2 = off_args[0]->ts2;
 
   uint64_t avg, diff[total_requests];
-  avg_samples_from_arrays(diff, avg, ts1, ts0, requests_completed);
-  PRINT_DBG("Deserialize: %lu\n", avg);
-  avg_samples_from_arrays(diff, avg, ts2, ts1, requests_completed);
-  PRINT_DBG("Hash: %lu\n", avg);
+  avg_samples_from_arrays(diff, deser_times[idx], ts1, ts0, requests_completed);
+  LOG_PRINT( LOG_PERF, "Deser time: %lu\n", deser_times[idx]);
+  avg_samples_from_arrays(diff, hash_times[idx], ts2, ts1, requests_completed);
+  LOG_PRINT( LOG_PERF, "HashTime: %lu\n", hash_times[idx]);
 }
