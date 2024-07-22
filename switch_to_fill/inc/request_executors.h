@@ -1,6 +1,7 @@
 #ifndef REQUEST_EXEC
 #define REQUEST_EXEC
 
+#include "router_request_args.h"
 #include "router_requests.h"
 #include "offload.h"
 extern "C" {

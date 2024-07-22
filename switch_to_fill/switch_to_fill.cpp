@@ -221,71 +221,6 @@ void blocking_ax_router_closed_loop_test(int requests_sampling_interval, int tot
   fcontext_destroy(self);
 }
 
-void blocking_ax_router_request_breakdown_test(
-  int requests_sampling_interval, int total_requests,
-  uint64_t *off_times, uint64_t *wait_times, uint64_t *hash_times, int idx){
-  fcontext_state_t *self = fcontext_create_proxy();
-  char**dst_bufs;
-  ax_comp *comps;
-  timed_offload_request_args **off_args;
-  fcontext_transfer_t *offload_req_xfer;
-  fcontext_state_t **off_req_state;
-  string query = "/region/cluster/foo:key|#|etc";
-
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-  uint64_t *ts0, *ts1, *ts2, *ts3; /* request args ts*/
-
-
-  requests_completed = 0;
-  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
-
-  /* Pre-allocate the CRs */
-  allocate_crs(total_requests, &comps);
-
-  /* Pre-allocate the request args */
-  off_args = (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
-  ts0 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts3 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
-    off_args[i]->comp = &comps[i];
-    off_args[i]->dst_payload = dst_bufs[i];
-    off_args[i]->id = i;
-    off_args[i]->ts0 = ts0;
-    off_args[i]->ts1 = ts1;
-    off_args[i]->ts2 = ts2;
-    off_args[i]->ts3 = ts3;
-  }
-
-  /* Pre-create the contexts */
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-  create_contexts(off_req_state, total_requests, blocking_router_request_stamp);
-
-  execute_blocking_requests_closed_system_request_breakdown(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    NULL, off_req_state, self,
-    off_times, wait_times, hash_times, idx);
-
-  /* teardown */
-  free_contexts(off_req_state, total_requests);
-  free(comps);
-  for(int i=0; i<total_requests; i++){
-    free(off_args[i]);
-    free(dst_bufs[i]);
-  }
-  free(off_args);
-  free(dst_bufs);
-
-  fcontext_destroy(self);
-}
 
 void cpu_router_closed_loop_test(int requests_sampling_interval, int total_requests){
   int sampling_intervals = (total_requests / requests_sampling_interval);
@@ -341,64 +276,7 @@ void cpu_router_closed_loop_test(int requests_sampling_interval, int total_reque
 
 }
 
-void cpu_router_request_breakdown(int requests_sampling_interval,
-  int total_requests, uint64_t *deser_times, uint64_t *hash_times, int idx){
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
 
-  fcontext_state_t *self = fcontext_create_proxy();
-  router::RouterRequest **serializedMCReqs;
-  serializedMCReqs = (router::RouterRequest **)malloc(sizeof(router::RouterRequest *) * total_requests);
-  string **serializedMCReqStrings = (string **)malloc(sizeof(string *) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    serializedMCReqs[i] = new router::RouterRequest(); /*preallocated request obj*/
-    serializedMCReqStrings[i] = new string();
-    serialize_request(serializedMCReqs[i], serializedMCReqStrings[i]);
-  }
-
-  timed_cpu_request_args **cpu_args;
-  uint64_t *ts0, *ts1, *ts2;
-  ts0 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  ts2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  cpu_args = (timed_cpu_request_args **)malloc(sizeof(timed_cpu_request_args *) * total_requests);
-  for(int i=0; i<total_requests; i++){
-    cpu_args[i] = (timed_cpu_request_args *)malloc(sizeof(timed_cpu_request_args));
-    cpu_args[i]->request = serializedMCReqs[i];
-    cpu_args[i]->serialized = serializedMCReqStrings[i];
-
-    cpu_args[i]->ts0 = ts0;
-    cpu_args[i]->ts1 = ts1;
-    cpu_args[i]->ts2 = ts2;
-    cpu_args[i]->id = i;
-  }
-
-  fcontext_state_t **cpu_req_state;
-  cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-  create_contexts(cpu_req_state, total_requests, cpu_router_request_stamp);
-
-  requests_completed = 0;
-  execute_cpu_requests_closed_system_request_breakdown(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    NULL, cpu_args,
-    cpu_req_state, self,
-    deser_times, hash_times, idx);
-
-  free_contexts(cpu_req_state, total_requests);
-  for(int i=0; i<total_requests; i++){
-    delete serializedMCReqs[i];
-    delete serializedMCReqStrings[i];
-    free(cpu_args[i]);
-  }
-  free(cpu_args);
-  free(serializedMCReqs);
-  free(serializedMCReqStrings);
-
-  fcontext_destroy(self);
-
-}
 
 
 int main(){

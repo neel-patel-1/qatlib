@@ -4,7 +4,10 @@
 #include "emul_ax.h"
 #include "ch3_hash.h"
 #include "dsa_alloc.h"
+#include "context_management.h"
+#include "request_executors.h"
 #include <string>
+#include "router_request_args.h"
 
 extern "C" {
   #include "fcontext.h"
@@ -14,34 +17,7 @@ extern "C" {
 
 extern int requests_completed;
 
-typedef struct _offload_request_args{
-  ax_comp *comp;
-  char *dst_payload;
-  int id;
-} offload_request_args;
 
-typedef struct _timed_offload_request_args{
-  ax_comp *comp;
-  char *dst_payload;
-  int id;
-  uint64_t *ts0;
-  uint64_t *ts1;
-  uint64_t *ts2;
-  uint64_t *ts3;
-} timed_offload_request_args;
-
-typedef struct _cpu_request_args{
-  router::RouterRequest *request;
-  std::string *serialized;
-} cpu_request_args;
-typedef struct _timed_cpu_request_args{
-  router::RouterRequest *request;
-  std::string *serialized;
-  uint64_t *ts0;
-  uint64_t *ts1;
-  uint64_t *ts2;
-  int id;
-} timed_cpu_request_args;
 
 void allocate_offload_requests(int total_requests, offload_request_args ***p_off_args, ax_comp *comps, char **dst_bufs);
 
@@ -50,9 +26,14 @@ void yielding_router_request_stamp(fcontext_transfer_t arg);
 
 void blocking_router_request(fcontext_transfer_t arg);
 void blocking_router_request_stamp(fcontext_transfer_t arg);
+void blocking_ax_router_request_breakdown_test(
+  int requests_sampling_interval, int total_requests,
+  uint64_t *off_times, uint64_t *wait_times, uint64_t *hash_times, int idx);
 
 void cpu_router_request(fcontext_transfer_t arg);
 void cpu_router_request_stamp(fcontext_transfer_t arg);
+void cpu_router_request_breakdown(int requests_sampling_interval,
+  int total_requests, uint64_t *deser_times, uint64_t *hash_times, int idx);
 
 void serialize_request(router::RouterRequest *req, std::string *serialized);
 
