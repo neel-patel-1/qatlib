@@ -41,12 +41,20 @@ void execute_blocking_requests_closed_system_with_sampling(
   fcontext_transfer_t *offload_req_xfer,
   fcontext_state_t **off_req_state, fcontext_state_t *self)
 {
+  uint64_t start, end;
 
+  start = sampleCoderdtsc();
   int next_unstarted_req_idx = 0;
   while(requests_completed < total_requests){
+    if(comps[next_unstarted_req_idx].status != COMP_STATUS_PENDING){
+      PRINT_ERR("Request already completed\n");
+    }
     fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
     next_unstarted_req_idx++;
   }
+
+  end = sampleCoderdtsc();
+  PRINT_DBG("BlockingRequests: %d Cycles: %ld\n", total_requests,  end - start);
 }
 
 void execute_cpu_requests_closed_system_with_sampling(
@@ -56,9 +64,17 @@ void execute_cpu_requests_closed_system_with_sampling(
   fcontext_state_t **off_req_state, fcontext_state_t *self)
 {
 
+  uint64_t start, end;
+
+  start = sampleCoderdtsc();
+
   int next_unstarted_req_idx = 0;
   while(requests_completed < total_requests){
     fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
     next_unstarted_req_idx++;
   }
+
+  end = sampleCoderdtsc();
+
+  PRINT_DBG("CPURequests: %d Cycles: %ld\n", total_requests,  end - start);
 }

@@ -162,7 +162,7 @@ int main(){
         free(serializedMCReqs);
         free(serializedMCReqStrings);,
 
-        1000
+        10
       );
     }
 
@@ -198,7 +198,7 @@ int main(){
         free(off_args);
         free(dst_bufs);,
 
-        1000
+        10
       );
     }
 
