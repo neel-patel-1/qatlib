@@ -68,9 +68,6 @@ int main(){
 
   string query = "/region/cluster/foo:key|#|etc";
   string value = "bar";
-
-    self = fcontext_create_proxy();
-
     /* switch to fill router requests */
     /*reset offload counter*/
     requests_sampling_interval = 1000, total_requests = 10000;

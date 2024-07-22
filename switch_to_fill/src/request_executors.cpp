@@ -32,10 +32,6 @@ void execute_yielding_requests_closed_system_with_sampling(
       next_unstarted_req_idx++;
     }
   }
-
-
-
-  PRINT_DBG("Sampling_Interval: %d\n", sampling_interval);
 }
 
 void execute_blocking_requests_closed_system_with_sampling(
