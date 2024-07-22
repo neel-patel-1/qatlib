@@ -22,6 +22,7 @@ extern "C"{
 #include "request_executors.h"
 #include "context_management.h"
 #include "rps.h"
+#include "stats.h"
 
 /*
   End-to-End Evaluation
@@ -399,6 +400,7 @@ void cpu_router_request_breakdown(int requests_sampling_interval,
 
 }
 
+
 int main(){
   gDebugParam = true;
   pthread_t ax_td;
@@ -425,11 +427,20 @@ int main(){
     blocking_ax_router_request_breakdown_test(total_requests, total_requests,
       off_times, wait_times, hash_times, i);
 
-  for(int i=0; i<iter; i++){
-    LOG_PRINT( LOG_PERF, "Offload Time: %lu\n", off_times[i]);
-    LOG_PRINT( LOG_PERF, "Wait Time: %lu\n", wait_times[i]);
-    LOG_PRINT( LOG_PERF, "Hash Time: %lu\n", hash_times[i]);
-  }
+  uint64_t off_mean = avg_from_array(off_times, iter);
+  uint64_t off_median = median_from_array(off_times, iter);
+  uint64_t off_stddev = stddev_from_array(off_times, iter);
+  uint64_t wait_mean = avg_from_array(wait_times, iter);
+  uint64_t wait_median = median_from_array(wait_times, iter);
+  uint64_t wait_stddev = stddev_from_array(wait_times, iter);
+  uint64_t hash_mean = avg_from_array(hash_times, iter);
+  uint64_t hash_median = median_from_array(hash_times, iter);
+  uint64_t hash_stddev = stddev_from_array(hash_times, iter);
+
+  LOG_PRINT( LOG_PERF, "Offload Mean: %lu Median: %lu Stddev: %lu\n", off_mean, off_median, off_stddev);
+  LOG_PRINT( LOG_PERF, "Wait Mean: %lu Median: %lu Stddev: %lu\n", wait_mean, wait_median, wait_stddev);
+  LOG_PRINT( LOG_PERF, "Hash Mean: %lu Median: %lu Stddev: %lu\n", hash_mean, hash_median, hash_stddev);
+
   free(off_times);
   free(wait_times);
   free(hash_times);
@@ -440,10 +451,16 @@ int main(){
     cpu_router_request_breakdown(total_requests, total_requests,
       deser_times, hash_times, i);
 
-  for(int i=0; i<iter; i++){
-    LOG_PRINT( LOG_PERF, "Deser Time: %lu\n", deser_times[i]);
-    LOG_PRINT( LOG_PERF, "Hash Time: %lu\n", hash_times[i]);
-  }
+  uint64_t deser_mean = avg_from_array(deser_times, iter);
+  uint64_t deser_median = median_from_array(deser_times, iter);
+  uint64_t deser_stddev = stddev_from_array(deser_times, iter);
+  hash_mean = avg_from_array(hash_times, iter);
+  hash_median = median_from_array(hash_times, iter);
+  hash_stddev = stddev_from_array(hash_times, iter);
+
+  LOG_PRINT( LOG_PERF, "Deser Mean: %lu Median: %lu Stddev: %lu\n", deser_mean, deser_median, deser_stddev);
+  LOG_PRINT( LOG_PERF, "Hash Mean: %lu Median: %lu Stddev: %lu\n", hash_mean, hash_median, hash_stddev);
+
   free(deser_times);
   free(hash_times);
 
