@@ -44,6 +44,7 @@ extern "C"{
 using namespace std;
 
 bool gDebugParam = false;
+int gLogLevel = LOG_PERF;
 
 void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
   int total_requests){
@@ -150,12 +151,6 @@ void yielding_ax_router_request_breakdown_closed_loop_test(int requests_sampling
     sampling_interval_completion_times, sampling_interval_timestamps,
     comps, off_args,
     offload_req_xfer, off_req_state, self);
-
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
 
   /* teardown */
   free_contexts(off_req_state, total_requests);
@@ -278,12 +273,6 @@ void blocking_ax_router_request_breakdown_test(
     NULL, off_req_state, self,
     off_times, wait_times, hash_times, idx);
 
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
-
   /* teardown */
   free_contexts(off_req_state, total_requests);
   free(comps);
@@ -351,7 +340,8 @@ void cpu_router_closed_loop_test(int requests_sampling_interval, int total_reque
 
 }
 
-void cpu_router_request_breakdown(int requests_sampling_interval, int total_requests){
+void cpu_router_request_breakdown(int requests_sampling_interval,
+  int total_requests, uint64_t *deser_times, uint64_t *hash_times, int idx){
   int sampling_intervals = (total_requests / requests_sampling_interval);
   int sampling_interval_timestamps = sampling_intervals + 1;
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
@@ -392,13 +382,8 @@ void cpu_router_request_breakdown(int requests_sampling_interval, int total_requ
     requests_sampling_interval, total_requests,
     sampling_interval_completion_times, sampling_interval_timestamps,
     NULL, cpu_args,
-    cpu_req_state, self);
-
-  calculate_rps_from_samples(
-    sampling_interval_completion_times,
-    sampling_intervals,
-    requests_sampling_interval,
-    2100000000);
+    cpu_req_state, self,
+    deser_times, hash_times, idx);
 
   free_contexts(cpu_req_state, total_requests);
   for(int i=0; i<total_requests; i++){
@@ -428,6 +413,7 @@ int main(){
   char**dst_bufs;
   string query = "/region/cluster/foo:key|#|etc";
   uint64_t *off_times, *wait_times, *hash_times;
+  uint64_t *deser_times;
 
   // for(int i=0; i<iter; i++)
   //   yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);
@@ -440,14 +426,26 @@ int main(){
       off_times, wait_times, hash_times, i);
 
   for(int i=0; i<iter; i++){
-    PRINT_DBG("Offload Time: %lu\n", off_times[i]);
-    PRINT_DBG("Wait Time: %lu\n", wait_times[i]);
-    PRINT_DBG("Hash Time: %lu\n", hash_times[i]);
+    LOG_PRINT( LOG_PERF, "Offload Time: %lu\n", off_times[i]);
+    LOG_PRINT( LOG_PERF, "Wait Time: %lu\n", wait_times[i]);
+    LOG_PRINT( LOG_PERF, "Hash Time: %lu\n", hash_times[i]);
   }
+  free(off_times);
+  free(wait_times);
+  free(hash_times);
 
-  // for(int i=0; i<iter; i++)
-  //   cpu_router_request_breakdown(total_requests, total_requests);
+  deser_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  hash_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++)
+    cpu_router_request_breakdown(total_requests, total_requests,
+      deser_times, hash_times, i);
 
+  for(int i=0; i<iter; i++){
+    LOG_PRINT( LOG_PERF, "Deser Time: %lu\n", deser_times[i]);
+    LOG_PRINT( LOG_PERF, "Hash Time: %lu\n", hash_times[i]);
+  }
+  free(deser_times);
+  free(hash_times);
 
 
   stop_non_blocking_ax(&ax_td, &ax_running);
