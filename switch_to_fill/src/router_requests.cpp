@@ -162,3 +162,11 @@ void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, 
     memcpy((*p_dst_bufs)[i], query.c_str(), query.size());
   }
 }
+
+void allocate_pre_deserialized_dsa_payloads(int total_requests, char ***p_dst_bufs, std::string query){
+  *p_dst_bufs = (char **)malloc(sizeof(char *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    (*p_dst_bufs)[i] = (char *)malloc(sizeof(char) * query.size());
+    dsa_llc_realloc((*p_dst_bufs)[i], (void *)(query.c_str()), query.size());
+  }
+}

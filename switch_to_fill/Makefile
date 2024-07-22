@@ -29,11 +29,12 @@ OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o router.pb.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o obj/router_requests.o \
 	obj/ch3_hash.o obj/request_executors.o obj/context_management.o \
-	obj/rps.o
+	obj/rps.o obj/dsa_alloc.o
 
 
 switch_to_fill: $(OBJS) switch_to_fill.o router.pb.o
-	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf`
+	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf` \
+	-ldml
 
 emul_ax_router_request_breakdown: $(OBJS) emul_ax_router_request_breakdown.o router.pb.o
 	$(CXX) -g -o $@ $^ `pkg-config --cflags --libs protobuf`

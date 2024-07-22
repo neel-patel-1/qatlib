@@ -3,6 +3,7 @@
 #include "router.pb.h"
 #include "emul_ax.h"
 #include "ch3_hash.h"
+#include "dsa_alloc.h"
 #include <string>
 
 extern "C" {
@@ -56,5 +57,7 @@ void cpu_router_request_stamp(fcontext_transfer_t arg);
 void serialize_request(router::RouterRequest *req, std::string *serialized);
 
 void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, std::string query);
+void allocate_pre_deserialized_dsa_payloads(int total_requests, char ***p_dst_bufs, std::string query);
+
 
 #endif

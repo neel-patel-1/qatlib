@@ -419,10 +419,11 @@ int main(){
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
 
   int requests_sampling_interval = 1000, total_requests = 10000;
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-  int sampling_interval = 0;
+
+  char**dst_bufs;
+  string query = "/region/cluster/foo:key|#|etc";
+
+  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
 
   for(int i=0; i<10; i++)
     yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);
