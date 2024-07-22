@@ -3,6 +3,9 @@
 #include <stdint.h>
 #include <atomic>
 #include <cstddef>
+#include <pthread.h>
+#include <cstdlib>
+#include "thread_utils.h"
 
 #define SUBMIT_SUCCESS 0
 #define SUBMIT_FAIL 1
@@ -46,4 +49,7 @@ typedef struct _ax_params {
 
 void *nonblocking_emul_ax(void *arg);
 
+void start_non_blocking_ax(pthread_t *ax_td, bool *ax_running_flag, uint64_t offload_duration, int max_inflights);
+
+void stop_non_blocking_ax(pthread_t *ax_td, bool *ax_running_flag);
 #endif
