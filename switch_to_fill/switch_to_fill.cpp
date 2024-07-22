@@ -74,7 +74,7 @@ void yielding_ax_router_closed_loop_test(int requests_sampling_interval,
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
 
   requests_completed = 0;
-  allocate_pre_deserialized_payloads(total_requests, &dst_bufs, query);
+  allocate_pre_deserialized_dsa_payloads(total_requests, &dst_bufs, query);
 
   /* Pre-allocate the CRs */
   allocate_crs(total_requests, &comps);
@@ -139,19 +139,38 @@ int main(){
   double rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
   double rpsmedian = (double)total_requests / (exetimemedian / 2100000000.0);
 
-  LOG_PRINT( LOG_PERF, "ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
-  LOG_PRINT( LOG_PERF, "RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
+  LOG_PRINT( LOG_PERF, "CPU ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
+  LOG_PRINT( LOG_PERF, "CPU RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
 
-  for(int i=0; i<iter; i++)
-    blocking_ax_router_closed_loop_test(requests_sampling_interval, total_requests, exetime, i);
+  exetime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    blocking_ax_router_closed_loop_test(total_requests, total_requests,
+      exetime, i);
+  }
   exetimemean = avg_from_array(exetime, iter);
   exetimemedian = median_from_array(exetime, iter);
   exetimestddev = stddev_from_array(exetime, iter);
   rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
   rpsmedian = (double)total_requests / (exetimemedian / 2100000000.0);
 
-  LOG_PRINT( LOG_PERF, "ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
-  LOG_PRINT( LOG_PERF, "RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
+  LOG_PRINT( LOG_PERF, "Blocking ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
+  LOG_PRINT( LOG_PERF, "Blocking RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
+  free(exetime);
+
+  int num_yield_samples = total_requests / requests_sampling_interval * iter;
+  int num_yield_samples_per_iter = total_requests / requests_sampling_interval;
+  exetime = (uint64_t *)malloc(sizeof(uint64_t) * num_yield_samples);
+  for(int i=0; i<iter; i++)
+    yielding_ax_router_closed_loop_test(requests_sampling_interval,
+      total_requests, exetime, i * num_yield_samples_per_iter);
+  exetimemean = avg_from_array(exetime, num_yield_samples);
+  exetimemedian = median_from_array(exetime, num_yield_samples);
+  exetimestddev = stddev_from_array(exetime, num_yield_samples);
+  rpsmean = (double)requests_sampling_interval / (exetimemean / 2100000000.0);
+  rpsmedian = (double)requests_sampling_interval / (exetimemedian / 2100000000.0);
+
+  LOG_PRINT( LOG_PERF, "SwitchToFill ExeTime Mean: %lu Median: %lu Stddev: %lu\n", exetimemean, exetimemedian, exetimestddev);
+  LOG_PRINT( LOG_PERF, "SwitchToFill RPS Mean: %f Median: %f\n", rpsmean, rpsmedian);
 
 
   off_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
