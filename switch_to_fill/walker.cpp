@@ -45,7 +45,6 @@ void blocking_simple_ranker_request(ranker_offload_args *arg){
   }
 
   ll_simple(head);
-
 }
 
 
