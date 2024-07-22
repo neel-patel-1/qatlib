@@ -225,7 +225,9 @@ void blocking_ax_router_closed_loop_test(int requests_sampling_interval, int tot
   fcontext_destroy(self);
 }
 
-void blocking_ax_router_request_breakdown_test(int requests_sampling_interval, int total_requests){
+void blocking_ax_router_request_breakdown_test(
+  int requests_sampling_interval, int total_requests,
+  uint64_t *off_times, uint64_t *wait_times, uint64_t *hash_times, int idx){
   fcontext_state_t *self = fcontext_create_proxy();
   char**dst_bufs;
   ax_comp *comps;
@@ -238,6 +240,7 @@ void blocking_ax_router_request_breakdown_test(int requests_sampling_interval, i
   int sampling_interval_timestamps = sampling_intervals + 1;
   uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
 
+  uint64_t *ts0, *ts1, *ts2, *ts3; /* request args ts*/
 
 
   requests_completed = 0;
@@ -248,7 +251,6 @@ void blocking_ax_router_request_breakdown_test(int requests_sampling_interval, i
 
   /* Pre-allocate the request args */
   off_args = (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
-  uint64_t *ts0, *ts1, *ts2, *ts3;
   ts0 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
   ts1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
   ts2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
@@ -273,7 +275,8 @@ void blocking_ax_router_request_breakdown_test(int requests_sampling_interval, i
     requests_sampling_interval, total_requests,
     sampling_interval_completion_times, sampling_interval_timestamps,
     comps, off_args,
-    NULL, off_req_state, self);
+    NULL, off_req_state, self,
+    off_times, wait_times, hash_times, idx);
 
   calculate_rps_from_samples(
     sampling_interval_completion_times,
@@ -416,21 +419,34 @@ int main(){
   pthread_t ax_td;
   bool ax_running = true;
   int offload_time = 511;
-  start_non_blocking_ax(&ax_td, &ax_running, offload_time, 10);
+  int max_inflight = 128;
+  start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
+  int iter = 10;
   int requests_sampling_interval = 1000, total_requests = 10000;
 
   char**dst_bufs;
   string query = "/region/cluster/foo:key|#|etc";
+  uint64_t *off_times, *wait_times, *hash_times;
 
-  for(int i=0; i<10; i++)
-    yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);
+  // for(int i=0; i<iter; i++)
+  //   yielding_ax_router_request_breakdown_closed_loop_test(requests_sampling_interval, total_requests);
 
-  for(int i=0; i<10; i++)
-    blocking_ax_router_request_breakdown_test(total_requests, total_requests);
+  off_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  wait_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  hash_times = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++)
+    blocking_ax_router_request_breakdown_test(total_requests, total_requests,
+      off_times, wait_times, hash_times, i);
 
-  for(int i=0; i<10; i++)
-    cpu_router_request_breakdown(total_requests, total_requests);
+  for(int i=0; i<iter; i++){
+    PRINT_DBG("Offload Time: %lu\n", off_times[i]);
+    PRINT_DBG("Wait Time: %lu\n", wait_times[i]);
+    PRINT_DBG("Hash Time: %lu\n", hash_times[i]);
+  }
+
+  // for(int i=0; i<iter; i++)
+  //   cpu_router_request_breakdown(total_requests, total_requests);
 
 
 
