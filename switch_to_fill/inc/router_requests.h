@@ -3,6 +3,7 @@
 #include "router.pb.h"
 #include "emul_ax.h"
 #include "ch3_hash.h"
+#include <string>
 
 extern "C" {
   #include "fcontext.h"
@@ -30,5 +31,9 @@ void yielding_router_request(fcontext_transfer_t arg);
 void blocking_router_request(fcontext_transfer_t arg);
 
 void cpu_router_request(fcontext_transfer_t arg);
+
+void serialize_request(router::RouterRequest *req, std::string *serialized);
+
+void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, std::string query);
 
 #endif

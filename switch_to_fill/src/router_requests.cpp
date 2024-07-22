@@ -57,3 +57,20 @@ void cpu_router_request(fcontext_transfer_t arg){
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
 }
+
+void serialize_request(router::RouterRequest *req, std::string *serialized){
+  std::string query = "/region/cluster/foo:key|#|etc";
+  std::string value = "bar";
+  req->set_key(query);
+  req->set_value(value);
+  req->set_operation(0);
+  req->SerializeToString(serialized);
+}
+
+void allocate_pre_deserialized_payloads(int total_requests, char ***p_dst_bufs, std::string query){
+  *p_dst_bufs = (char **)malloc(sizeof(char *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    (*p_dst_bufs)[i] = (char *)malloc(sizeof(char) * query.size());
+    memcpy((*p_dst_bufs)[i], query.c_str(), query.size());
+  }
+}
