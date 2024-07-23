@@ -68,7 +68,7 @@ void run_gpcore_blocking_swtofill_simple_rank(int new_pl,
       cpu_simple_ranker_request,
       allocate_posting_lists,
       free_posting_lists,
-      sampling_interval, total_requests, cpu_exe_time, i
+      total_requests, total_requests, cpu_exe_time, i
     );
   }
   mean_median_stdev_rps(cpu_exe_time, iter, total_requests, "GPCoreRPS");
@@ -80,7 +80,7 @@ void run_gpcore_blocking_swtofill_simple_rank(int new_pl,
       blocking_simple_ranker_request,
       allocate_pre_intersected_posting_lists_llc,
       free_pre_intersected_posting_lists_llc,
-      sampling_interval, total_requests, blocking_exe_time, i
+      total_requests, total_requests, blocking_exe_time, i
     );
   }
   mean_median_stdev_rps(blocking_exe_time, iter, total_requests, "BlockingOffloadRPS");

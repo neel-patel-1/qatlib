@@ -35,7 +35,7 @@ void execute_yielding_requests_closed_system_with_sampling(
   }
   for(int i=0; i<exetime_samples; i++){
     exetime[idx + i] = (sampling_interval_completion_times[i+1] - sampling_interval_completion_times[i]);
-    LOG_PRINT( LOG_DEBUG, "ExeTime: %ld\n", exetime[i]);
+    LOG_PRINT( LOG_MONITOR, "ExeTime: %ld\n", exetime[i]);
   }
 }
 
