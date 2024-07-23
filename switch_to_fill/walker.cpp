@@ -19,6 +19,7 @@ extern "C"{
 #include "posting_list.h"
 #include "test_harness.h"
 #include "timer_utils.h"
+#include "stats.h"
 /*
   blocking linked list merge request:
     (same as router)
@@ -84,7 +85,7 @@ void cpu_simple_ranker_request_stamped(fcontext_transfer_t arg){
 }
 
 
-int gLogLevel = LOG_DEBUG;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = true;
 int main(){
   pthread_t ax_td;
@@ -92,23 +93,35 @@ int main(){
   int offload_time = 1200;
   int max_inflight = 128;
 
+  int iter = 1000;
   int sampling_interval = 1000;
-  int total_requests = 1;
+  int total_requests = 1000;
   uint64_t *exetime;
   uint64_t *kernel1, *kernel2;
 
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
-  exetime = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  kernel1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  kernel2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  gpcore_request_breakdown(
-    cpu_simple_ranker_request_stamped,
-    allocate_posting_lists,
-    free_posting_lists,
-    total_requests,
-    kernel1, kernel2, 0
-  );
+  exetime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  kernel1 = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  kernel2 = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    gpcore_request_breakdown(
+      cpu_simple_ranker_request_stamped,
+      allocate_posting_lists,
+      free_posting_lists,
+      total_requests,
+      kernel1, kernel2, i
+    );
+  }
+  uint64_t kernel1mean = avg_from_array(kernel1, iter);
+  uint64_t kernel1median = median_from_array(kernel1, iter);
+  uint64_t kernel1stddev = stddev_from_array(kernel1, iter);
+  LOG_PRINT( LOG_PERF, "Kernel1 Mean: %lu Median: %lu Stddev: %lu\n", kernel1mean, kernel1median, kernel1stddev);
+  uint64_t kernel2mean = avg_from_array(kernel2, iter);
+  uint64_t kernel2median = median_from_array(kernel2, iter);
+  uint64_t kernel2stddev = stddev_from_array(kernel2, iter);
+  LOG_PRINT( LOG_PERF, "Kernel2 Mean: %lu Median: %lu Stddev: %lu\n", kernel2mean, kernel2median, kernel2stddev);
+
   // gpcore_closed_loop_test(
   //   cpu_simple_ranker_request,
   //   allocate_posting_lists,
