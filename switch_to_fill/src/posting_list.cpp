@@ -85,7 +85,7 @@ void allocate_posting_lists(int total_requests,
   for(int i=0; i<total_requests; i++){
     (*p_arr_posting_list_heads_arrs)[i] = (char **)malloc(sizeof(char *) * num_pls);
     for(int j=0; j<num_pls; j++){
-      (*p_arr_posting_list_heads_arrs)[i][j] = (char *)build_llc_ll(pl_len);
+      (*p_arr_posting_list_heads_arrs)[i][j] = (char *)build_host_ll(pl_len);
     }
   }
 }
