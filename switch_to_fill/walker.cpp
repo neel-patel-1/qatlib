@@ -95,16 +95,26 @@ int main(){
   int sampling_interval = 1000;
   int total_requests = 1;
   uint64_t *exetime;
+  uint64_t *kernel1, *kernel2;
 
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
   exetime = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  gpcore_closed_loop_test(
-    cpu_simple_ranker_request,
+  kernel1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
+  kernel2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
+  gpcore_request_breakdown(
+    cpu_simple_ranker_request_stamped,
     allocate_posting_lists,
-    free_posting_lists ,
-    sampling_interval, total_requests, exetime, 0
+    free_posting_lists,
+    total_requests,
+    kernel1, kernel2, 0
   );
+  // gpcore_closed_loop_test(
+  //   cpu_simple_ranker_request,
+  //   allocate_posting_lists,
+  //   free_posting_lists ,
+  //   sampling_interval, total_requests, exetime, 0
+  // );
   // blocking_ax_closed_loop_test(
   //   blocking_simple_ranker_request,
   //   allocate_pre_intersected_posting_lists_llc,

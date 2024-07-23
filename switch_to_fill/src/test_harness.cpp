@@ -114,16 +114,24 @@ void gpcore_request_breakdown(
   char ***dst_bufs;
   fcontext_state_t **cpu_req_state;
   timed_gpcore_request_args **gpcore_args;
+  uint64_t *ts0, *ts1, *ts2;
 
   payload_allocator(total_requests, &dst_bufs);
   cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
   create_contexts(cpu_req_state, total_requests, request_fn);
+
+  ts0 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
+  ts1 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
+  ts2 = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
 
   gpcore_args = (timed_gpcore_request_args **)malloc(sizeof(timed_gpcore_request_args *) * total_requests);
   for(int i=0; i<total_requests; i++){
     gpcore_args[i] = (timed_gpcore_request_args *)malloc(sizeof(timed_gpcore_request_args));
     gpcore_args[i]->inputs = (char **)(dst_bufs[i]);
     gpcore_args[i]->id = i;
+    gpcore_args[i]->ts0 = ts0;
+    gpcore_args[i]->ts1 = ts1;
+    gpcore_args[i]->ts2 = ts2;
   }
 
   requests_completed = 0;

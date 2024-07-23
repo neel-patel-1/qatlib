@@ -28,5 +28,12 @@ void gpcore_closed_loop_test(
   int total_requests,
   uint64_t *exetime, int idx
 );
+void gpcore_request_breakdown(
+  fcontext_fn_t request_fn,
+  void (* payload_allocator)(int, char****),
+  void (* payload_free)(int, char****),
+  int total_requests,
+  uint64_t *kernel1, uint64_t *kernel2, int idx
+);
 
 #endif
