@@ -43,7 +43,7 @@ void cpu_simple_ranker_request(fcontext_transfer_t arg){
 
 void blocking_simple_ranker_request_stamped(fcontext_transfer_t arg){
   timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
-  node *head = (node *)args->dst_payload;
+  node *head = (node *)(args->dst_payload);
   ax_comp *comp = args->comp;
   uint64_t *ts0 = args->ts0;
   uint64_t *ts1 = args->ts1;
@@ -103,6 +103,33 @@ void yielding_simple_ranker_request(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 
   ll_simple(head);
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void yielding_simple_ranker_request_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+  node *head = (node *)args->dst_payload;
+  ax_comp *comp = args->comp;
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+
+  ts0[id] = sampleCoderdtsc();
+  int status = submit_offload(comp, (char *)head);
+  if(status == STATUS_FAIL){
+    return;
+  }
+  ts1[id] = sampleCoderdtsc();
+
+  fcontext_swap(arg.prev_context, NULL);
+
+  ts2[id] = sampleCoderdtsc();
+  ll_simple(head);
+  ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
