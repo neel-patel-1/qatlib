@@ -40,6 +40,12 @@ void execute_blocking_requests_closed_system_request_breakdown(
   fcontext_transfer_t *offload_req_xfer,
   fcontext_state_t **off_req_state, fcontext_state_t *self,
   uint64_t *off_times, uint64_t *wait_times, uint64_t *hash_times, int idx);
+void execute_blocking_requests_closed_system_request_breakdown(
+  int total_requests,
+  timed_offload_request_args **off_args,
+  fcontext_state_t **off_req_state,
+  uint64_t *off_times, uint64_t *wait_times, uint64_t *kernel2_time,
+  int idx);
 
 void execute_cpu_requests_closed_system_with_sampling(
   int requests_sampling_interval, int total_requests,

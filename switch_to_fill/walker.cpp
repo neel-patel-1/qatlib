@@ -119,17 +119,40 @@ bool gDebugParam = true;
 int main(){
   pthread_t ax_td;
   bool ax_running = true;
-  int offload_time = 1200;
+  int offload_time = 16313;
   int max_inflight = 128;
 
-  int iter = 1000;
+  int iter = 100;
   int sampling_interval = 1000;
   int total_requests = 1000;
-  uint64_t *exetime;
-  uint64_t *kernel1, *kernel2;
+
+  uint64_t *offloadtime;
+  uint64_t *waittime, *posttime;
 
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
+  offloadtime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  waittime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  posttime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+
+  for(int i=0; i<iter; i++){
+    blocking_ax_request_breakdown(
+      blocking_simple_ranker_request_stamped,
+      allocate_pre_intersected_posting_lists_llc,
+      free_pre_intersected_posting_lists_llc,
+      total_requests,
+      offloadtime, waittime, posttime, i
+    );
+  }
+  print_mean_median_stdev(offloadtime, iter, "Offload");
+  print_mean_median_stdev(waittime, iter, "Wait");
+  print_mean_median_stdev(posttime, iter, "Post");
+
+  return 0;
+
+
+  uint64_t *exetime;
+  uint64_t *kernel1, *kernel2;
   exetime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
   kernel1 = (uint64_t *)malloc(sizeof(uint64_t) * iter);
   kernel2 = (uint64_t *)malloc(sizeof(uint64_t) * iter);
@@ -150,6 +173,7 @@ int main(){
   uint64_t kernel2median = median_from_array(kernel2, iter);
   uint64_t kernel2stddev = stddev_from_array(kernel2, iter);
   LOG_PRINT( LOG_PERF, "Kernel2 Mean: %lu Median: %lu Stddev: %lu\n", kernel2mean, kernel2median, kernel2stddev);
+
 
   // gpcore_closed_loop_test(
   //   cpu_simple_ranker_request,

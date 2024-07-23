@@ -272,3 +272,33 @@ void execute_gpcore_requests_closed_system_with_sampling(
   exetime[idx] = this_rps;
   LOG_PRINT( LOG_DEBUG, "ExeTime: %ld\n", this_rps);
 }
+
+void execute_blocking_requests_closed_system_request_breakdown(
+  int total_requests,
+  timed_offload_request_args **off_args,
+  fcontext_state_t **off_req_state,
+  uint64_t *off_times, uint64_t *wait_times, uint64_t *kernel2_time,
+  int idx)
+    /* pass in the times we measure and idx to populate */
+{
+  int next_unstarted_req_idx = 0;
+
+  while(requests_completed < total_requests){
+    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+    next_unstarted_req_idx++;
+  }
+
+  uint64_t *ts0 = off_args[0]->ts0;
+  uint64_t *ts1 = off_args[0]->ts1;
+  uint64_t *ts2 = off_args[0]->ts2;
+  uint64_t *ts3 = off_args[0]->ts3;
+  uint64_t avg, diff[total_requests];
+  avg_samples_from_arrays(diff, off_times[idx], ts1, ts0, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Offload time: %lu\n", off_times[idx]);
+
+  avg_samples_from_arrays(diff, wait_times[idx], ts2, ts1, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "WaitTime: %lu\n", wait_times[idx]);
+
+  avg_samples_from_arrays(diff, kernel2_time[idx], ts3, ts2, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Kernel2Time: %lu\n", kernel2_time[idx]);
+}

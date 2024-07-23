@@ -56,9 +56,10 @@ void allocate_pre_intersected_posting_lists_llc(
   char ***p_posting_list_heads_arr
   )
 {
+  int pl_len = 512;
   *p_posting_list_heads_arr = (char **)malloc(sizeof(char *) * total_requests);
   for(int i=0; i<total_requests; i++){
-    (*p_posting_list_heads_arr)[i] = (char *)build_llc_ll(10);
+    (*p_posting_list_heads_arr)[i] = (char *)build_llc_ll(pl_len);
   }
 
 }

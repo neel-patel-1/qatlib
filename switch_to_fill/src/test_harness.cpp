@@ -99,6 +99,10 @@ void blocking_ax_request_breakdown(
 
   create_contexts(off_req_state, total_requests, request_fn);
 
+  execute_blocking_requests_closed_system_request_breakdown(
+    total_requests, off_args,
+    off_req_state, offload_time, wait_time, kernel2_time, idx);
+
   /* teardown */
   free_contexts(off_req_state, total_requests);
   free(comps);
