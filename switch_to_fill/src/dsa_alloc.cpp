@@ -20,10 +20,10 @@ retry:
   dml_job_ptr->flags = DML_FLAG_PREFETCH_CACHE;
   status = dml_execute_job(dml_job_ptr, DML_WAIT_MODE_BUSY_POLL);
   if(status != DML_STATUS_OK){
-    PRINT_ERR("dml_execute_job failed: %u\n", status);
+    LOG_PRINT( LOG_WARN, "dml_execute_job failed: %u\n", status);
 
     if(num_retries > 3){
-      PRINT_ERR("dml_execute_job failed after %d retries\n", num_retries);
+      LOG_PRINT( LOG_WARN, "dml_execute_job failed after %d retries\n", num_retries);
       memcpy(dst, src, size);
     } else {
       num_retries++;

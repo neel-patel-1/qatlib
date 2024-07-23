@@ -103,7 +103,7 @@ void run_yielding_request_brkdown(fcontext_fn_t req_fn,
   print_mean_median_stdev(posttime, iter, "PostSwToFill");
 }
 
-int gLogLevel = 0;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = true;
 extern int pl_len;
 int main(){

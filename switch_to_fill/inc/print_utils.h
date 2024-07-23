@@ -6,7 +6,9 @@
 
 extern bool gDebugParam;
 extern int gLogLevel;
-#define LOG_PERF 1
+#define LOG_ERR -2
+#define LOG_PERF -1
+#define LOG_WARN 0
 #define LOG_MONITOR 2
 #define LOG_DEBUG 3
 
