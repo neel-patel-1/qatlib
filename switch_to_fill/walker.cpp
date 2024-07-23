@@ -18,6 +18,7 @@ extern "C"{
 
 #include "posting_list.h"
 #include "test_harness.h"
+#include "timer_utils.h"
 /*
   blocking linked list merge request:
     (same as router)
@@ -54,6 +55,29 @@ void cpu_simple_ranker_request(fcontext_transfer_t arg){
   intersect_posting_lists(result_head, plist1_head, plist2_head);
 
   ll_simple(result_head);
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void cpu_simple_ranker_request_stamped(fcontext_transfer_t arg){
+  timed_gpcore_request_args *args = (timed_gpcore_request_args *)arg.data;
+  node *plist1_head = (node *)(args->inputs[0]);
+  node *plist2_head = (node *)(args->inputs[1]);
+  node *result_head = (node *)(args->inputs[2]);
+
+  int id = args->id;
+
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+
+  ts0[id] = sampleCoderdtsc();
+  intersect_posting_lists(result_head, plist1_head, plist2_head);
+  ts1[id] = sampleCoderdtsc();
+
+  ll_simple(result_head);
+  ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
