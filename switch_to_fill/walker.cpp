@@ -47,6 +47,35 @@ void blocking_simple_ranker_request(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void blocking_simple_ranker_request_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+  node *head = (node *)args->dst_payload;
+  ax_comp *comp = args->comp;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  int id = args->id;
+
+  ts0[id] = sampleCoderdtsc();
+  int status = submit_offload(comp, (char *)head);
+  if(status == STATUS_FAIL){
+    return;
+  }
+  ts1[id] = sampleCoderdtsc();
+
+  while(comp->status == COMP_STATUS_PENDING){
+    _mm_pause();
+  }
+  ts2[id] = sampleCoderdtsc();
+
+  ll_simple(head);
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
 void cpu_simple_ranker_request(fcontext_transfer_t arg){
   gpcore_request_args *args = (gpcore_request_args *)arg.data;
   node *plist1_head = (node *)(args->inputs[0]);
