@@ -97,8 +97,12 @@ void *nonblocking_emul_ax(void *arg){
     }
   }
 
-  PRINT_DBG("Avg_Offload_Duration: %ld Rejected_Offloads: %ld\n",
-          offloadDurationSum / totalOffloads, rejected_offloads );
+  if(gLogLevel == LOG_PERF){
+    if(totalOffloads > 0){
+      LOG_PRINT(LOG_PERF, "Avg_Offload_Duration: %ld Rejected_Offloads: %ld\n",
+              offloadDurationSum / totalOffloads, rejected_offloads );
+    }
+  }
   return NULL;
 }
 
