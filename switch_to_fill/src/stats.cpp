@@ -32,3 +32,15 @@ void print_mean_median_stdev(uint64_t *arr, int size, const char *name){
   uint64_t stdev = stddev_from_array(arr, size);
   PRINT( "%s Mean: %lu Median: %lu Stddev: %lu\n", name, mean, median, stdev);
 }
+
+void mean_median_stdev_rps(uint64_t *cycle_arr, int size, int total_requests, const char *name){
+  uint64_t mean = avg_from_array(cycle_arr, size);
+  uint64_t median = median_from_array(cycle_arr, size);
+  uint64_t stdev = stddev_from_array(cycle_arr, size);
+
+  double rpsmean = (double)total_requests / (mean / 2100000000.0);
+  double rpsmedian = (double)total_requests / (median / 2100000000.0);
+  double rpsstddev = (double)total_requests / (stdev / 2100000000.0);
+
+  PRINT( "%s Mean: %f Median: %f Stddev: %f\n", name, rpsmean, rpsmedian, rpsstddev);
+}
