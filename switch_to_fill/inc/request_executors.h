@@ -59,5 +59,10 @@ void execute_gpcore_requests_closed_system_with_sampling(
   gpcore_request_args **off_args,
   fcontext_state_t **off_req_state,
   uint64_t *exetime, int idx);
+void execute_gpcore_requests_closed_system_request_breakdown(
+  int total_requests,
+  timed_gpcore_request_args **off_args,
+  fcontext_state_t **off_req_state,
+  uint64_t *kernel1, uint64_t *kernel2, int idx);
 
 #endif
