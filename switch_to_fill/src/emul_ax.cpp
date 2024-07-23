@@ -7,7 +7,7 @@ std::atomic<int> submit_flag;
 std::atomic<int> submit_status;
 std::atomic<uint64_t> compl_addr;
 std::atomic<uint64_t> p_dst_buf;
-uint64_t totalOffloads;
+std::atomic<uint64_t> total_offloads;
 
 
 extern bool gDebugParam;
@@ -24,9 +24,13 @@ void *nonblocking_emul_ax(void *arg){
   bool *keep_running = args->ax_running;
 
   /* Debugging offload duration */
-  totalOffloads = 0;
+  uint64_t totalOffloads = 0;
   uint64_t offloadDurationSum = 0;
   uint64_t rejected_offloads = 0;
+
+  if(LOG_MONITOR == gLogLevel){ /* export total offloads for curious requestors if monitoring is enabled*/
+    total_offloads = 0;
+  }
 
   submit_flag = OFFLOAD_RECEIVED;
 
@@ -90,6 +94,10 @@ void *nonblocking_emul_ax(void *arg){
           next_offload_completion_time = comp_time;
         }
         totalOffloads++;
+
+        if(gLogLevel == LOG_MONITOR){ /* export total offloads for curious requestors if monitoring is enabled*/
+          total_offloads++;
+        }
       } else {
         submit_status = SUBMIT_FAIL;
         submit_flag = OFFLOAD_RECEIVED; /*received submission*/

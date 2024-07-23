@@ -175,7 +175,7 @@ void run_gpcore_blocking_swtofill_simple_rank(int new_pl,
 
 }
 
-int gLogLevel = LOG_PERF;
+int gLogLevel = LOG_MONITOR;
 bool gDebugParam = true;
 extern int pl_len;
 int main(){
@@ -184,7 +184,7 @@ int main(){
   int offload_time = 16313;
   int max_inflight = 128;
 
-  int iter = 100;
+  int iter = 1;
   int sampling_interval = 1000;
   int total_requests = 1000;
 

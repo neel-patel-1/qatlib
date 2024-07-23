@@ -8,7 +8,7 @@ extern "C" {
 #include "print_utils.h"
 #include <stdint.h>
 
-extern uint64_t totalOffloads;
+extern std::atomic<uint64_t> total_offloads; /* Exported total_offloads used for monitoring at request side*/
 
 void cpu_simple_ranker_request_stamped(fcontext_transfer_t arg);
 void cpu_simple_ranker_request(fcontext_transfer_t arg);
