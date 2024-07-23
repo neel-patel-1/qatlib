@@ -78,22 +78,26 @@ void allocate_posting_lists(int total_requests,
   char ****p_arr_posting_list_heads_arrs){
 
   int pl_len = 10;
+  int num_pls = 3;
 
   *p_arr_posting_list_heads_arrs = (char ***)malloc(sizeof(char **) * total_requests);
-  /* each request has two posting lists to merge */
+  /* each request has two posting lists to merge and a dst */
   for(int i=0; i<total_requests; i++){
-    (*p_arr_posting_list_heads_arrs)[i] = (char **)malloc(sizeof(char *) * 2);
-    (*p_arr_posting_list_heads_arrs)[i][0] = (char *)build_llc_ll(pl_len);
-    (*p_arr_posting_list_heads_arrs)[i][1] = (char *)build_llc_ll(pl_len);
+    (*p_arr_posting_list_heads_arrs)[i] = (char **)malloc(sizeof(char *) * num_pls);
+    for(int j=0; j<num_pls; j++){
+      (*p_arr_posting_list_heads_arrs)[i][j] = (char *)build_llc_ll(pl_len);
+    }
   }
 }
 
 void free_posting_lists(int total_requests,
   char ****p_arr_posting_list_heads_arrs){
+  int num_pls = 3;
 
   for(int i=0; i<total_requests; i++){
-    free_ll((node *)((*p_arr_posting_list_heads_arrs)[i][0]));
-    free_ll((node *)((*p_arr_posting_list_heads_arrs)[i][1]));
+    for(int j=0; j<num_pls; j++){
+      free_ll((node *)((*p_arr_posting_list_heads_arrs)[i][j]));
+    }
     free((*p_arr_posting_list_heads_arrs)[i]);
   }
   free(*p_arr_posting_list_heads_arrs);

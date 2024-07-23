@@ -29,6 +29,9 @@ void free_posting_lists(int total_requests,
   char ****p_arr_posting_list_heads_arrs);
 
 static void ll_simple(node *head);
+static inline void intersect_posting_lists(node *intersected, node *head1, node *head2);
+static int dot_product(uint8_t *a, uint8_t *b, int size);
+static void ll_dynamic_rank(node *head);
 
 #include "inline/posting_list.ipp"
 #endif

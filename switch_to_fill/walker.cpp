@@ -45,12 +45,15 @@ void blocking_simple_ranker_request(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
-void cpu_ranker_request(fcontext_transfer_t arg){
+void cpu_simple_ranker_request(fcontext_transfer_t arg){
   gpcore_request_args *args = (gpcore_request_args *)arg.data;
   node *plist1_head = (node *)(args->inputs[0]);
   node *plist2_head = (node *)(args->inputs[1]);
+  node *result_head = (node *)(args->inputs[2]);
 
-  ll_simple(plist1_head);
+  intersect_posting_lists(result_head, plist1_head, plist2_head);
+
+  ll_simple(result_head);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -66,14 +69,14 @@ int main(){
   int max_inflight = 128;
 
   int sampling_interval = 1000;
-  int total_requests = 10000;
+  int total_requests = 1;
   uint64_t *exetime;
 
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
   exetime = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
   gpcore_closed_loop_test(
-    cpu_ranker_request,
+    cpu_simple_ranker_request,
     allocate_posting_lists,
     free_posting_lists ,
     sampling_interval, total_requests, exetime, 0
