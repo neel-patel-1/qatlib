@@ -40,5 +40,18 @@ WALKER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 walker: $(WALKER_OBJS) walker.o
 	$(CXX) -g -o $@ $^ -ldml
 
+
+mlp.o: mlp.cpp
+	$(CXX) -g -c -o $@ $^ -I./inc
+MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/context_management.o \
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/request_executors.o obj/runners.o
+mlp: $(MLP_OBJS) mlp.o
+	$(CXX) -g -o $@ $^ -ldml
+
+
 clean:
 	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o
