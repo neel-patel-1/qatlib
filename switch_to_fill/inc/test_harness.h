@@ -43,4 +43,13 @@ void gpcore_request_breakdown(
   uint64_t *kernel1, uint64_t *kernel2, int idx
 );
 
+void yielding_offload_ax_closed_loop_test(
+  fcontext_fn_t request_fn,
+  void (* payload_allocator)(int, char***),
+  void (* payload_free)(int, char***),
+  int requests_sampling_interval,
+  int total_requests,
+  uint64_t *exetime, int idx
+);
+
 #endif
