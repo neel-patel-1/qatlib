@@ -57,3 +57,37 @@ void blocking_ax_closed_loop_test(
 
   fcontext_destroy(self);
 }
+
+void gpcore_closed_loop_test(
+  fcontext_fn_t request_fn,
+  void (* payload_allocator)(int, char****),
+  void (* payload_free)(int, char****),
+  int requests_sampling_interval,
+  int total_requests,
+  uint64_t *exetime, int idx
+)
+{
+  int sampling_intervals = (total_requests / requests_sampling_interval);
+  int sampling_interval_timestamps = sampling_intervals + 1;
+  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
+
+  fcontext_state_t *self = fcontext_create_proxy();
+  char ***dst_bufs;
+  fcontext_state_t **cpu_req_state;
+  gpcore_request_args **gpcore_args;
+
+  payload_allocator(total_requests, &dst_bufs);
+  cpu_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
+  create_contexts(cpu_req_state, total_requests, request_fn);
+
+  gpcore_args = (gpcore_request_args **)malloc(sizeof(gpcore_request_args *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    gpcore_args[i] = (gpcore_request_args *)malloc(sizeof(gpcore_request_args));
+    gpcore_args[i]->inputs = (char **)(dst_bufs[i]);
+    gpcore_args[i]->id = i;
+  }
+
+  requests_completed = 0;
+  execute_gpcore_requests_closed_system_with_sampling(
+    total_requests, gpcore_args, cpu_req_state, exetime, idx );
+}

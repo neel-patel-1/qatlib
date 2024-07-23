@@ -23,6 +23,9 @@ void free_pre_intersected_posting_lists_llc(
   char ***p_posting_list_heads_arr
   );
 
+void allocate_posting_lists(int total_requests,
+  char ****p_arr_posting_list_heads_arrs);
+
 static void ll_simple(node *head);
 
 #include "inline/posting_list.ipp"

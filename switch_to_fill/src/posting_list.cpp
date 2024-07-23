@@ -73,3 +73,17 @@ void free_pre_intersected_posting_lists_llc(
   }
   free(*p_posting_list_heads_arr);
 }
+
+void allocate_posting_lists(int total_requests,
+  char ****p_arr_posting_list_heads_arrs){
+
+  int pl_len = 10;
+
+  *p_arr_posting_list_heads_arrs = (char ***)malloc(sizeof(char **) * total_requests);
+  /* each request has two posting lists to merge */
+  for(int i=0; i<total_requests; i++){
+    (*p_arr_posting_list_heads_arrs)[i] = (char **)malloc(sizeof(char *) * 2);
+    (*p_arr_posting_list_heads_arrs)[i][0] = (char *)build_llc_ll(pl_len);
+    (*p_arr_posting_list_heads_arrs)[i][1] = (char *)build_llc_ll(pl_len);
+  }
+}

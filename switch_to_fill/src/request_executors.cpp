@@ -251,3 +251,33 @@ void execute_gpcore_requests_closed_system_request_breakdown(
   avg_samples_from_arrays(diff, kernel2[idx], ts2, ts1, requests_completed);
   LOG_PRINT( LOG_DEBUG, "Kernel2Time: %lu\n", kernel2[idx]);
 }
+
+void execute_gpcore_requests_closed_system_with_sampling(
+  int total_requests,
+  gpcore_request_args **off_args,
+  fcontext_state_t **off_req_state,
+  uint64_t *exetime, int idx)
+{
+
+  int next_unstarted_req_idx = 0;
+  int next_request_offload_to_complete_idx = 0;
+  int sampling_interval = 0;
+  uint64_t start, end;
+
+  start = sampleCoderdtsc(); /* start time */
+  sampling_interval++;
+
+  while(requests_completed < total_requests){
+
+    fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+    next_unstarted_req_idx++;
+
+  }
+  end = sampleCoderdtsc();
+
+
+  uint64_t this_rps =
+    (end - start);
+  exetime[idx] = this_rps;
+  LOG_PRINT( LOG_DEBUG, "ExeTime: %ld\n", this_rps);
+}

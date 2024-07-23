@@ -53,4 +53,11 @@ void execute_cpu_requests_closed_system_request_breakdown(
   ax_comp *comps, timed_cpu_request_args **off_args,
   fcontext_state_t **off_req_state, fcontext_state_t *self,
   uint64_t *deser_times, uint64_t *hash_times, int idx);
+
+void execute_gpcore_requests_closed_system_with_sampling(
+  int total_requests,
+  gpcore_request_args **off_args,
+  fcontext_state_t **off_req_state,
+  uint64_t *exetime, int idx);
+
 #endif
