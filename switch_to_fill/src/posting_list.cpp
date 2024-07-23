@@ -77,7 +77,7 @@ void free_pre_intersected_posting_lists_llc(
 void allocate_posting_lists(int total_requests,
   char ****p_arr_posting_list_heads_arrs){
 
-  int pl_len = 10;
+  int pl_len = 512;
   int num_pls = 3;
 
   *p_arr_posting_list_heads_arrs = (char ***)malloc(sizeof(char **) * total_requests);
