@@ -20,6 +20,7 @@ extern "C"{
 #include "test_harness.h"
 #include "timer_utils.h"
 #include "stats.h"
+#include "walker_requests.h"
 /*
   blocking linked list merge request:
     (same as router)
@@ -27,94 +28,8 @@ extern "C"{
     ll_dynamic
 
 */
-void blocking_simple_ranker_request(fcontext_transfer_t arg){
-  offload_request_args *args = (offload_request_args *)arg.data;
-  node *head = (node *)args->dst_payload;
-  ax_comp *comp = args->comp;
-  int id = args->id;
 
-  int status = submit_offload(comp, (char *)head);
-  if(status == STATUS_FAIL){
-    return;
-  }
-  while(comp->status == COMP_STATUS_PENDING){
-    _mm_pause();
-  }
-
-  ll_simple(head);
-
-  requests_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
-
-void blocking_simple_ranker_request_stamped(fcontext_transfer_t arg){
-  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
-  node *head = (node *)args->dst_payload;
-  ax_comp *comp = args->comp;
-  uint64_t *ts0 = args->ts0;
-  uint64_t *ts1 = args->ts1;
-  uint64_t *ts2 = args->ts2;
-  uint64_t *ts3 = args->ts3;
-  int id = args->id;
-
-  ts0[id] = sampleCoderdtsc();
-  int status = submit_offload(comp, (char *)head);
-  if(status == STATUS_FAIL){
-    return;
-  }
-  ts1[id] = sampleCoderdtsc();
-
-  while(comp->status == COMP_STATUS_PENDING){
-    _mm_pause();
-  }
-  ts2[id] = sampleCoderdtsc();
-
-  ll_simple(head);
-  ts3[id] = sampleCoderdtsc();
-
-  requests_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
-
-void cpu_simple_ranker_request(fcontext_transfer_t arg){
-  gpcore_request_args *args = (gpcore_request_args *)arg.data;
-  node *plist1_head = (node *)(args->inputs[0]);
-  node *plist2_head = (node *)(args->inputs[1]);
-  node *result_head = (node *)(args->inputs[2]);
-
-  intersect_posting_lists(result_head, plist1_head, plist2_head);
-
-  ll_simple(result_head);
-
-  requests_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
-
-void cpu_simple_ranker_request_stamped(fcontext_transfer_t arg){
-  timed_gpcore_request_args *args = (timed_gpcore_request_args *)arg.data;
-  node *plist1_head = (node *)(args->inputs[0]);
-  node *plist2_head = (node *)(args->inputs[1]);
-  node *result_head = (node *)(args->inputs[2]);
-
-  int id = args->id;
-
-  uint64_t *ts0 = args->ts0;
-  uint64_t *ts1 = args->ts1;
-  uint64_t *ts2 = args->ts2;
-
-  ts0[id] = sampleCoderdtsc();
-  intersect_posting_lists(result_head, plist1_head, plist2_head);
-  ts1[id] = sampleCoderdtsc();
-
-  ll_simple(result_head);
-  ts2[id] = sampleCoderdtsc();
-
-  requests_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
-
-
-int gLogLevel = LOG_PERF;
+int gLogLevel = 0;
 bool gDebugParam = true;
 extern int pl_len;
 int main(){
@@ -123,7 +38,7 @@ int main(){
   int offload_time = 16313;
   int max_inflight = 128;
 
-  int iter = 10;
+  int iter = 100;
   int sampling_interval = 1000;
   int total_requests = 1000;
 
@@ -204,6 +119,22 @@ int main(){
   exetimemean = avg_from_array(blocking_exe_time, iter);
   rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
   LOG_PRINT( LOG_PERF, "Blocking RPS Mean: %f\n", rpsmean);
+
+
+  uint64_t *yielding_exe_time;
+  yielding_exe_time = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    yielding_offload_ax_closed_loop_test(
+      yielding_simple_ranker_request,
+      allocate_pre_intersected_posting_lists_llc,
+      free_pre_intersected_posting_lists_llc,
+      sampling_interval, total_requests, yielding_exe_time, i
+    );
+  }
+  print_mean_median_stdev(yielding_exe_time, iter, "YieldingExecution");
+  exetimemean = avg_from_array(yielding_exe_time, iter);
+  rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
+  LOG_PRINT( LOG_PERF, "Yielding RPS Mean: %f\n", rpsmean);
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
