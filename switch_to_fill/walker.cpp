@@ -175,18 +175,35 @@ int main(){
   print_mean_median_stdev(waittime, iter, "Wait");
   print_mean_median_stdev(posttime, iter, "Post");
 
-  // gpcore_closed_loop_test(
-  //   cpu_simple_ranker_request,
-  //   allocate_posting_lists,
-  //   free_posting_lists ,
-  //   sampling_interval, total_requests, exetime, 0
-  // );
-  // blocking_ax_closed_loop_test(
-  //   blocking_simple_ranker_request,
-  //   allocate_pre_intersected_posting_lists_llc,
-  //   free_pre_intersected_posting_lists_llc,
-  //   total_requests, total_requests, exetime, 0
-  // );
+  uint64_t *cpu_exe_time;
+  cpu_exe_time = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    gpcore_closed_loop_test(
+      cpu_simple_ranker_request,
+      allocate_posting_lists,
+      free_posting_lists,
+      sampling_interval, total_requests, cpu_exe_time, i
+    );
+  }
+  print_mean_median_stdev(cpu_exe_time, iter, "CPUExecution");
+  double exetimemean = avg_from_array(cpu_exe_time, iter);
+  double rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
+  LOG_PRINT( LOG_PERF, "CPU RPS Mean: %f\n", rpsmean);
+
+  uint64_t *blocking_exe_time;
+  blocking_exe_time = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    blocking_ax_closed_loop_test(
+      blocking_simple_ranker_request,
+      allocate_pre_intersected_posting_lists_llc,
+      free_pre_intersected_posting_lists_llc,
+      sampling_interval, total_requests, blocking_exe_time, i
+    );
+  }
+  print_mean_median_stdev(blocking_exe_time, iter, "BlockingExecution");
+  exetimemean = avg_from_array(blocking_exe_time, iter);
+  rpsmean = (double)total_requests / (exetimemean / 2100000000.0);
+  LOG_PRINT( LOG_PERF, "Blocking RPS Mean: %f\n", rpsmean);
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 
