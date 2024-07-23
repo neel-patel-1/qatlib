@@ -18,6 +18,7 @@ extern std::atomic<int> submit_flag;
 extern std::atomic<int> submit_status;
 extern std::atomic<uint64_t> compl_addr;
 extern std::atomic<uint64_t> p_dst_buf;
+extern uint64_t total_offloads;
 
 typedef struct completion_record{
   int status;

@@ -4,6 +4,9 @@
 #include "test_harness.h"
 #include "status.h"
 
+extern uint64_t total_offloads;
+
+
 void cpu_simple_ranker_request_stamped(fcontext_transfer_t arg){
   timed_gpcore_request_args *args = (timed_gpcore_request_args *)arg.data;
   node *plist1_head = (node *)(args->inputs[0]);
@@ -118,6 +121,13 @@ void yielding_simple_ranker_request_stamped(fcontext_transfer_t arg){
   uint64_t *ts2 = args->ts2;
   uint64_t *ts3 = args->ts3;
 
+  uint64_t offloads_before_yielding;
+
+  if(gLogLevel >= LOG_MONITOR)
+  {
+    offloads_before_yielding = totalOffloads;
+  }
+
   ts0[id] = sampleCoderdtsc();
   int status = submit_offload(comp, (char *)head);
   if(status == STATUS_FAIL){
@@ -126,6 +136,12 @@ void yielding_simple_ranker_request_stamped(fcontext_transfer_t arg){
   ts1[id] = sampleCoderdtsc();
 
   fcontext_swap(arg.prev_context, NULL);
+
+  /* when ctx switch back (our offload completes), how many requests have started their offload phase */
+  /* emul_ax exports "total_offloads" <- total offloads started */
+  LOG_PRINT(LOG_MONITOR, "%ld Requests Offloaded After %d Requests Offload Duration\n",
+    totalOffloads - offloads_before_yielding, id);
+
 
   ts2[id] = sampleCoderdtsc();
   ll_simple(head);

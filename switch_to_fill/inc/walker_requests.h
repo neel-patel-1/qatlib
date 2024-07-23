@@ -4,6 +4,11 @@ extern "C" {
   #include "fcontext.h"
 }
 #include "router_request_args.h"
+#include "emul_ax.h"
+#include "print_utils.h"
+#include <stdint.h>
+
+extern uint64_t totalOffloads;
 
 void cpu_simple_ranker_request_stamped(fcontext_transfer_t arg);
 void cpu_simple_ranker_request(fcontext_transfer_t arg);

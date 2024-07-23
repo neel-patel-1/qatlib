@@ -7,6 +7,8 @@ std::atomic<int> submit_flag;
 std::atomic<int> submit_status;
 std::atomic<uint64_t> compl_addr;
 std::atomic<uint64_t> p_dst_buf;
+uint64_t totalOffloads;
+
 
 extern bool gDebugParam;
 
@@ -22,8 +24,8 @@ void *nonblocking_emul_ax(void *arg){
   bool *keep_running = args->ax_running;
 
   /* Debugging offload duration */
+  totalOffloads = 0;
   uint64_t offloadDurationSum = 0;
-  uint64_t totalOffloads = 0;
   uint64_t rejected_offloads = 0;
 
   submit_flag = OFFLOAD_RECEIVED;
