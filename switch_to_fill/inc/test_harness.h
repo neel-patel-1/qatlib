@@ -20,4 +20,13 @@ void blocking_ax_closed_loop_test(
   uint64_t *exetime, int idx
   );
 
+void gpcore_closed_loop_test(
+  fcontext_fn_t request_fn,
+  void (* payload_allocator)(int, char****),
+  void (* payload_free)(int, char****),
+  int requests_sampling_interval,
+  int total_requests,
+  uint64_t *exetime, int idx
+);
+
 #endif

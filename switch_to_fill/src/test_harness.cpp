@@ -90,4 +90,9 @@ void gpcore_closed_loop_test(
   requests_completed = 0;
   execute_gpcore_requests_closed_system_with_sampling(
     total_requests, gpcore_args, cpu_req_state, exetime, idx );
+
+  free_contexts(cpu_req_state, total_requests);
+  payload_free(total_requests, &dst_bufs);
+
+  fcontext_destroy(self);
 }

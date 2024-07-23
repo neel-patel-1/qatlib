@@ -45,6 +45,17 @@ void blocking_simple_ranker_request(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void cpu_ranker_request(fcontext_transfer_t arg){
+  gpcore_request_args *args = (gpcore_request_args *)arg.data;
+  node *plist1_head = (node *)(args->inputs[0]);
+  node *plist2_head = (node *)(args->inputs[1]);
+
+  ll_simple(plist1_head);
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
 
 int gLogLevel = LOG_DEBUG;
 bool gDebugParam = true;
@@ -61,12 +72,18 @@ int main(){
   start_non_blocking_ax(&ax_td, &ax_running, offload_time, max_inflight);
 
   exetime = (uint64_t *)malloc(sizeof(uint64_t) * total_requests);
-  blocking_ax_closed_loop_test(
-    blocking_simple_ranker_request,
-    allocate_pre_intersected_posting_lists_llc,
-    free_pre_intersected_posting_lists_llc,
-    total_requests, total_requests, exetime, 0
+  gpcore_closed_loop_test(
+    cpu_ranker_request,
+    allocate_posting_lists,
+    free_posting_lists ,
+    sampling_interval, total_requests, exetime, 0
   );
+  // blocking_ax_closed_loop_test(
+  //   blocking_simple_ranker_request,
+  //   allocate_pre_intersected_posting_lists_llc,
+  //   free_pre_intersected_posting_lists_llc,
+  //   total_requests, total_requests, exetime, 0
+  // );
 
   stop_non_blocking_ax(&ax_td, &ax_running);
 

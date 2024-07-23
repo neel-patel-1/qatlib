@@ -87,3 +87,14 @@ void allocate_posting_lists(int total_requests,
     (*p_arr_posting_list_heads_arrs)[i][1] = (char *)build_llc_ll(pl_len);
   }
 }
+
+void free_posting_lists(int total_requests,
+  char ****p_arr_posting_list_heads_arrs){
+
+  for(int i=0; i<total_requests; i++){
+    free_ll((node *)((*p_arr_posting_list_heads_arrs)[i][0]));
+    free_ll((node *)((*p_arr_posting_list_heads_arrs)[i][1]));
+    free((*p_arr_posting_list_heads_arrs)[i]);
+  }
+  free(*p_arr_posting_list_heads_arrs);
+}
