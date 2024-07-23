@@ -49,3 +49,21 @@ void allocate_offload_requests(int total_requests, offload_request_args ***p_off
     (*p_off_args)[i]->id = i;
   }
 }
+
+void allocate_timed_offload_requests(int total_requests,
+  timed_offload_request_args ***p_off_args,
+  ax_comp *comps, char **dst_bufs,
+  uint64_t *ts0, uint64_t *ts1, uint64_t *ts2, uint64_t *ts3
+  ){
+  *p_off_args = (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
+  for(int i=0; i<total_requests; i++){
+    (*p_off_args)[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
+    (*p_off_args)[i]->comp = &(comps[i]);
+    (*p_off_args)[i]->dst_payload = dst_bufs[i];
+    (*p_off_args)[i]->id = i;
+    (*p_off_args)[i]->ts0 = ts0;
+    (*p_off_args)[i]->ts1 = ts1;
+    (*p_off_args)[i]->ts2 = ts2;
+    (*p_off_args)[i]->ts3 = ts3;
+  }
+}
