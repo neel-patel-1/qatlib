@@ -51,5 +51,12 @@ void yielding_offload_ax_closed_loop_test(
   int total_requests,
   uint64_t *exetime, int idx
 );
+void yielding_request_breakdown(
+  fcontext_fn_t request_fn,
+  void (* payload_allocator)(int, char***),
+  void (* payload_free)(int, char***),
+  int total_requests,
+  uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
+);
 
 #endif

@@ -87,6 +87,19 @@ int main(){
     print_mean_median_stdev(waittime, iter, "Wait");
     print_mean_median_stdev(posttime, iter, "Post");
 
+    for(int i=0; i<iter; i++){
+      yielding_request_breakdown(
+        yielding_simple_ranker_request_stamped,
+        allocate_pre_intersected_posting_lists_llc,
+        free_pre_intersected_posting_lists_llc,
+        total_requests,
+        offloadtime, waittime, posttime, i
+      );
+    }
+    print_mean_median_stdev(offloadtime, iter, "OffloadSwToFill");
+    print_mean_median_stdev(waittime, iter, "YieldToResumeLatency");
+    print_mean_median_stdev(posttime, iter, "PostSwToFill");
+
     uint64_t *cpu_exe_time;
     cpu_exe_time = (uint64_t *)malloc(sizeof(uint64_t) * iter);
     for(int i=0; i<iter; i++){
