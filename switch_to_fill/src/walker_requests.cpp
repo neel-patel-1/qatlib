@@ -118,7 +118,7 @@ void yielding_simple_ranker_request_stamped(fcontext_transfer_t arg){
   uint64_t *ts2 = args->ts2;
   uint64_t *ts3 = args->ts3;
 
-  uint64_t offloads_before_yielding;
+  uint64_t offloads_before_yielding, offloads_after_yielding;
 
   if(gLogLevel >= LOG_MONITOR)
   {
@@ -136,8 +136,12 @@ void yielding_simple_ranker_request_stamped(fcontext_transfer_t arg){
 
   /* when ctx switch back (our offload completes), how many requests have started their offload phase */
   /* emul_ax exports "total_offloads" <- total offloads started */
-  LOG_PRINT(LOG_MONITOR, "%ld Requests Offloaded After %d Requests Offload Duration\n",
-    total_offloads - offloads_before_yielding, id);
+  if(gLogLevel >= LOG_MONITOR)
+  {
+    offloads_after_yielding = total_offloads;
+    LOG_PRINT(LOG_MONITOR, "%ld Requests Offloaded while Request %d was away\n",
+      offloads_after_yielding - offloads_before_yielding - 1, id);
+  }
 
 
   ts2[id] = sampleCoderdtsc();
