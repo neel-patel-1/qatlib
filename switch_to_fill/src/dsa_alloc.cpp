@@ -1,6 +1,7 @@
 #include "dsa_alloc.h"
 #include <cstdlib>
 #include "print_utils.h"
+#include <string.h>
 
 void dsa_llc_realloc(void *dst, void *src, int size){
   dml_path_t execution_path = DML_PATH_HW;
@@ -23,6 +24,7 @@ retry:
 
     if(num_retries > 3){
       PRINT_ERR("dml_execute_job failed after %d retries\n", num_retries);
+      memcpy(dst, src, size);
     } else {
       num_retries++;
       goto retry;
