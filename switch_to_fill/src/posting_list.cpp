@@ -1,5 +1,7 @@
 #include "posting_list.h"
 
+int pl_len = 512;
+
 node *build_llc_ll(int length){
   node *cpy_src = (node *)malloc(sizeof(node));
   node *cpy_dst = (node *)malloc(sizeof(node));
@@ -56,7 +58,6 @@ void allocate_pre_intersected_posting_lists_llc(
   char ***p_posting_list_heads_arr
   )
 {
-  int pl_len = 512;
   *p_posting_list_heads_arr = (char **)malloc(sizeof(char *) * total_requests);
   for(int i=0; i<total_requests; i++){
     (*p_posting_list_heads_arr)[i] = (char *)build_llc_ll(pl_len);
@@ -78,7 +79,6 @@ void free_pre_intersected_posting_lists_llc(
 void allocate_posting_lists(int total_requests,
   char ****p_arr_posting_list_heads_arrs){
 
-  int pl_len = 512;
   int num_pls = 3;
 
   *p_arr_posting_list_heads_arrs = (char ***)malloc(sizeof(char **) * total_requests);

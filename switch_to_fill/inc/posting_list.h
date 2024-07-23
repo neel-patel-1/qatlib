@@ -6,6 +6,8 @@
 #include "dsa_alloc.h"
 #include "print_utils.h"
 
+extern int pl_len;
+
 typedef struct _node{
   int docID;
   struct _node *next;
