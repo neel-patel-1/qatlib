@@ -39,7 +39,7 @@ void run_gpcore_blocking_swtofill_simple_rank(int new_pl,
       cpu_simple_ranker_request_stamped,
       allocate_posting_lists,
       free_posting_lists,
-      100, 1000
+      iter, total_requests
     );
 
   int max_inflight = 128;
@@ -51,14 +51,14 @@ void run_gpcore_blocking_swtofill_simple_rank(int new_pl,
     blocking_simple_ranker_request_stamped,
     allocate_pre_intersected_posting_lists_llc,
     free_pre_intersected_posting_lists_llc,
-    100, 1000
+    iter, total_requests
   );
 
   run_yielding_request_brkdown(
     yielding_simple_ranker_request_stamped,
     allocate_pre_intersected_posting_lists_llc,
     free_pre_intersected_posting_lists_llc,
-    100, 1000
+    iter, total_requests
   );
 
   uint64_t *cpu_exe_time;
@@ -117,9 +117,14 @@ int main(){
 
   uint64_t cpu_intersect_time;
 
-  for (pl_len = 32; pl_len<=512; pl_len*=2){
+  pl_len = 32;
+  // for (pl_len = 32; pl_len<=512; pl_len*=2){
     printf("PL_LEN: %d\n", pl_len);
     run_gpcore_blocking_swtofill_simple_rank(pl_len, total_requests, sampling_interval, iter);
-  }
+  // }
+  pl_len = 512;
+  // for (pl_len = 32; pl_len<=512; pl_len*=2){
+    printf("PL_LEN: %d\n", pl_len);
+    run_gpcore_blocking_swtofill_simple_rank(pl_len, total_requests, sampling_interval, iter);
 
 }
