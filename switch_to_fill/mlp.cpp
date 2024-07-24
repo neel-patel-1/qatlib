@@ -33,43 +33,18 @@ static inline int gpcore_do_compress(void *dst, void *src, int src_len, int *out
   stream.avail_out = avail_out;
   stream.next_out = (Bytef *)dst;
 
-  LOG_PRINT( LOG_DEBUG,
-    "deflate: avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=0x%p\n",
-    stream.avail_in,
-    stream.total_in,
-    stream.avail_out,
-    stream.total_out,
-    stream.next_out);
+  dump_deflate_state(&stream);
 
   do {
     ret = deflate(&stream, Z_NO_FLUSH);
-    LOG_PRINT( LOG_DEBUG,
-      "deflate: ret=%d avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=%p\n",
-      ret,
-      stream.avail_in,
-      stream.total_in,
-      stream.avail_out,
-      stream.total_out,
-      stream.next_out);
-      if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
-        deflateEnd(&stream);
-        LOG_PRINT( LOG_ERR, "Error deflate status %d\n", ret);
-        return ret;
-      }
+    dump_deflate_state(&stream);
   }
   while(stream.avail_in > 0 && ret == Z_OK);
 
   if(ret != Z_STREAM_END) { /* we need to flush, out input was small */
     ret = deflate(&stream, Z_FINISH);
   }
-  LOG_PRINT( LOG_DEBUG,
-    "deflate: ret=%d avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=%p\n",
-    ret,
-    stream.avail_in,
-    stream.total_in,
-    stream.avail_out,
-    stream.total_out,
-    stream.next_out);
+  dump_deflate_state(&stream);
 
 
   ret = deflateEnd(&stream);
@@ -81,6 +56,51 @@ static inline int gpcore_do_compress(void *dst, void *src, int src_len, int *out
   *out_len = stream.total_out;
   return ret;
 }
+
+static inline int gpcore_do_decompress(void *dst, void *src, int src_len, int *out_len)
+{
+	int ret = 0;
+	z_stream stream;
+  int avail_out  = *out_len;
+
+	memset(&stream, 0, sizeof(z_stream));
+
+	/* allocate inflate state */
+	ret = inflateInit2(&stream, -MAX_WBITS);
+	if (ret) {
+		LOG_PRINT( LOG_ERR, "Error inflateInit2 status %d\n", ret);
+		return ret;
+	}
+
+	stream.avail_in = src_len;
+	stream.next_in = (Bytef *)src;
+	stream.avail_out = avail_out;
+	stream.next_out = (Bytef *)dst;
+
+  dump_inflate_state(&stream);
+
+	do {
+		ret = inflate(&stream, Z_NO_FLUSH);
+
+		if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
+			inflateEnd(&stream);
+			LOG_PRINT( LOG_ERR, "Error inflate status %d\n", ret);
+			return ret;
+		}
+    dump_inflate_state(&stream);
+	} while (ret != Z_STREAM_END);
+
+	ret = inflateEnd(&stream);
+	if (ret) {
+		LOG_PRINT( LOG_ERR, "Error inflateEnd status %d\n", ret);
+		return ret;
+	}
+  dump_inflate_state(&stream);
+
+	*out_len = stream.total_out;
+	return ret;
+}
+
 
 void compressed_mc_req_allocator(int total_requests,
   char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
@@ -99,7 +119,6 @@ void compressed_mc_req_allocator(int total_requests,
       (char *) malloc(avail_out);
     // compress((Bytef *)(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]), (uLongf *)&compressed_size,
     //   (const Bytef*)(query.c_str()), query.size());
-    int compressed_size;
     gpcore_do_compress((void *) (ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]),
       (void *) query.c_str(), query.size(), &avail_out);
 
@@ -112,7 +131,7 @@ void compressed_mc_req_allocator(int total_requests,
     /* and the size of the compressed payload for decomp */
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] =
       (char *) malloc(sizeof(int));
-    *(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2]) = compressed_size;
+    *(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2]) = avail_out;
   }
 
   *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
@@ -144,10 +163,10 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   int compressed_size = *((int *) args->inputs[2]);
 
   int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
+    /* dst is provisioned by allocator to have max dest size */
 
   ts0[id] = sampleCoderdtsc();
-  memcpy(dst1, src1, compressed_size);
-  decompressed_size = gpcore_do_decompress(dst1, src1, IAA_COMPRESS_MAX_DEST_SIZE, NULL);
+  decompressed_size = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
   ts1[id] = sampleCoderdtsc();
 
   uint32_t hash = furc_hash(dst1, decompressed_size, 16);
