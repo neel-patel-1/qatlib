@@ -220,7 +220,7 @@ int main(){
   int dev_id = 3;
   int wq_type = SHARED;
   int rc;
-  int itr = 100;
+  int itr = 1000;
   int total_requests = 1000;
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 

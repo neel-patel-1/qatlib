@@ -19,6 +19,7 @@ typedef struct _timed_offload_request_args{
   char *src_payload;
   uint64_t src_size;
   char *dst_payload;
+  uint64_t dst_size;
   int id;
   uint64_t *ts0;
   uint64_t *ts1;
