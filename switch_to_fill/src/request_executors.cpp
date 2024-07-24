@@ -84,8 +84,42 @@ void execute_yielding_requests_closed_system_request_breakdown(
   LOG_PRINT( LOG_DEBUG, "YieldToResumeDelay: %lu\n", yield_to_resume_times[idx]);
   avg_samples_from_arrays(diff, hash_times[idx], ts3, ts2, requests_completed);
   LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
+}
+
+void execute_yielding_requests_closed_system_request_breakdown(
+  int total_requests,
+  ax_comp *comps, timed_offload_request_args **off_args,
+  fcontext_transfer_t *offload_req_xfer,
+  fcontext_state_t **off_req_state,
+  uint64_t *off_times, uint64_t *yield_to_resume_times, uint64_t *hash_times, int idx)
+{
+
+  int next_unstarted_req_idx = 0;
+  int next_request_offload_to_complete_idx = 0;
+
+  while(requests_completed < total_requests){
+    if(comps[next_request_offload_to_complete_idx].status == COMP_STATUS_COMPLETED){
+      fcontext_swap(offload_req_xfer[next_request_offload_to_complete_idx].prev_context, NULL);
+      next_request_offload_to_complete_idx++;
+    } else if(next_unstarted_req_idx < total_requests){
+      offload_req_xfer[next_unstarted_req_idx] =
+        fcontext_swap(off_req_state[next_unstarted_req_idx]->context, off_args[next_unstarted_req_idx]);
+      next_unstarted_req_idx++;
+    }
+  }
 
 
+  uint64_t *ts0 = off_args[0]->ts0;
+  uint64_t *ts1 = off_args[0]->ts1;
+  uint64_t *ts2 = off_args[0]->ts2;
+  uint64_t *ts3 = off_args[0]->ts3;
+  uint64_t diff[total_requests];
+  avg_samples_from_arrays(diff, off_times[idx], ts1, ts0, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Offload time: %lu\n", off_times[idx]);
+  avg_samples_from_arrays(diff, yield_to_resume_times[idx], ts2, ts1, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "YieldToResumeDelay: %lu\n", yield_to_resume_times[idx]);
+  avg_samples_from_arrays(diff, hash_times[idx], ts3, ts2, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
 }
 
 void execute_blocking_requests_closed_system_with_sampling(

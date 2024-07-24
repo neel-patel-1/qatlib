@@ -26,6 +26,17 @@ void blocking_ax_request_breakdown(
   int total_requests,
   uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
 );
+void blocking_ax_request_breakdown(
+  fcontext_fn_t request_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int total_requests,
+  uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
+);
 
 void gpcore_closed_loop_test(
   fcontext_fn_t request_fn,
@@ -55,6 +66,17 @@ void yielding_request_breakdown(
   fcontext_fn_t request_fn,
   void (* payload_allocator)(int, char***),
   void (* payload_free)(int, char***),
+  int total_requests,
+  uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
+);
+void yielding_request_breakdown(
+  fcontext_fn_t request_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
   int total_requests,
   uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
 );

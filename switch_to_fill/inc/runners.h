@@ -21,7 +21,11 @@ void run_blocking_offload_request_brkdown(fcontext_fn_t req_fn,
   int iter, int total_requests);
 void run_blocking_offload_request_brkdown(
   fcontext_fn_t req_fn,
-  void (* offload_args_allocator)(int, timed_offload_request_args***, ax_comp *comps),
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
   void (* offload_args_free)(int, timed_offload_request_args***),
   int iter, int total_requests
 );
@@ -30,6 +34,15 @@ void run_yielding_request_brkdown(fcontext_fn_t req_fn,
   void (*payload_alloc)(int,char***),
   void (*payload_free)(int,char***),
   int iter, int total_requests);
-
+void run_yielding_request_brkdown(
+  fcontext_fn_t req_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int iter, int total_requests
+);
 
 #endif

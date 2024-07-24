@@ -74,3 +74,61 @@ void run_yielding_request_brkdown(fcontext_fn_t req_fn,
   print_mean_median_stdev(waittime, iter, "YieldToResumeLatency");
   print_mean_median_stdev(posttime, iter, "PostSwToFill");
 }
+
+void run_yielding_request_brkdown(
+  fcontext_fn_t req_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int iter, int total_requests
+){
+  uint64_t *offloadtime;
+  uint64_t *waittime, *posttime;
+  offloadtime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  waittime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  posttime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    yielding_request_breakdown(
+      req_fn,
+      offload_args_allocator,
+      offload_args_free,
+      total_requests,
+      offloadtime, waittime, posttime, i
+    );
+  }
+  print_mean_median_stdev(offloadtime, iter, "OffloadSwitchToFill");
+  print_mean_median_stdev(waittime, iter, "YieldToResume");
+  print_mean_median_stdev(posttime, iter, "PostProcessingSwitchToFill");
+}
+
+void run_blocking_offload_request_brkdown(
+  fcontext_fn_t req_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int iter, int total_requests
+){
+  uint64_t *offloadtime;
+  uint64_t *waittime, *posttime;
+  offloadtime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  waittime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  posttime = (uint64_t *)malloc(sizeof(uint64_t) * iter);
+  for(int i=0; i<iter; i++){
+    blocking_ax_request_breakdown(
+      req_fn,
+      offload_args_allocator,
+      offload_args_free,
+      total_requests,
+      offloadtime, waittime, posttime, i
+    );
+  }
+  print_mean_median_stdev(offloadtime, iter, "Offload");
+  print_mean_median_stdev(waittime, iter, "Wait");
+  print_mean_median_stdev(posttime, iter, "Post");
+}
