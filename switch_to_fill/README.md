@@ -1,4 +1,5 @@
 APU-Gym: A framework for on-chip accelerator design space exploration
+* APUGym is used for the accelerator and gpcore profiling stage of bottleneck analysis for latency-critical / user-facing services.
 
 
 ### Profiling a GPCore/APU-Accelerated Request

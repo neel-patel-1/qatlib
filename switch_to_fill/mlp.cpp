@@ -16,10 +16,11 @@ extern "C" {
 #include "decompress_and_hash_request.hpp"
 
 
-void prepare_compress_iaa_compress_desc_with_preallocated_comp(
+void prepare_iaa_compress_desc_with_preallocated_comp(
   struct hw_desc *hw, uint64_t src1, uint64_t src2, uint64_t dst1,
   uint64_t comp, uint64_t xfer_size )
 {
+  memset(hw, 0, sizeof(struct hw_desc));
   hw->flags = 0x5000eUL;
   hw->opcode = 0x43;
   hw->src_addr = src1;
@@ -33,6 +34,25 @@ void prepare_compress_iaa_compress_desc_with_preallocated_comp(
   hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
 }
 
+void prepare_iaa_decompress_desc_with_preallocated_comp(
+  struct hw_desc *hw, uint64_t src1, uint64_t dst1,
+  uint64_t comp, uint64_t xfer_size )
+{
+  memset(hw, 0, sizeof(struct hw_desc));
+  hw->flags = 14;
+  hw->opcode = IAX_OPCODE_DECOMPRESS;
+  hw->src_addr = src1;
+  hw->dst_addr = dst1;
+  hw->xfer_size = xfer_size;
+
+  memset((void *)comp, 0, sizeof(ax_comp));
+  hw->completion_addr = comp;
+  hw->iax_decompr_flags = 31;
+  hw->iax_src2_addr = 0x0;
+  hw->iax_src2_xfer_size = 0;
+  hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
+}
+
 void alloc_src_and_dst_compress_bufs(char **src1, char **dst1, char **src2,
   int input_size){
   *src1 = (char *) aligned_alloc(32, 1024);
@@ -40,7 +60,7 @@ void alloc_src_and_dst_compress_bufs(char **src1, char **dst1, char **src2,
   *src2 = (char *) aligned_alloc(32, IAA_COMPRESS_SRC2_SIZE);
 }
 
-int gLogLevel = LOG_PERF;
+int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
 int main(){
 
@@ -52,17 +72,17 @@ int main(){
   int itr = 100;
   int total_requests = 1000;
 
-  int bufsize = 1024;
+  uint32_t bufsize = 1024;
 
-  run_gpcore_request_brkdown(
-    cpu_decompress_and_hash_stamped,
-    compressed_mc_req_allocator,
-    compressed_mc_req_free,
-    itr,
-    total_requests
-  );
+  // run_gpcore_request_brkdown(
+  //   cpu_decompress_and_hash_stamped,
+  //   compressed_mc_req_allocator,
+  //   compressed_mc_req_free,
+  //   itr,
+  //   total_requests
+  // );
 
-  return 0;
+  // return 0;
 
   uint64_t pattern = 0x98765432abcdef01;
   char *src1, *dst1, *src2;
@@ -86,7 +106,8 @@ int main(){
   ax_comp *comp =
     (ax_comp *) aligned_alloc(iaa->compl_size, sizeof(ax_comp));
 
-  prepare_compress_iaa_compress_desc_with_preallocated_comp(
+  /* compress */
+  prepare_iaa_compress_desc_with_preallocated_comp(
     hw, (uint64_t) src1, (uint64_t) src2, (uint64_t) dst1,
     (uint64_t) comp, bufsize);
 
@@ -98,6 +119,7 @@ int main(){
 
   LOG_PRINT( LOG_DEBUG, "Compressed size: %d\n", compressed_size);
 
+  /* validate */
   iaa_do_decompress(src1_decomp, dst1, compressed_size,
      &decompressed_size);
 
@@ -105,6 +127,29 @@ int main(){
     LOG_PRINT(LOG_ERR, "Decompressed data does not match original data\n");
     return -1;
   }
+
+  /* decompress */
+  prepare_iaa_decompress_desc_with_preallocated_comp(
+    hw, (uint64_t) dst1, (uint64_t) src1_decomp,
+    (uint64_t) comp, compressed_size);
+
+  acctest_desc_submit(iaa, hw);
+
+  acctest_wait_on_desc_timeout(comp, iaa, 1000);
+  if(comp->status != IAX_COMP_SUCCESS){
+    return comp->status;
+  }
+  if(memcmp(src1, src1_decomp, bufsize) != 0){
+    LOG_PRINT(LOG_ERR, "Decompressed data does not match original data\n");
+    return -1;
+  }
+  if(bufsize - comp->iax_output_size){
+    LOG_PRINT(LOG_ERR, "Decompressed size: %u does not match original size %u\n",
+      comp->iax_output_size, bufsize);
+    return -1;
+  }
+  LOG_PRINT(LOG_DEBUG, "Decompressed size: %u\n", comp->iax_output_size);
+
 
   acctest_free_task(iaa);
   acctest_free(iaa);
