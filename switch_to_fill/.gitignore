@@ -1,0 +1,9 @@
+[._]*.sw[a-p]
+*.o
+*.d
+*.log*
+*.txt*
+mlp
+switch_to_fill
+walker
+*.code-workspace
