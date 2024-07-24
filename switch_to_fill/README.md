@@ -1,14 +1,13 @@
-APU-Gym: A framework for on-chip accelerator design space exploration
+# APU-Gym: A framework for on-chip accelerator design space exploration
 * APUGym is used for the accelerator and gpcore profiling stage of bottleneck analysis for latency-critical / user-facing services.
 
 
-### Profiling a GPCore/APU-Accelerated Request
+### Latency/Offered Load of a GPCore/APU-Accelerated Request
 The goal of this workflow is to get a breakdown of the end-to-end execution of a request executing on a general-purpose core and compare it with the same request with part of the request offloaded to an accelerator.
 We will need:
   (1) A time-stamped "{GPCore,Blocking-Offload} Request"
-  (2) A input payload "{GPCore,Offload} Allocator Function"
-  (3) A input payload "{GPCore,Offload} Free function"
-* Given all of these are created, these functions can be passed directly to a "Test Harness" which executes the request in the context of an "Executor"
+  (2) "{GPCore Input Payload, Offload Requestor Argument} Allocate/Free Functions"
+* These functions are passed to a "Test Harness" which executes the request in the context of an "Executor"
 
 Design:
 * There are "Latency Breakdown" and "Closed System Throughput" Executors
