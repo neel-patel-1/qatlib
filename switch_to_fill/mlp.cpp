@@ -28,8 +28,13 @@ int main(){
   char *dst1 = (char *) aligned_alloc(32,IAA_COMPRESS_MAX_DEST_SIZE);
   char *src2 =
     (char *) aligned_alloc(32, IAA_COMPRESS_SRC2_SIZE);
-  memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
+  char *src1_decomp =
+    (char *) aligned_alloc(32, IAA_COMPRESS_MAX_DEST_SIZE);
+  int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
+  int compressed_size = 0;
 
+
+  memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
   memset_pattern(src1, pattern, bufsize);
 
   iaa = acctest_init(tflags);
@@ -73,8 +78,16 @@ int main(){
 
   acctest_wait_on_desc_timeout(comp, iaa, 1000);
 
-  // iaa_compress_multi_task_nodes(iaa);
-  // rc = iaa_task_result_verify_task_nodes(iaa, 0);
+  compressed_size = comp->iax_output_size;
+
+  iaa_do_decompress(src1_decomp, dst1, compressed_size,
+     &decompressed_size);
+
+  if(memcmp(src1, src1_decomp, bufsize) != 0){
+    LOG_PRINT(LOG_ERR, "Decompressed data does not match original data\n");
+    return -1;
+  }
+
   acctest_free_task(iaa);
   acctest_free(iaa);
 }
