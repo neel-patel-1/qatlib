@@ -58,7 +58,8 @@ MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/ch3_hash.o \
-	obj/request_executors.o obj/runners.o obj/iaa_offloads.o
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/decompress_and_hash_request.o
 REQUEST_OBJS = obj/walker.o
 mlp.o: mlp.cpp
 	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
@@ -69,4 +70,4 @@ mlp_clean:
 	rm -f mlp mlp.o
 
 clean:
-	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o
+	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o mlp.o
