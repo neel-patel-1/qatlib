@@ -3,6 +3,7 @@
 #include "router_request_args.h"
 #include "iaa_offloads.h"
 #include "ch3_hash.h"
+#include "runners.h"
 
 extern "C" {
   #include "fcontext.h"
@@ -16,23 +17,42 @@ void compressed_mc_req_allocator(int total_requests,
   std::string query = "/region/cluster/foo:key|#|etc";
   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
 
-  int num_inputs_per_request = 2;
+  int num_inputs_per_request = 3;
   for(int i = 0; i < total_requests; i++){
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] =
       (char **) malloc(sizeof(char *) * num_inputs_per_request); /* only one input to each request */
-    for(int j=0; j<num_inputs_per_request; j++){
-      /* CPU request needs a src payload to decompress */
-      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j] = (char *) malloc(query.size() + 1);
-      memcpy(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j], query.c_str(), query.size());
-      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j][query.size()] = '\0';
 
-      /* and a dst payload to decompress into */
-      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j] =
-        (char *) malloc(IAA_COMPRESS_MAX_DEST_SIZE);
-    }
+    /* CPU request needs a src payload to decompress */
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] =
+      (char *) malloc(query.size() + 1);
+    int compressed_size = query.size() + 1;
+    memcpy(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0], query.c_str(), query.size());
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0][query.size()] = '\0';
+
+    /* and a dst payload to decompress into */
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] =
+      (char *) malloc(IAA_COMPRESS_MAX_DEST_SIZE);
+
+    /* and the size of the compressed payload for decomp */
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] =
+      (char *) malloc(sizeof(int));
+    *(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2]) = compressed_size;
   }
 
   *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
+}
+
+void compressed_mc_req_free(int total_requests,
+  char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
+  char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
+  int num_inputs_per_request = 2;
+  for(int i = 0; i < total_requests; i++){
+    for(int j=0; j<num_inputs_per_request; j++){
+      free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j]);
+    }
+    free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i]);
+  }
+  free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
 }
 
 void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
@@ -45,14 +65,17 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
 
   char *src1 = args->inputs[0];
   char *dst1 = args->inputs[1];
+  int compressed_size = *((int *) args->inputs[2]);
 
   int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
 
   ts0[id] = sampleCoderdtsc();
-  decompressed_size = iaa_do_decompress(dst1, src1, IAA_COMPRESS_MAX_DEST_SIZE, NULL);
+  memcpy(dst1, src1, compressed_size);
+  // decompressed_size = iaa_do_decompress(dst1, src1, IAA_COMPRESS_MAX_DEST_SIZE, NULL);
   ts1[id] = sampleCoderdtsc();
 
   uint32_t hash = furc_hash(dst1, decompressed_size, 16);
+  LOG_PRINT(LOG_DEBUG, "Hashing: %s\n", dst1);
   ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -88,14 +111,26 @@ void alloc_src_and_dst_compress_bufs(char **src1, char **dst1, char **src2,
 int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
 int main(){
-  int opcode = 67; /* compress opcode */
+
+
   int wq_id = 0;
   int dev_id = 3;
   int wq_type = SHARED;
   int rc;
   int itr = 1;
+  int total_requests = 1;
 
   int bufsize = 1024;
+
+  run_gpcore_request_brkdown(
+    cpu_decompress_and_hash_stamped,
+    compressed_mc_req_allocator,
+    compressed_mc_req_free,
+    itr,
+    total_requests
+  );
+
+  return 0;
 
   uint64_t pattern = 0x98765432abcdef01;
   char *src1, *dst1, *src2;
@@ -105,8 +140,6 @@ int main(){
     (char *) aligned_alloc(32, IAA_COMPRESS_MAX_DEST_SIZE);
   int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
   int compressed_size = 0;
-
-
   memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
   memset_pattern(src1, pattern, bufsize);
 
