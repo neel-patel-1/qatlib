@@ -10,7 +10,26 @@ extern "C" {
   #include "iaa_compress.h"
 }
 
-void cpu_decompress_and_hash(fcontext_transfer_t arg){
+void compressed_mc_req_allocator(int total_requests,
+  char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
+  std::string query = "/region/cluster/foo:key|#|etc";
+  char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
+
+  int num_inputs_per_request = 1;
+  for(int i = 0; i < total_requests; i++){
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] =
+      (char **) malloc(sizeof(char *) * num_inputs_per_request); /* only one input to each request */
+    for(int j=0; j<num_inputs_per_request; j++){
+      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j] = (char *) malloc(query.size() + 1);
+      memcpy(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j], query.c_str(), query.size());
+      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j][query.size()] = '\0';
+    }
+  }
+
+  *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
+}
+
+void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   timed_gpcore_request_args* args = (timed_gpcore_request_args *)arg.data;
 
   int id = args->id;
