@@ -4,12 +4,82 @@
 #include "iaa_offloads.h"
 #include "ch3_hash.h"
 #include "runners.h"
+#include "gpcore_compress.h"
 
 extern "C" {
   #include "fcontext.h"
   #include "iaa.h"
   #include "accel_test.h"
   #include "iaa_compress.h"
+  #include <zlib.h>
+}
+static inline int gpcore_do_compress(void *dst, void *src, int src_len, int *out_len)
+{
+  int ret = 0;
+  z_stream stream;
+  int avail_out = *out_len;
+
+  memset(&stream, 0, sizeof(z_stream));
+
+  /* allocate deflate state */
+  ret = deflateInit2(&stream, Z_BEST_COMPRESSION, Z_DEFLATED, -12, 9, Z_DEFAULT_STRATEGY);
+  if (ret != Z_OK) {
+    LOG_PRINT( LOG_ERR, "Error deflateInit2 status %d\n", ret);
+    return ret;
+  }
+
+  stream.avail_in = src_len;
+  stream.next_in = (Bytef *)src;
+  stream.avail_out = avail_out;
+  stream.next_out = (Bytef *)dst;
+
+  LOG_PRINT( LOG_DEBUG,
+    "deflate: avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=0x%p\n",
+    stream.avail_in,
+    stream.total_in,
+    stream.avail_out,
+    stream.total_out,
+    stream.next_out);
+
+  do {
+    ret = deflate(&stream, Z_NO_FLUSH);
+    LOG_PRINT( LOG_DEBUG,
+      "deflate: ret=%d avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=%p\n",
+      ret,
+      stream.avail_in,
+      stream.total_in,
+      stream.avail_out,
+      stream.total_out,
+      stream.next_out);
+      if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
+        deflateEnd(&stream);
+        LOG_PRINT( LOG_ERR, "Error deflate status %d\n", ret);
+        return ret;
+      }
+  }
+  while(stream.avail_in > 0 && ret == Z_OK);
+
+  if(ret != Z_STREAM_END) { /* we need to flush, out input was small */
+    ret = deflate(&stream, Z_FINISH);
+  }
+  LOG_PRINT( LOG_DEBUG,
+    "deflate: ret=%d avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=%p\n",
+    ret,
+    stream.avail_in,
+    stream.total_in,
+    stream.avail_out,
+    stream.total_out,
+    stream.next_out);
+
+
+  ret = deflateEnd(&stream);
+  if (ret) {
+    LOG_PRINT( LOG_ERR, "Error deflateEnd status %d\n", ret);
+    return ret;
+  }
+
+  *out_len = stream.total_out;
+  return ret;
 }
 
 void compressed_mc_req_allocator(int total_requests,
@@ -17,17 +87,23 @@ void compressed_mc_req_allocator(int total_requests,
   std::string query = "/region/cluster/foo:key|#|etc";
   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
 
+  int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
   int num_inputs_per_request = 3;
   for(int i = 0; i < total_requests; i++){
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] =
       (char **) malloc(sizeof(char *) * num_inputs_per_request); /* only one input to each request */
 
     /* CPU request needs a src payload to decompress */
+    avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] =
-      (char *) malloc(query.size() + 1);
-    int compressed_size = query.size() + 1;
-    memcpy(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0], query.c_str(), query.size());
-    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0][query.size()] = '\0';
+      (char *) malloc(avail_out);
+    // compress((Bytef *)(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]), (uLongf *)&compressed_size,
+    //   (const Bytef*)(query.c_str()), query.size());
+    int compressed_size;
+    gpcore_do_compress((void *) (ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]),
+      (void *) query.c_str(), query.size(), &avail_out);
+
+    LOG_PRINT(LOG_DEBUG, "Compressed size: %d\n", avail_out);
 
     /* and a dst payload to decompress into */
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] =
@@ -71,7 +147,7 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
 
   ts0[id] = sampleCoderdtsc();
   memcpy(dst1, src1, compressed_size);
-  // decompressed_size = iaa_do_decompress(dst1, src1, IAA_COMPRESS_MAX_DEST_SIZE, NULL);
+  decompressed_size = gpcore_do_decompress(dst1, src1, IAA_COMPRESS_MAX_DEST_SIZE, NULL);
   ts1[id] = sampleCoderdtsc();
 
   uint32_t hash = furc_hash(dst1, decompressed_size, 16);

@@ -6,16 +6,8 @@ The goal of this workflow is to get a breakdown of the end-to-end execution of a
 We will need:
 (1) A time-stamped "GPCore Request"
 (2) A input payload "Allocator Function"
-
-
-Components:
-```
-Executors: {Latency,Throughput} Variants
-Harnesses: (Request, Input/Output Allocators)
-```
-
-Tree:
-```
-
-
-```
+(3) A input payload "Free function"
+* Given all of these are created, these functions can be passed directly to a "Test Harness" which executes the request in the context of an "Executor"
+* There are "Latency Breakdown" and "Closed System Throughput" Executors
+* "Latency Breakdown" executor shows where the time goes during the execution of a request
+* "Closed System Throughput" executor implements a FCFS scheduling policy and determines the offered load when executing the passed in request on a single GPCore with optional offloads to on-chip accelerators
