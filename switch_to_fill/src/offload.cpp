@@ -44,6 +44,7 @@ void allocate_offload_requests(int total_requests, offload_request_args ***p_off
   *p_off_args = (offload_request_args **)malloc(sizeof(offload_request_args *) * total_requests);
   for(int i=0; i<total_requests; i++){
     (*p_off_args)[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+    (*p_off_args)[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
     (*p_off_args)[i]->comp = &(comps[i]);
     (*p_off_args)[i]->dst_payload = dst_bufs[i];
     (*p_off_args)[i]->id = i;

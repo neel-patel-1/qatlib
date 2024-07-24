@@ -6,12 +6,14 @@
 
 typedef struct _offload_request_args{
   ax_comp *comp;
+  struct hw_desc *desc;
   char *dst_payload;
   int id;
 } offload_request_args;
 
 typedef struct _timed_offload_request_args{
   ax_comp *comp;
+  struct hw_desc *desc;
   char *dst_payload;
   int id;
   uint64_t *ts0;

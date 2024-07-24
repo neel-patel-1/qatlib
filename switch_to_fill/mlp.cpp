@@ -16,42 +16,7 @@ extern "C" {
 #include "decompress_and_hash_request.hpp"
 
 
-void prepare_iaa_compress_desc_with_preallocated_comp(
-  struct hw_desc *hw, uint64_t src1, uint64_t src2, uint64_t dst1,
-  uint64_t comp, uint64_t xfer_size )
-{
-  memset(hw, 0, sizeof(struct hw_desc));
-  hw->flags = 0x5000eUL;
-  hw->opcode = 0x43;
-  hw->src_addr = src1;
-  hw->dst_addr = dst1;
-  hw->xfer_size = xfer_size;
 
-  hw->completion_addr = comp;
-  hw->iax_compr_flags = 14;
-  hw->iax_src2_addr = src2;
-  hw->iax_src2_xfer_size = IAA_COMPRESS_AECS_SIZE;
-  hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
-}
-
-void prepare_iaa_decompress_desc_with_preallocated_comp(
-  struct hw_desc *hw, uint64_t src1, uint64_t dst1,
-  uint64_t comp, uint64_t xfer_size )
-{
-  memset(hw, 0, sizeof(struct hw_desc));
-  hw->flags = 14;
-  hw->opcode = IAX_OPCODE_DECOMPRESS;
-  hw->src_addr = src1;
-  hw->dst_addr = dst1;
-  hw->xfer_size = xfer_size;
-
-  memset((void *)comp, 0, sizeof(ax_comp));
-  hw->completion_addr = comp;
-  hw->iax_decompr_flags = 31;
-  hw->iax_src2_addr = 0x0;
-  hw->iax_src2_xfer_size = 0;
-  hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
-}
 
 void alloc_src_and_dst_compress_bufs(char **src1, char **dst1, char **src2,
   int input_size){
