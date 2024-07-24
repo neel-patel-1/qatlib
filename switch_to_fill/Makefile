@@ -41,17 +41,23 @@ walker: $(WALKER_OBJS) walker.o
 	$(CXX) -g -o $@ $^ -ldml
 
 
-mlp.o: mlp.cpp
-	$(CXX) -g -c -o $@ $^ -I./inc
+
+IAA_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test
+IAA_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test -liaa
+ACCFG_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config
 MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
 	obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/request_executors.o obj/runners.o
+mlp.o: mlp.cpp
+	$(CXX) -g -c -o $@ $^ -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) -fpermissive
 mlp: $(MLP_OBJS) mlp.o
-	$(CXX) -g -o $@ $^ -ldml
+	$(CXX) -g -o $@ $^ -ldml $(IAA_LIBS)
 
+mlp_clean:
+	rm -f mlp mlp.o
 
 clean:
 	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o

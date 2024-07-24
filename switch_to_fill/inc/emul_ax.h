@@ -20,9 +20,7 @@ extern std::atomic<uint64_t> compl_addr;
 extern std::atomic<uint64_t> p_dst_buf;
 extern std::atomic<uint64_t> total_offloads; /* Exported total_offloads used for monitoring at request side*/
 
-typedef struct completion_record{
-  int status;
-} ax_comp;
+typedef struct completion_record  ax_comp;
 
 class offload_entry{
   public:
