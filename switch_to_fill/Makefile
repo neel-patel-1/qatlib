@@ -25,7 +25,7 @@ router.pb.o: src/router.pb.cc
 	$(CXX) -g -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
 
 obj/%.o: src/%.cpp
-	$(CXX) -g -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf`
+	$(CXX) -g -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf` -fpermissive
 
 switch_to_fill.o: switch_to_fill.cpp
 	$(CXX) -g -c -o $@ $^  $(INCLUDES)
@@ -57,7 +57,7 @@ MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
 	obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
-	obj/request_executors.o obj/runners.o
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o
 REQUEST_OBJS = obj/walker.o
 mlp.o: mlp.cpp
 	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive

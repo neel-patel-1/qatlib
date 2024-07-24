@@ -1,5 +1,7 @@
 #include "test_harness.h"
 #include "print_utils.h"
+#include "router_request_args.h"
+#include "iaa_offloads.h"
 
 extern "C" {
   #include "fcontext.h"
@@ -8,12 +10,16 @@ extern "C" {
   #include "iaa_compress.h"
 }
 
-int gLogLevel = LOG_MONITOR;
+void cpu_decompress_and_hash(fcontext_transfer_t arg){
+  timed_gpcore_request_args* args = (timed_gpcore_request_args *)arg.data;
+
+  int id = args->id;
+
+}
+
+int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
 int main(){
-  struct task_node *tsk_node;
-  struct acctest_context *iaa;
-  int tflags = TEST_FLAGS_BOF;
   int opcode = 67; /* compress opcode */
   int wq_id = 0;
   int dev_id = 3;
@@ -37,24 +43,11 @@ int main(){
   memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
   memset_pattern(src1, pattern, bufsize);
 
-  iaa = acctest_init(tflags);
-  rc = acctest_alloc(iaa, wq_type, dev_id, wq_id);
+  initialize_iaa_wq(dev_id, wq_id, wq_type);
   if(rc != ACCTEST_STATUS_OK){
     return rc;
   }
-  rc = acctest_alloc_multiple_tasks(iaa, itr);
-  if(rc != ACCTEST_STATUS_OK){
-    return rc;
-  }
-  tsk_node = iaa->multi_task_node;
-  while(tsk_node){
-    struct task *tsk = tsk_node->tsk;
-    rc = init_task(tsk, tflags, opcode, bufsize );
-    if(rc != ACCTEST_STATUS_OK){
-      return rc;
-    }
-    tsk_node = tsk_node->next;
-  }
+
   struct hw_desc *hw;
   hw = (struct hw_desc *) malloc(sizeof(struct hw_desc));
   memset(hw, 0, sizeof(struct hw_desc));
@@ -79,6 +72,8 @@ int main(){
   acctest_wait_on_desc_timeout(comp, iaa, 1000);
 
   compressed_size = comp->iax_output_size;
+
+  LOG_PRINT( LOG_DEBUG, "Compressed size: %d\n", compressed_size);
 
   iaa_do_decompress(src1_decomp, dst1, compressed_size,
      &decompressed_size);
