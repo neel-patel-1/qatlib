@@ -171,7 +171,7 @@ void blocking_decompress_and_hash_request_stamped(
   ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
-
+  fcontext_swap(arg.prev_context, NULL);
 }
 
 void run_blocking_offload_request_brkdown(
@@ -204,7 +204,7 @@ void run_blocking_offload_request_brkdown(
 }
 
 
-int gLogLevel = LOG_DEBUG;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(){
 
@@ -213,8 +213,8 @@ int main(){
   int dev_id = 3;
   int wq_type = SHARED;
   int rc;
-  int itr = 1;
-  int total_requests = 1;
+  int itr = 100;
+  int total_requests = 1000;
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
   // run_gpcore_request_brkdown(
