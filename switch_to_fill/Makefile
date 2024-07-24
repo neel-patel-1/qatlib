@@ -1,4 +1,5 @@
-IAA_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test
+IAA_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test \
+	-I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test/algorithms
 IDXD_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config
 ACCFG_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/accfg
 IAA_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test -liaa -lz -lcrypto
