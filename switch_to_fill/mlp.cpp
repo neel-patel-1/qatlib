@@ -101,6 +101,9 @@ void alloc_decomp_and_hash_offload_args(int total_requests,
     /* and the size of the compressed payload for decomp */
     off_args[i]->src_size = (uint64_t)avail_out;
 
+    /* and the size of the original payload for hash */
+    off_args[i]->dst_size = query.size();
+
     /* and a preallocated desc for prep and submit */
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
 
@@ -145,6 +148,7 @@ void blocking_decompress_and_hash_request_stamped(
   uint64_t *ts2 = args->ts2;
   uint64_t *ts3 = args->ts3;
   uint64_t src_size = args->src_size;
+  uint64_t dst_size = args->dst_size;
 
 
   struct hw_desc *desc = args->desc;
@@ -158,15 +162,18 @@ void blocking_decompress_and_hash_request_stamped(
   acctest_desc_submit(iaa, desc);
 
   ts1[id] = sampleCoderdtsc();
-  acctest_wait_on_desc_timeout(comp, iaa, 1000);
+  while(comp->status == COMP_STATUS_PENDING){
+    _mm_pause();
+  }
   if(comp->status != IAX_COMP_SUCCESS){
     LOG_PRINT(LOG_ERR, "Decompress failed: %d\n", comp->status);
   }
+  LOG_PRINT(LOG_DEBUG, "Decompressed size: %d\n", comp->iax_output_size);
 
   ts2[id] = sampleCoderdtsc();
   /* hash the decompressed payload */
-  LOG_PRINT(LOG_DEBUG, "Hashing: %s\n", dst);
-  uint32_t hash = furc_hash((char *)dst, src_size, 16);
+  LOG_PRINT(LOG_DEBUG, "Hashing: %s %ld bytes\n", dst, dst_size);
+  uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   ts3[id] = sampleCoderdtsc();
 
