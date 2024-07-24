@@ -30,7 +30,7 @@ retry:
 }
 
 void allocate_crs(int total_requests, ax_comp **p_comps){
-  *p_comps = (ax_comp *)malloc(sizeof(ax_comp) * total_requests);
+  *p_comps = (ax_comp *)aligned_alloc(64, sizeof(ax_comp) * total_requests);
   if(*p_comps == NULL){
     PRINT_DBG("Error allocating completion records\n");
     exit(1);

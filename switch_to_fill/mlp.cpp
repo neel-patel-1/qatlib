@@ -145,84 +145,30 @@ void blocking_decompress_and_hash_request_stamped(
   uint64_t *ts2 = args->ts2;
   uint64_t *ts3 = args->ts3;
   uint64_t src_size = args->src_size;
+
+
   struct hw_desc *desc = args->desc;
+  ax_comp *comp = args->comp;
 
+  ts0[id] = sampleCoderdtsc();
+  /* prep hw desc */
+  prepare_iaa_decompress_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)comp, (uint64_t)src_size);
+  acctest_desc_submit(iaa, desc);
 
-    uint32_t bufsize = 1024;
-    uint64_t pattern = 0x98765432abcdef01;
-    char *src1, *dst1, *src2;
-    alloc_src_and_dst_compress_bufs(&src1, &dst1, &src2, bufsize);
+  ts1[id] = sampleCoderdtsc();
+  acctest_wait_on_desc_timeout(comp, iaa, 1000);
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Decompress failed: %d\n", comp->status);
+  }
 
-    char *src1_decomp =
-      (char *) aligned_alloc(32, IAA_COMPRESS_MAX_DEST_SIZE);
-    int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
-    int compressed_size = 0;
-    memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
-    memset_pattern(src1, pattern, bufsize);
-    struct hw_desc *hw;
-    hw = (struct hw_desc *) malloc(sizeof(struct hw_desc));
-    memset(hw, 0, sizeof(struct hw_desc));
-    ax_comp *comp =
-      (ax_comp *) aligned_alloc(iaa->compl_size, sizeof(ax_comp));
+  ts2[id] = sampleCoderdtsc();
+  /* hash the decompressed payload */
+  LOG_PRINT(LOG_DEBUG, "Hashing: %s\n", dst);
+  uint32_t hash = furc_hash((char *)dst, src_size, 16);
 
-    /* compress */
-    prepare_iaa_compress_desc_with_preallocated_comp(
-      hw, (uint64_t) src1, (uint64_t) src2, (uint64_t) dst1,
-      (uint64_t) comp, bufsize);
-
-    acctest_desc_submit(iaa, hw);
-    acctest_wait_on_desc_timeout(comp, iaa, 1000);
-
-    compressed_size = comp->iax_output_size;
-
-    LOG_PRINT( LOG_DEBUG, "Compressed size: %d\n", compressed_size);
-
-    /* validate */
-    iaa_do_decompress(src1_decomp, dst1, compressed_size,
-      &decompressed_size);
-
-    if(memcmp(src1, src1_decomp, bufsize) != 0){
-      LOG_PRINT(LOG_ERR, "Decompressed data does not match original data\n");
-      return -1;
-    }
-    prepare_iaa_decompress_desc_with_preallocated_comp(
-    hw, (uint64_t) dst1, (uint64_t) src1_decomp,
-    (uint64_t) comp, compressed_size);
-
-    acctest_desc_submit(iaa, hw);
-
-    acctest_wait_on_desc_timeout(comp, iaa, 1000);
-    if(comp->status != IAX_COMP_SUCCESS){
-      return comp->status;
-    }
-    if(memcmp(src1, src1_decomp, bufsize) != 0){
-      LOG_PRINT(LOG_ERR, "Decompressed data does not match original data\n");
-      return -1;
-    }
-    if(bufsize - comp->iax_output_size){
-      LOG_PRINT(LOG_ERR, "Decompressed size: %u does not match original size %u\n",
-        comp->iax_output_size, bufsize);
-      return -1;
-    }
-    LOG_PRINT(LOG_DEBUG, "Decompressed size: %u\n", comp->iax_output_size);
-
-  // ts0[id] = sampleCoderdtsc();
-  // /* prep hw desc */
-  // prepare_iaa_decompress_desc_with_preallocated_comp(
-  //   desc, (uint64_t)src, (uint64_t)dst,
-  //   (uint64_t)comp, (uint64_t)src_size);
-  // acctest_desc_submit(iaa, desc);
-
-  // ts1[id] = sampleCoderdtsc();
-  // acctest_wait_on_desc_timeout(comp, iaa, 1000);
-  // LOG_PRINT(LOG_DEBUG, "Comp status: %d\n", comp->status);
-
-  // ts2[id] = sampleCoderdtsc();
-  // /* hash the decompressed payload */
-  // LOG_PRINT(LOG_DEBUG, "Hashing: %s\n", dst);
-  // uint32_t hash = furc_hash((char *)dst, src_size, 16);
-
-  // ts3[id] = sampleCoderdtsc();
+  ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
 
