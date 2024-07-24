@@ -65,9 +65,22 @@ mlp.o: mlp.cpp
 	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
 mlp: $(MLP_OBJS) mlp.o
 	$(CXX) -g -o $@ $^ -ldml $(LIBS)
-
 mlp_clean:
 	rm -f mlp mlp.o
 
+TEST_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/context_management.o \
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/ch3_hash.o \
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/decompress_and_hash_request.o
+tests: tests/iaa_compress_and_decompress_verify
+tests/iaa_compress_and_decompress_verify.o: tests/iaa_compress_and_decompress_verify.cpp
+	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+tests/iaa_compress_and_decompress_verify: tests/iaa_compress_and_decompress_verify.o $(TEST_OBJS)
+	$(CXX) -g -o $@ $^ $(LIBS)
+
 clean:
-	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o mlp.o
+	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o mlp.o tests/*.o
