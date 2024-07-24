@@ -2,6 +2,7 @@
 #include "print_utils.h"
 #include "router_request_args.h"
 #include "iaa_offloads.h"
+#include "ch3_hash.h"
 
 extern "C" {
   #include "fcontext.h"
@@ -15,14 +16,19 @@ void compressed_mc_req_allocator(int total_requests,
   std::string query = "/region/cluster/foo:key|#|etc";
   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
 
-  int num_inputs_per_request = 1;
+  int num_inputs_per_request = 2;
   for(int i = 0; i < total_requests; i++){
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] =
       (char **) malloc(sizeof(char *) * num_inputs_per_request); /* only one input to each request */
     for(int j=0; j<num_inputs_per_request; j++){
+      /* CPU request needs a src payload to decompress */
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j] = (char *) malloc(query.size() + 1);
       memcpy(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j], query.c_str(), query.size());
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j][query.size()] = '\0';
+
+      /* and a dst payload to decompress into */
+      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][j] =
+        (char *) malloc(IAA_COMPRESS_MAX_DEST_SIZE);
     }
   }
 
@@ -33,7 +39,50 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   timed_gpcore_request_args* args = (timed_gpcore_request_args *)arg.data;
 
   int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
 
+  char *src1 = args->inputs[0];
+  char *dst1 = args->inputs[1];
+
+  int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
+
+  ts0[id] = sampleCoderdtsc();
+  decompressed_size = iaa_do_decompress(dst1, src1, IAA_COMPRESS_MAX_DEST_SIZE, NULL);
+  ts1[id] = sampleCoderdtsc();
+
+  uint32_t hash = furc_hash(dst1, decompressed_size, 16);
+  ts2[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+
+}
+
+
+void prepare_compress_iaa_compress_desc_with_preallocated_comp(
+  struct hw_desc *hw, uint64_t src1, uint64_t src2, uint64_t dst1,
+  uint64_t comp, uint64_t xfer_size )
+{
+  hw->flags = 0x5000eUL;
+  hw->opcode = 0x43;
+  hw->src_addr = src1;
+  hw->dst_addr = dst1;
+  hw->xfer_size = xfer_size;
+
+  hw->completion_addr = comp;
+  hw->iax_compr_flags = 14;
+  hw->iax_src2_addr = src2;
+  hw->iax_src2_xfer_size = IAA_COMPRESS_AECS_SIZE;
+  hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
+}
+
+void alloc_src_and_dst_compress_bufs(char **src1, char **dst1, char **src2,
+  int input_size){
+  *src1 = (char *) aligned_alloc(32, 1024);
+  *dst1 = (char *) aligned_alloc(32, IAA_COMPRESS_MAX_DEST_SIZE);
+  *src2 = (char *) aligned_alloc(32, IAA_COMPRESS_SRC2_SIZE);
 }
 
 int gLogLevel = LOG_DEBUG;
@@ -49,10 +98,9 @@ int main(){
   int bufsize = 1024;
 
   uint64_t pattern = 0x98765432abcdef01;
-  char *src1 = (char *) aligned_alloc(32,bufsize);
-  char *dst1 = (char *) aligned_alloc(32,IAA_COMPRESS_MAX_DEST_SIZE);
-  char *src2 =
-    (char *) aligned_alloc(32, IAA_COMPRESS_SRC2_SIZE);
+  char *src1, *dst1, *src2;
+  alloc_src_and_dst_compress_bufs(&src1, &dst1, &src2, bufsize);
+
   char *src1_decomp =
     (char *) aligned_alloc(32, IAA_COMPRESS_MAX_DEST_SIZE);
   int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
@@ -73,18 +121,9 @@ int main(){
   ax_comp *comp =
     (ax_comp *) aligned_alloc(iaa->compl_size, sizeof(ax_comp));
 
-
-  hw->flags = 0x5000eUL;
-  hw->opcode = 0x43;
-  hw->src_addr = (uint64_t) src1;
-  hw->dst_addr = (uint64_t) dst1;
-  hw->xfer_size = bufsize;
-
-  hw->completion_addr = (uint64_t) comp;
-  hw->iax_compr_flags = 14;
-  hw->iax_src2_addr = (uint64_t) src2;
-  hw->iax_src2_xfer_size = IAA_COMPRESS_AECS_SIZE;
-  hw->iax_max_dst_size = bufsize;
+  prepare_compress_iaa_compress_desc_with_preallocated_comp(
+    hw, (uint64_t) src1, (uint64_t) src2, (uint64_t) dst1,
+    (uint64_t) comp, bufsize);
 
   acctest_desc_submit(iaa, hw);
 

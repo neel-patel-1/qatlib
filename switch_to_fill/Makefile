@@ -57,6 +57,7 @@ MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
 	obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o
 REQUEST_OBJS = obj/walker.o
 mlp.o: mlp.cpp
