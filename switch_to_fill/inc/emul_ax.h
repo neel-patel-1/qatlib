@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <cstdlib>
 #include "thread_utils.h"
+#include "idxd.h"
 
 #define SUBMIT_SUCCESS 0
 #define SUBMIT_FAIL 1

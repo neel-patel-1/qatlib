@@ -6,6 +6,7 @@ extern "C" {
 #include "router_request_args.h"
 #include "emul_ax.h"
 #include "print_utils.h"
+#include "idxd.h"
 #include <stdint.h>
 
 extern std::atomic<uint64_t> total_offloads; /* Exported total_offloads used for monitoring at request side*/

@@ -1,4 +1,13 @@
-all: switch_to_fill walker
+IAA_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test
+IDXD_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config
+ACCFG_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/accfg
+IAA_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test -liaa
+ACCFG_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/accfg/lib -laccel-config
+
+INCLUDES = -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) $(IDXD_INCLUDES)
+LIBS = -ldml $(IAA_LIBS) $(ACCFG_LIBS)
+
+all: switch_to_fill walker mlp
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
 	$(CXX) -g -c -o $@ $^  -I./inc
 
@@ -15,10 +24,10 @@ router.pb.o: src/router.pb.cc
 	$(CXX) -g -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
 
 obj/%.o: src/%.cpp
-	$(CXX) -g -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
+	$(CXX) -g -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf`
 
 switch_to_fill.o: switch_to_fill.cpp
-	$(CXX) -g -c -o $@ $^  -I./inc
+	$(CXX) -g -c -o $@ $^  $(INCLUDES)
 SWITCH_TO_FILL_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o router.pb.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o obj/router_requests.o \
@@ -30,7 +39,7 @@ switch_to_fill: $(SWITCH_TO_FILL_OBJS) switch_to_fill.o router.pb.o
 
 
 walker.o: walker.cpp
-	$(CXX) -g -c -o $@ $^  -I./inc
+	$(CXX) -g -c -o $@ $^  -I./inc $(INCLUDES)
 WALKER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/walker_requests.o obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
@@ -42,19 +51,17 @@ walker: $(WALKER_OBJS) walker.o
 
 
 
-IAA_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test
-IAA_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test -liaa
-ACCFG_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config
 MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
 	obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/request_executors.o obj/runners.o
+REQUEST_OBJS = obj/walker.o
 mlp.o: mlp.cpp
-	$(CXX) -g -c -o $@ $^ -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) -fpermissive
+	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
 mlp: $(MLP_OBJS) mlp.o
-	$(CXX) -g -o $@ $^ -ldml $(IAA_LIBS)
+	$(CXX) -g -o $@ $^ -ldml $(LIBS)
 
 mlp_clean:
 	rm -f mlp mlp.o
