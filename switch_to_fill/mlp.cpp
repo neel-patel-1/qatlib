@@ -55,7 +55,6 @@ void alloc_cpu_memcpy_and_compute_args(int total_requests,
     char ***ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***)malloc(total_requests * sizeof(char **));
     for(int i = 0; i < total_requests; i++){
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] = (char **)malloc(3 * sizeof(char *));
-      // ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] = (char *)malloc(input_size * sizeof(char));
       input_gen(&ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]);
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] = (char *)malloc(input_size * sizeof(char));
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] = (char *)malloc(sizeof(int));
@@ -100,47 +99,65 @@ void cpu_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
-// void alloc_offload_memcpy_and_compute_args(
-//   int total_requests,
-//   timed_offload_request_args*** p_off_args,
-//   ax_comp *comps,
-//   uint64_t *ts0,
-//   uint64_t *ts1,
-//   uint64_t *ts2,
-//   uint64_t *ts3
-// ){
+void alloc_offload_memcpy_and_compute_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args,
+  ax_comp *comps,
+  uint64_t *ts0,
+  uint64_t *ts1,
+  uint64_t *ts2,
+  uint64_t *ts3
+){
 
-//   timed_offload_request_args **off_args = (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
-//   for(int i = 0; i < total_requests; i++){
-//     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
-//     off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
-//     off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
-//     off_args[i]->inputs[2] = (char *)malloc(sizeof(int));
-//     *((int *) off_args[i]->inputs[2]) = input_size;
-//     off_args[i]->ts0 = ts0;
-//     off_args[i]->ts1 = ts1;
-//     off_args[i]->ts2 = ts2;
-//     off_args[i]->ts3 = ts3;
-//     off_args[i]->id = i;
-//   }
+  timed_offload_request_args **off_args = (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+  for(int i = 0; i < total_requests; i++){
+    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
+    off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
+    off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
+    off_args[i]->src_size =  input_size;
+    off_args[i]->ts0 = ts0;
+    off_args[i]->ts1 = ts1;
+    off_args[i]->ts2 = ts2;
+    off_args[i]->ts3 = ts3;
+    off_args[i]->id = i;
+  }
 
-//   *p_off_args = off_args;
-// }
+  *p_off_args = off_args;
+}
 
-// void free_offload_memcpy_and_compute_args(
-//   int total_requests,
-//   timed_offload_request_args*** p_off_args
-// ){
-//   timed_offload_request_args **off_args = *p_off_args;
-//   for(int i = 0; i < total_requests; i++){
-//     free(off_args[i]->inputs[0]);
-//     free(off_args[i]->inputs[1]);
-//     free(off_args[i]->inputs[2]);
-//     free(off_args[i]->inputs);
-//     free(off_args[i]);
-//   }
-//   free(off_args);
-// }
+void free_offload_memcpy_and_compute_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args
+){
+  timed_offload_request_args **off_args = *p_off_args;
+  for(int i = 0; i < total_requests; i++){
+    free(off_args[i]->src_payload);
+    free(off_args[i]->dst_payload);
+    free(off_args[i]);
+  }
+  free(off_args);
+}
+
+void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+
+  ts0[id] = sampleCoderdtsc();
+  memcpy(dst, src, input_size);
+  ts1[id] = sampleCoderdtsc();
+
+  compute(dst, input_size);
+  ts2[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
 
 
 
@@ -164,13 +181,13 @@ int main(){
     itr,
     total_requests
   );
-  // run_blocking_offload_request_brkdown(
-  //   blocking_decompress_and_hash_request_stamped,
-  //   alloc_decomp_and_hash_offload_args,
-  //   free_decomp_and_hash_offload_args,
-  //   itr,
-  //   total_requests
-  // );
+  run_blocking_offload_request_brkdown(
+    blocking_memcpy_and_compute_stamped,
+    alloc_offload_memcpy_and_compute_args,
+    free_offload_memcpy_and_compute_args,
+    itr,
+    total_requests
+  );
   // run_yielding_request_brkdown(
   //   yielding_decompress_and_hash_request_stamped,
   //   alloc_decomp_and_hash_offload_args,
