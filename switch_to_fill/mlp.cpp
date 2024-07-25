@@ -183,16 +183,48 @@ void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)args->comp, (uint64_t)input_size
   );
-  enqcmd(dsa->wq_reg, desc);
-  // if (!dsa_submit(dsa, desc)){
-  //   LOG_PRINT(LOG_ERR, "Error submitting request\n");
-  //   return;
-  // }
+  if (!dsa_submit(dsa, desc)){
+    LOG_PRINT(LOG_ERR, "Error submitting request\n");
+    return;
+  }
   ts1[id] = sampleCoderdtsc();
   while(comp->status == IAX_COMP_NONE)
   {
     _mm_pause();
   }
+
+  ts2[id] = sampleCoderdtsc();
+  compute(dst, input_size);
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void yielding_memcpy_and_compute_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+  ts0[id] = sampleCoderdtsc();
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  if (!dsa_submit(dsa, desc)){
+    LOG_PRINT(LOG_ERR, "Error submitting request\n");
+    return;
+  }
+  ts1[id] = sampleCoderdtsc();
+  fcontext_swap(arg.prev_context, NULL);
 
   ts2[id] = sampleCoderdtsc();
   compute(dst, input_size);
@@ -231,13 +263,13 @@ int main(){
     itr,
     total_requests
   );
-  // run_yielding_request_brkdown(
-  //   yielding_decompress_and_hash_request_stamped,
-  //   alloc_decomp_and_hash_offload_args,
-  //   free_decomp_and_hash_offload_args,
-  //   itr,
-  //   total_requests
-  // );
+  run_yielding_request_brkdown(
+    yielding_memcpy_and_compute_stamped,
+    alloc_offload_memcpy_and_compute_args,
+    free_offload_memcpy_and_compute_args,
+    itr,
+    total_requests
+  );
 
   free_dsa_wq();
 }
