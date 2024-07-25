@@ -99,6 +99,17 @@ void cpu_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void prepare_dsa_compress_desc_with_preallocated_comp(
+  struct hw_desc *hw, uint64_t src,
+  uint64_t dst, uint64_t comp, uint64_t xfer_size){
+  hw->flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
+  hw->src_addr = src;
+  hw->dst_addr = dst;
+  hw->completion_addr = comp;
+  hw->xfer_size = xfer_size;
+  hw->opcode = DSA_OPCODE_MEMMOVE;
+}
+
 void alloc_offload_memcpy_and_compute_args(
   int total_requests,
   timed_offload_request_args*** p_off_args,
@@ -115,6 +126,8 @@ void alloc_offload_memcpy_and_compute_args(
     off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
     off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
     off_args[i]->src_size =  input_size;
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+    off_args[i]->comp = &comps[i];
     off_args[i]->ts0 = ts0;
     off_args[i]->ts1 = ts1;
     off_args[i]->ts2 = ts2;
