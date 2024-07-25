@@ -68,6 +68,22 @@ mlp: $(MLP_OBJS) mlp.o
 mlp_clean:
 	rm -f mlp mlp.o
 
+DECOMP_AND_HASH_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/context_management.o \
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/ch3_hash.o \
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/decompress_and_hash_request.o
+REQUEST_OBJS = obj/walker.o
+decomp_and_hash.o: decomp_and_hash.cpp
+	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+decomp_and_hash: $(DECOMP_AND_HASH_OBJS) decomp_and_hash.o
+	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+decomp_and_hash_clean:
+	rm -f decomp_and_hash decomp_and_hash.o
+
 TEST_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
