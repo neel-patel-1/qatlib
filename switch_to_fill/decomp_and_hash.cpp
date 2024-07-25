@@ -26,13 +26,13 @@ int main(){
   int wq_type = SHARED;
   int rc;
   int itr = 100;
-  int total_requests = 100;
+  int total_requests = 1000;
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
   // int query_sizes[] = {31, 256, 1024, 4096, 16384, 65536}; // 10 x 10000
   // int query_sizes[] = {256 * 1024, 1024 * 1024}; // 10 x 100
   int query_sizes[] = {31, 256, 1024, 4096, 16384, 65536,
-    256 * 1024, 1024 * 1024, 4 * 1024 * 1024}; // 100 * 100
+    256 * 1024, 1024 * 1024}; // 100 * 100
   std::string append_string = query;
 
 

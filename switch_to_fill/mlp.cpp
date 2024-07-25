@@ -14,49 +14,12 @@ extern "C" {
   #include <zlib.h>
 }
 #include "decompress_and_hash_request.hpp"
+#include "dsa_offloads.h"
+#include "submit.hpp"
 
 int input_size = 16384;
 
-struct acctest_context *dsa;
-void initialize_dsa_wq(int dev_id, int wq_id, int wq_type){
-  int tflags = TEST_FLAGS_BOF;
-  int rc;
 
-  dsa = acctest_init(tflags);
-  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
-  if(rc != ACCTEST_STATUS_OK){
-    LOG_PRINT( LOG_ERR, "Error allocating work queue\n");
-    return;
-  }
-}
-
-void free_dsa_wq(){
-  acctest_free(dsa);
-}
-
-static inline bool dsa_submit(struct acctest_context *dsa,
-  struct hw_desc *desc){
-  if (enqcmd(dsa->wq_reg, desc) ){
-    return false;
-  }
-  return true;
-}
-
-static inline void prepare_dsa_memcpy_desc_with_preallocated_comp(
-  struct hw_desc *hw, uint64_t src,
-  uint64_t dst, uint64_t comp, uint64_t xfer_size){
-
-  memset(hw, 0, sizeof(struct hw_desc));
-  hw->flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
-  hw->src_addr = src;
-  hw->dst_addr = dst;
-  hw->xfer_size = xfer_size;
-  hw->opcode = DSA_OPCODE_MEMMOVE;
-
-  memset((void *)comp, 0, sizeof(ax_comp));
-  hw->completion_addr = comp;
-
-}
 
 static inline void input_gen(char **p_buf){
   char *buf = (char *)malloc(input_size);
