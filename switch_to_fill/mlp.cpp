@@ -17,12 +17,13 @@ extern "C" {
 
 int input_size = 16384;
 
+struct acctest_context *dsa;
 void initialize_dsa_wq(int dev_id, int wq_id, int wq_type){
   int tflags = TEST_FLAGS_BOF;
   int rc;
 
-  iaa = acctest_init(tflags);
-  rc = acctest_alloc(iaa, wq_type, dev_id, wq_id);
+  dsa = acctest_init(tflags);
+  rc = acctest_alloc(dsa, wq_type, dev_id, wq_id);
   if(rc != ACCTEST_STATUS_OK){
     LOG_PRINT( LOG_ERR, "Error allocating work queue\n");
     return;
@@ -30,7 +31,31 @@ void initialize_dsa_wq(int dev_id, int wq_id, int wq_type){
 }
 
 void free_dsa_wq(){
-  acctest_free(iaa);
+  acctest_free(dsa);
+}
+
+static inline bool dsa_submit(struct acctest_context *dsa,
+  struct hw_desc *desc){
+  if (enqcmd(dsa->wq_reg, desc) ){
+    return false;
+  }
+  return true;
+}
+
+static inline void prepare_dsa_memcpy_desc_with_preallocated_comp(
+  struct hw_desc *hw, uint64_t src,
+  uint64_t dst, uint64_t comp, uint64_t xfer_size){
+
+  memset(hw, 0, sizeof(struct hw_desc));
+  hw->flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
+  hw->src_addr = src;
+  hw->dst_addr = dst;
+  hw->xfer_size = xfer_size;
+  hw->opcode = DSA_OPCODE_MEMMOVE;
+
+  memset((void *)comp, 0, sizeof(ax_comp));
+  hw->completion_addr = comp;
+
 }
 
 static inline void input_gen(char **p_buf){
@@ -99,17 +124,6 @@ void cpu_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
-void prepare_dsa_compress_desc_with_preallocated_comp(
-  struct hw_desc *hw, uint64_t src,
-  uint64_t dst, uint64_t comp, uint64_t xfer_size){
-  hw->flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_BOF;
-  hw->src_addr = src;
-  hw->dst_addr = dst;
-  hw->completion_addr = comp;
-  hw->xfer_size = xfer_size;
-  hw->opcode = DSA_OPCODE_MEMMOVE;
-}
-
 void alloc_offload_memcpy_and_compute_args(
   int total_requests,
   timed_offload_request_args*** p_off_args,
@@ -160,13 +174,29 @@ void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   uint64_t *ts0 = args->ts0;
   uint64_t *ts1 = args->ts1;
   uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
 
   ts0[id] = sampleCoderdtsc();
-  memcpy(dst, src, input_size);
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  enqcmd(dsa->wq_reg, desc);
+  // if (!dsa_submit(dsa, desc)){
+  //   LOG_PRINT(LOG_ERR, "Error submitting request\n");
+  //   return;
+  // }
   ts1[id] = sampleCoderdtsc();
+  while(comp->status == IAX_COMP_NONE)
+  {
+    _mm_pause();
+  }
 
-  compute(dst, input_size);
   ts2[id] = sampleCoderdtsc();
+  compute(dst, input_size);
+  ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
