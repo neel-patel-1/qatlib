@@ -14,6 +14,11 @@ uint64_t run_gpcore_request_brkdown(fcontext_fn_t req_fn,
   void (*payload_alloc)(int,char****),
   void (*payload_free)(int,char****),
   int iter, int total_requests);
+void run_gpcore_offeredLoad(
+  fcontext_fn_t req_fn,
+  void (*payload_alloc)(int,char****),
+  void (*payload_free)(int,char****),
+  int iter, int total_requests);
 
 void run_blocking_offload_request_brkdown(fcontext_fn_t req_fn,
   void (*payload_alloc)(int,char***),
@@ -29,6 +34,12 @@ void run_blocking_offload_request_brkdown(
   void (* offload_args_free)(int, timed_offload_request_args***),
   int iter, int total_requests
 );
+void run_blocking_offered_load(
+  fcontext_fn_t request_fn,
+  void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
+  void (* offload_args_free)(int, offload_request_args***),
+  int total_requests,
+  int itr);
 
 void run_yielding_request_brkdown(fcontext_fn_t req_fn,
   void (*payload_alloc)(int,char***),
@@ -44,5 +55,11 @@ void run_yielding_request_brkdown(
   void (* offload_args_free)(int, timed_offload_request_args***),
   int iter, int total_requests
 );
+void run_yielding_offered_load(
+  fcontext_fn_t request_fn,
+  void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
+  void (* offload_args_free)(int, offload_request_args***),
+  int num_exe_time_samples_per_run,
+  int total_requests, int iter);
 
 #endif
