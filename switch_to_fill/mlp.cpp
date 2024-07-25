@@ -19,7 +19,8 @@ extern "C" {
 
 int input_size = 16384;
 
-
+int (*input_populate)(char **);
+void (*compute_on_input)(void *, int);
 
 static inline void input_gen(char **p_buf){
   char *buf = (char *)malloc(input_size);
@@ -30,11 +31,21 @@ static inline void input_gen(char **p_buf){
 }
 
 
-static inline void compute(void *buf, int size){
+static inline void dot_product(void *buf, int size){
   int i;
-  char *p = (char *)buf;
-  for(i = 0; i < size; i++){
-    p[i] = p[i] + 1;
+  char *v1 = (char *)buf;
+  char *v2 = (char *)buf + size/2;
+  LOG_PRINT(LOG_DEBUG, "Dot Product\n");
+  for(i = 0; i < size/2; i++){
+    v1[i] = v1[i] * v2[i];
+  }
+}
+
+static inline void linear_access(void *buf, int size){
+  volatile uint8_t *p;
+  LOG_PRINT(LOG_DEBUG, "Linear access\n");
+  for(int i = 0; i < size; i++){
+    p = (uint8_t *)buf + i;
   }
 }
 
@@ -80,7 +91,7 @@ void cpu_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   memcpy(dst1, src1, buf_size);
   ts1[id] = sampleCoderdtsc();
 
-  compute(dst1, buf_size);
+  compute_on_input(dst1, buf_size);
   ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -157,7 +168,7 @@ void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   }
 
   ts2[id] = sampleCoderdtsc();
-  compute(dst, input_size);
+  compute_on_input(dst, input_size);
   ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -190,7 +201,7 @@ void yielding_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 
   ts2[id] = sampleCoderdtsc();
-  compute(dst, input_size);
+  compute_on_input(dst, input_size);
   ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -256,7 +267,7 @@ void blocking_memcpy_and_compute(
     _mm_pause();
   }
 
-  compute(dst, input_size);
+  compute_on_input(dst, input_size);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -284,7 +295,7 @@ void yielding_memcpy_and_compute(
 
   fcontext_swap(arg.prev_context, NULL);
 
-  compute(dst, input_size);
+  compute_on_input(dst, input_size);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -301,7 +312,7 @@ void cpu_memcpy_and_compute(
   int buf_size = *((int *) args->inputs[2]);
 
   memcpy(dst1, src1, buf_size);
-  compute(dst1, buf_size);
+  compute_on_input(dst1, buf_size);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -317,10 +328,10 @@ int main(){
   int dev_id = 2;
   int wq_type = SHARED;
   int rc;
-  int itr = 1;
-  int total_requests = 1000;
-  initialize_dsa_wq(dev_id, wq_id, wq_type);
+  int itr = 10;
+  int total_requests = 100;
 
+  compute_on_input = linear_access;
   run_gpcore_request_brkdown(
     cpu_memcpy_and_compute_stamped,
     alloc_cpu_memcpy_and_compute_args,
@@ -328,6 +339,18 @@ int main(){
     itr,
     total_requests
   );
+
+  compute_on_input = dot_product;
+  run_gpcore_request_brkdown(
+    cpu_memcpy_and_compute_stamped,
+    alloc_cpu_memcpy_and_compute_args,
+    free_cpu_memcpy_and_compute_args,
+    itr,
+    total_requests
+  );
+
+  return 0;
+  initialize_dsa_wq(dev_id, wq_id, wq_type);
   run_blocking_offload_request_brkdown(
     blocking_memcpy_and_compute_stamped,
     alloc_offload_memcpy_and_compute_args,
