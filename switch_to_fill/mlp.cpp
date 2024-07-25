@@ -234,112 +234,6 @@ void yielding_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
-void yielding_request_offered_load(
-  fcontext_fn_t request_fn,
-  void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
-  void (* offload_args_free)(int, offload_request_args***),
-  int requests_sampling_interval,
-  int total_requests,
-  uint64_t *exetime, int idx
-)
-{
-  using namespace std;
-  fcontext_state_t *self = fcontext_create_proxy();
-  char**dst_bufs;
-  ax_comp *comps;
-  offload_request_args **off_args;
-  fcontext_transfer_t *offload_req_xfer;
-  fcontext_state_t **off_req_state;
-
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-
-  requests_completed = 0;
-
-  /* Pre-allocate the CRs */
-  allocate_crs(total_requests, &comps);
-
-  /* allocate request args */
-  offload_args_allocator(total_requests, &off_args, comps);
-
-  /* Pre-create the contexts */
-  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-  create_contexts(off_req_state, total_requests, request_fn);
-
-  execute_yielding_requests_closed_system_with_sampling(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    offload_req_xfer, off_req_state, self,
-    exetime, idx);
-
-  /* teardown */
-  free_contexts(off_req_state, total_requests);
-  free(offload_req_xfer);
-  free(comps);
-
-  offload_args_free(total_requests, &off_args);
-
-  fcontext_destroy(self);
-}
-
-void blocking_request_offered_load(
-  fcontext_fn_t request_fn,
-  void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
-  void (* offload_args_free)(int, offload_request_args***),
-  int requests_sampling_interval,
-  int total_requests,
-  uint64_t *exetime, int idx
-)
-{
-  using namespace std;
-  fcontext_state_t *self = fcontext_create_proxy();
-  char**dst_bufs;
-  ax_comp *comps;
-  offload_request_args **off_args;
-  fcontext_transfer_t *offload_req_xfer;
-  fcontext_state_t **off_req_state;
-
-  int sampling_intervals = (total_requests / requests_sampling_interval);
-  int sampling_interval_timestamps = sampling_intervals + 1;
-  uint64_t sampling_interval_completion_times[sampling_interval_timestamps];
-
-
-  requests_completed = 0;
-
-  /* Pre-allocate the CRs */
-  allocate_crs(total_requests, &comps);
-
-  /* allocate request args */
-  offload_args_allocator(total_requests, &off_args, comps);
-
-  /* Pre-create the contexts */
-  offload_req_xfer = (fcontext_transfer_t *)malloc(sizeof(fcontext_transfer_t) * total_requests);
-  off_req_state = (fcontext_state_t **)malloc(sizeof(fcontext_state_t *) * total_requests);
-
-  create_contexts(off_req_state, total_requests, request_fn);
-
-  execute_blocking_requests_closed_system_with_sampling(
-    requests_sampling_interval, total_requests,
-    sampling_interval_completion_times, sampling_interval_timestamps,
-    comps, off_args,
-    offload_req_xfer, off_req_state, self,
-    exetime, idx);
-
-  /* teardown */
-  free_contexts(off_req_state, total_requests);
-  free(offload_req_xfer);
-  free(comps);
-
-  offload_args_free(total_requests, &off_args);
-
-  fcontext_destroy(self);
-}
-
 
 void alloc_offload_memcpy_and_compute_args(
   int total_requests,
@@ -451,6 +345,96 @@ void cpu_memcpy_and_compute(
 }
 
 
+void run_blocking_offered_load(
+  fcontext_fn_t request_fn,
+  void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
+  void (* offload_args_free)(int, offload_request_args***),
+  int total_requests,
+  int itr){
+
+  // this function executes all requests from start to finish only taking stamps at beginning and end
+  uint64_t exetime[itr];
+  for(int i = 0; i < itr; i++){
+    blocking_request_offered_load(
+      blocking_memcpy_and_compute,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      total_requests,
+      total_requests,
+      exetime,
+      i
+    );
+  }
+
+  mean_median_stdev_rps(
+    exetime, itr, total_requests, "BlockingOffloadRPS"
+  );
+}
+
+void run_gpcore_offeredLoad(
+  fcontext_fn_t req_fn,
+  void (*payload_alloc)(int,char****),
+  void (*payload_free)(int,char****),
+  int iter, int total_requests){
+
+  uint64_t exetime[iter];
+    // this function executes all requests from start to finish only taking stamps at beginning and end
+  for(int i = 0; i < iter; i++){
+    gpcore_closed_loop_test(
+      cpu_memcpy_and_compute,
+      alloc_cpu_memcpy_and_compute_args,
+      free_cpu_memcpy_and_compute_args,
+      total_requests,
+      total_requests,
+      exetime,
+      i
+    );
+  }
+
+  mean_median_stdev_rps(
+    exetime, iter, total_requests, "GPCoreRPS"
+  );
+}
+
+
+void run_yielding_offered_load(
+  fcontext_fn_t request_fn,
+  void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
+  void (* offload_args_free)(int, offload_request_args***),
+  int num_exe_time_samples_per_run,
+  int total_requests, int iter){
+
+  /*
+    we take exe time samples periodically as a fixed number of requests complete
+    This enables discarding results collected during the latter phase of the test
+    where the system has ran out of work to execute during blocking stalls
+  */
+  int num_requests_before_stamp = total_requests / num_exe_time_samples_per_run;
+  int total_exe_time_samples = iter * num_exe_time_samples_per_run;
+  uint64_t exetime[total_exe_time_samples];
+
+  /* this function takes multiple samples */
+  for(int i = 0; i < iter; i++){
+    yielding_request_offered_load(
+      yielding_memcpy_and_compute,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      num_requests_before_stamp,
+      total_requests,
+      exetime,
+      i * num_exe_time_samples_per_run
+    );
+  }
+
+  for(int i=0; i<total_exe_time_samples; i++){
+    LOG_PRINT(LOG_DEBUG, "ExeTime: %lu\n", exetime[i]);
+  }
+  mean_median_stdev_rps(
+    exetime, total_exe_time_samples, num_requests_before_stamp, "SwitchToFillRPS"
+  );
+}
+
+
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(){
@@ -460,7 +444,7 @@ int main(){
   int dev_id = 2;
   int wq_type = SHARED;
   int rc;
-  int itr = 100;
+  int itr = 1;
   int total_requests = 1000;
   initialize_dsa_wq(dev_id, wq_id, wq_type);
 
@@ -495,57 +479,23 @@ int main(){
   uint64_t exetime[total_exe_time_samples];
 
 
-  /*
-  void run_gpcore_request_brkdown(
-    fcontext_fn_t req_fn,
-    void (*payload_alloc)(int,char****),
-    void (*payload_free)(int,char****),
-    int iter, int total_requests){
-    // this function executes all requests from start to finish only taking stamps at beginning and end
-  */
-  for(int i = 0; i < itr; i++){
-    gpcore_closed_loop_test(
-      cpu_memcpy_and_compute,
-      alloc_cpu_memcpy_and_compute_args,
-      free_cpu_memcpy_and_compute_args,
-      total_requests,
-      total_requests,
-      exetime,
-      i
-    );
-  }
 
-  mean_median_stdev_rps(
-    exetime, itr, total_requests, "GPCoreRPS"
+ run_gpcore_offeredLoad(
+    cpu_memcpy_and_compute_stamped,
+    alloc_cpu_memcpy_and_compute_args,
+    free_cpu_memcpy_and_compute_args,
+    itr,
+    total_requests
   );
-  /*}*/
 
-  /*
-  void run_blocking_offered_load(
-    fcontext_fn_t request_fn,
-    void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
-    void (* offload_args_free)(int, offload_request_args***),
-    int total_requests){
 
-    // this function executes all requests from start to finish only taking stamps at beginning and end
-  */
-
-  for(int i = 0; i < itr; i++){
-    blocking_request_offered_load(
-      blocking_memcpy_and_compute,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
-      total_requests,
-      total_requests,
-      exetime,
-      i
-    );
-  }
-
-  mean_median_stdev_rps(
-    exetime, itr, total_requests, "BlockingOffloadRPS"
-  );
-  /*}*/
+ run_blocking_offered_load(
+  blocking_memcpy_and_compute,
+  alloc_offload_memcpy_and_compute_args,
+  free_offload_memcpy_and_compute_args,
+  total_requests,
+  itr
+ );
 
 
   /*
@@ -560,25 +510,33 @@ int main(){
   */
 
   /* this function takes multiple samples */
-  for(int i = 0; i < itr; i++){
-    yielding_request_offered_load(
-      yielding_memcpy_and_compute,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
-      num_requests_before_stamp,
-      total_requests,
-      exetime,
-      i * num_exe_time_samples_per_run
-    );
-  }
+  // for(int i = 0; i < itr; i++){
+  //   yielding_request_offered_load(
+  //     yielding_memcpy_and_compute,
+  //     alloc_offload_memcpy_and_compute_args,
+  //     free_offload_memcpy_and_compute_args,
+  //     num_requests_before_stamp,
+  //     total_requests,
+  //     exetime,
+  //     i * num_exe_time_samples_per_run
+  //   );
+  // }
 
-  for(int i=0; i<total_exe_time_samples; i++){
-    LOG_PRINT(LOG_DEBUG, "ExeTime: %lu\n", exetime[i]);
-  }
-  mean_median_stdev_rps(
-    exetime, total_exe_time_samples, num_requests_before_stamp, "SwitchToFillRPS"
-  );
+  // for(int i=0; i<total_exe_time_samples; i++){
+  //   LOG_PRINT(LOG_DEBUG, "ExeTime: %lu\n", exetime[i]);
+  // }
+  // mean_median_stdev_rps(
+  //   exetime, total_exe_time_samples, num_requests_before_stamp, "SwitchToFillRPS"
+  // );
   /*}*/
+  run_yielding_offered_load(
+    yielding_memcpy_and_compute,
+    alloc_offload_memcpy_and_compute_args,
+    free_offload_memcpy_and_compute_args,
+    num_exe_time_samples_per_run,
+    total_requests,
+    itr
+  );
 
 
   free_dsa_wq();
