@@ -460,65 +460,63 @@ int main(){
   int dev_id = 2;
   int wq_type = SHARED;
   int rc;
-  int itr = 1;
+  int itr = 100;
   int total_requests = 1000;
   initialize_dsa_wq(dev_id, wq_id, wq_type);
 
-  // run_gpcore_request_brkdown(
-  //   cpu_memcpy_and_compute_stamped,
-  //   alloc_cpu_memcpy_and_compute_args,
-  //   free_cpu_memcpy_and_compute_args,
-  //   itr,
-  //   total_requests
-  // );
-  // run_blocking_offload_request_brkdown(
-  //   blocking_memcpy_and_compute_stamped,
-  //   alloc_offload_memcpy_and_compute_args,
-  //   free_offload_memcpy_and_compute_args,
-  //   itr,
-  //   total_requests
-  // );
-  // run_yielding_request_brkdown(
-  //   yielding_memcpy_and_compute_stamped,
-  //   alloc_offload_memcpy_and_compute_args,
-  //   free_offload_memcpy_and_compute_args,
-  //   itr,
-  //   total_requests
-  // );
+  run_gpcore_request_brkdown(
+    cpu_memcpy_and_compute_stamped,
+    alloc_cpu_memcpy_and_compute_args,
+    free_cpu_memcpy_and_compute_args,
+    itr,
+    total_requests
+  );
+  run_blocking_offload_request_brkdown(
+    blocking_memcpy_and_compute_stamped,
+    alloc_offload_memcpy_and_compute_args,
+    free_offload_memcpy_and_compute_args,
+    itr,
+    total_requests
+  );
+  run_yielding_request_brkdown(
+    yielding_memcpy_and_compute_stamped,
+    alloc_offload_memcpy_and_compute_args,
+    free_offload_memcpy_and_compute_args,
+    itr,
+    total_requests
+  );
 
-  /*
-  void run_yielding_offered_load(int num_exe_time_samples_per_run
-    fcontext_fn_t request_fn,
-    void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
-    void (* offload_args_free)(int, offload_request_args***),
-    int total_requests){
-    we take exe time samples periodically as a fixed number of requests complete
-    This enables discarding results collected during the latter phase of the test
-    where the system has ran out of work to execute during blocking stalls
-  */
+
+  /* some vars needed for yield*/
   int num_exe_time_samples_per_run = 10; /* 10 samples per iter*/
   int num_requests_before_stamp = total_requests / num_exe_time_samples_per_run;
 
   int total_exe_time_samples = itr * num_exe_time_samples_per_run;
   uint64_t exetime[total_exe_time_samples];
-  /* this function takes multiple samples */
+
+
+  /*
+  void run_gpcore_request_brkdown(
+    fcontext_fn_t req_fn,
+    void (*payload_alloc)(int,char****),
+    void (*payload_free)(int,char****),
+    int iter, int total_requests){
+    // this function executes all requests from start to finish only taking stamps at beginning and end
+  */
   for(int i = 0; i < itr; i++){
-    yielding_request_offered_load(
-      yielding_memcpy_and_compute,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
-      num_requests_before_stamp,
+    gpcore_closed_loop_test(
+      cpu_memcpy_and_compute,
+      alloc_cpu_memcpy_and_compute_args,
+      free_cpu_memcpy_and_compute_args,
+      total_requests,
       total_requests,
       exetime,
-      i * num_exe_time_samples_per_run
+      i
     );
   }
 
-  for(int i=0; i<total_exe_time_samples; i++){
-    LOG_PRINT(LOG_DEBUG, "ExeTime: %lu\n", exetime[i]);
-  }
   mean_median_stdev_rps(
-    exetime, total_exe_time_samples, num_requests_before_stamp, "SwitchToFillRPS"
+    exetime, itr, total_requests, "GPCoreRPS"
   );
   /*}*/
 
@@ -545,32 +543,40 @@ int main(){
   }
 
   mean_median_stdev_rps(
-    exetime, itr, num_requests_before_stamp, "BlockingOffloadRPS"
+    exetime, itr, total_requests, "BlockingOffloadRPS"
   );
   /*}*/
 
+
   /*
-  void run_gpcore_request_brkdown(
-    fcontext_fn_t req_fn,
-    void (*payload_alloc)(int,char****),
-    void (*payload_free)(int,char****),
-    int iter, int total_requests){
-    // this function executes all requests from start to finish only taking stamps at beginning and end
+  void run_yielding_offered_load(int num_exe_time_samples_per_run
+    fcontext_fn_t request_fn,
+    void (* offload_args_allocator)(int, offload_request_args***, ax_comp *comps),
+    void (* offload_args_free)(int, offload_request_args***),
+    int total_requests){
+    we take exe time samples periodically as a fixed number of requests complete
+    This enables discarding results collected during the latter phase of the test
+    where the system has ran out of work to execute during blocking stalls
   */
+
+  /* this function takes multiple samples */
   for(int i = 0; i < itr; i++){
-    gpcore_closed_loop_test(
-      cpu_memcpy_and_compute,
-      alloc_cpu_memcpy_and_compute_args,
-      free_cpu_memcpy_and_compute_args,
-      total_requests,
+    yielding_request_offered_load(
+      yielding_memcpy_and_compute,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      num_requests_before_stamp,
       total_requests,
       exetime,
-      i
+      i * num_exe_time_samples_per_run
     );
   }
 
+  for(int i=0; i<total_exe_time_samples; i++){
+    LOG_PRINT(LOG_DEBUG, "ExeTime: %lu\n", exetime[i]);
+  }
   mean_median_stdev_rps(
-    exetime, itr, total_requests, "GPCoreRPS"
+    exetime, total_exe_time_samples, num_requests_before_stamp, "SwitchToFillRPS"
   );
   /*}*/
 
