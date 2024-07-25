@@ -19,11 +19,14 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
     /* dst is provisioned by allocator to have max dest size */
 
   ts0[id] = sampleCoderdtsc();
-  decompressed_size = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
+  int rc = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
+  if(rc != 0){
+    LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+  }
   ts1[id] = sampleCoderdtsc();
 
   uint32_t hash = furc_hash(dst1, decompressed_size, 16);
-  LOG_PRINT(LOG_VERBOSE, "Hashing: %s\n", dst1);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %ld bytes\n", decompressed_size);
   ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -209,7 +212,10 @@ void yielding_decompress_and_hash_request_stamped(
     (uint64_t)comp, (uint64_t)src_size);
   if (! iaa_submit(iaa, desc)){
     LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
-    gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    if(rc != 0){
+      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+    }
     comp->status = IAX_COMP_SUCCESS;
   }
 
@@ -222,7 +228,7 @@ void yielding_decompress_and_hash_request_stamped(
 
   ts2[id] = sampleCoderdtsc();
   /* hash the decompressed payload */
-  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %ld bytes\n", dst_size);
   uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   ts3[id] = sampleCoderdtsc();
@@ -268,7 +274,7 @@ void blocking_decompress_and_hash_request_stamped(
 
   ts2[id] = sampleCoderdtsc();
   /* hash the decompressed payload */
-  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %ld bytes\n", dst_size);
   uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   ts3[id] = sampleCoderdtsc();
@@ -308,7 +314,7 @@ void blocking_decompress_and_hash_request(
   LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
 
   /* hash the decompressed payload */
-  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %ld bytes\n", dst_size);
   uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   requests_completed ++;
@@ -330,10 +336,13 @@ void cpu_decompress_and_hash(fcontext_transfer_t arg){
   uLong decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
     /* dst is provisioned by allocator to have max dest size */
 
-  decompressed_size = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
+  int rc = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
+  if(rc != 0){
+    LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+  }
 
   uint32_t hash = furc_hash(dst1, decompressed_size, 16);
-  LOG_PRINT(LOG_VERBOSE, "Hashing: %s\n", dst1);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %ld bytes\n", decompressed_size);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -358,7 +367,10 @@ void yielding_decompress_and_hash_request(fcontext_transfer_t arg){
     (uint64_t)comp, (uint64_t)src_size);
   if (! iaa_submit(iaa, desc)){
     LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
-    gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    if(rc != 0){
+      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+    }
     comp->status = IAX_COMP_SUCCESS;
   }
 
@@ -369,7 +381,7 @@ void yielding_decompress_and_hash_request(fcontext_transfer_t arg){
   LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
 
   /* hash the decompressed payload */
-  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %ld bytes\n", dst_size);
   uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   requests_completed ++;
