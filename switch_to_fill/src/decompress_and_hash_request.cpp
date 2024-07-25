@@ -1,6 +1,8 @@
 #include "decompress_and_hash_request.hpp"
 
 #include "print_utils.h"
+
+std::string query = "/region/cluster/foo:key|#|etc";
 void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   timed_gpcore_request_args* args = (timed_gpcore_request_args *)arg.data;
 
@@ -44,7 +46,7 @@ void compressed_mc_req_free(int total_requests,
 
 void compressed_mc_req_allocator(int total_requests,
   char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
-  std::string query = "/region/cluster/foo:key|#|etc";
+
   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
@@ -84,7 +86,7 @@ void alloc_decomp_and_hash_offload_args_stamped(int total_requests,
     (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE; /* using 4MB allocator */
-  std::string query = "/region/cluster/foo:key|#|etc";
+
   for(int i=0; i<total_requests; i++){
     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
     off_args[i]->comp = &(comps[i]);
@@ -126,7 +128,7 @@ void alloc_decomp_and_hash_offload_args(int total_requests,
     (offload_request_args **)malloc(sizeof(offload_request_args *) * total_requests);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE; /* using 4MB allocator */
-  std::string query = "/region/cluster/foo:key|#|etc";
+
   for(int i=0; i<total_requests; i++){
     off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
     off_args[i]->comp = &(comps[i]);

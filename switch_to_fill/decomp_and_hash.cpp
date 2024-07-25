@@ -16,7 +16,7 @@ extern "C" {
 #include "decompress_and_hash_request.hpp"
 
 
-int gLogLevel = LOG_PERF;
+int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
 int main(){
 
@@ -28,6 +28,17 @@ int main(){
   int itr = 1000;
   int total_requests = 1000;
   initialize_iaa_wq(dev_id, wq_id, wq_type);
+
+  int query_size = 1024;
+  std::string append_string = query;
+
+  while(query.size() < query_size){
+    query += append_string;
+  }
+
+  LOG_PRINT(LOG_DEBUG, "Query: %s\n", query.c_str());
+
+  return 0;
 
   run_gpcore_request_brkdown(
     cpu_decompress_and_hash_stamped,

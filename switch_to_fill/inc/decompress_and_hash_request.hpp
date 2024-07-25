@@ -13,6 +13,8 @@ extern "C" {
 #include <string>
 #include "submit.hpp"
 
+extern std::string query;
+
 
 void compressed_mc_req_free(int total_requests, char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
 void compressed_mc_req_allocator(int total_requests,
