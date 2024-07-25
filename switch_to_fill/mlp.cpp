@@ -33,6 +33,14 @@ void free_dsa_wq(){
   acctest_free(iaa);
 }
 
+static inline void input_gen(char **p_buf){
+  char *buf = (char *)malloc(input_size);
+  for(int i = 0; i < input_size; i++){
+    buf[i] = rand() % 256;
+  }
+  *p_buf = buf;
+}
+
 
 static inline void compute(void *buf, int size){
   int i;
@@ -47,7 +55,8 @@ void alloc_cpu_memcpy_and_compute_args(int total_requests,
     char ***ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***)malloc(total_requests * sizeof(char **));
     for(int i = 0; i < total_requests; i++){
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] = (char **)malloc(3 * sizeof(char *));
-      ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] = (char *)malloc(input_size * sizeof(char));
+      // ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] = (char *)malloc(input_size * sizeof(char));
+      input_gen(&ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]);
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] = (char *)malloc(input_size * sizeof(char));
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] = (char *)malloc(sizeof(int));
       *((int *) ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2]) = input_size;
@@ -91,6 +100,47 @@ void cpu_memcpy_and_compute_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 }
 
+// void alloc_offload_memcpy_and_compute_args(
+//   int total_requests,
+//   timed_offload_request_args*** p_off_args,
+//   ax_comp *comps,
+//   uint64_t *ts0,
+//   uint64_t *ts1,
+//   uint64_t *ts2,
+//   uint64_t *ts3
+// ){
+
+//   timed_offload_request_args **off_args = (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+//   for(int i = 0; i < total_requests; i++){
+//     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
+//     off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
+//     off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
+//     off_args[i]->inputs[2] = (char *)malloc(sizeof(int));
+//     *((int *) off_args[i]->inputs[2]) = input_size;
+//     off_args[i]->ts0 = ts0;
+//     off_args[i]->ts1 = ts1;
+//     off_args[i]->ts2 = ts2;
+//     off_args[i]->ts3 = ts3;
+//     off_args[i]->id = i;
+//   }
+
+//   *p_off_args = off_args;
+// }
+
+// void free_offload_memcpy_and_compute_args(
+//   int total_requests,
+//   timed_offload_request_args*** p_off_args
+// ){
+//   timed_offload_request_args **off_args = *p_off_args;
+//   for(int i = 0; i < total_requests; i++){
+//     free(off_args[i]->inputs[0]);
+//     free(off_args[i]->inputs[1]);
+//     free(off_args[i]->inputs[2]);
+//     free(off_args[i]->inputs);
+//     free(off_args[i]);
+//   }
+//   free(off_args);
+// }
 
 
 
