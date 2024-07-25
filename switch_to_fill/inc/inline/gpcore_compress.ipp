@@ -1,7 +1,7 @@
 static inline void dump_deflate_state(z_stream *stream)
 {
   LOG_PRINT(
-      LOG_DEBUG, "deflate: avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=0x%p\n",
+      LOG_VERBOSE, "deflate: avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=0x%p\n",
          stream->avail_in,
          stream->total_in,
          stream->avail_out,
@@ -12,7 +12,7 @@ static inline void dump_deflate_state(z_stream *stream)
 static inline void dump_inflate_state(z_stream *stream)
 {
   LOG_PRINT(
-      LOG_DEBUG, "inflate: avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=0x%p\n",
+      LOG_VERBOSE, "inflate: avail_in=%d, total_in=%ld, avail_out=%d, total_out=%ld, next_out=0x%p\n",
          stream->avail_in,
          stream->total_in,
          stream->avail_out,
@@ -66,7 +66,7 @@ static inline int gpcore_do_compress(void *dst, void *src, int src_len, int *out
   return ret;
 }
 
-static inline int gpcore_do_decompress(void *dst, void *src, int src_len, int *out_len)
+static inline int gpcore_do_decompress(void *dst, void *src, uInt src_len, uLong *out_len)
 {
 	int ret = 0;
 	z_stream stream;

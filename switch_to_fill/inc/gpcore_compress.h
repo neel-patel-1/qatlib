@@ -9,7 +9,7 @@ extern "C" {
 }
 #include "print_utils.h"
 
-static int gpcore_do_decompress(void *dst, void *src, int src_len, int *out_len);
+static int gpcore_do_decompress(void *dst, void *src, uInt src_len, uLong *out_len);
 
 
 #include "inline/gpcore_compress.ipp"

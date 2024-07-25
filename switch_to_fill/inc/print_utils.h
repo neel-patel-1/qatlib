@@ -11,6 +11,7 @@ extern int gLogLevel;
 #define LOG_WARN 0
 #define LOG_MONITOR 2
 #define LOG_DEBUG 3
+#define LOG_VERBOSE 4
 
 /* Printing */
 /**< Prints the name of the function and the arguments only if gDebugParam is

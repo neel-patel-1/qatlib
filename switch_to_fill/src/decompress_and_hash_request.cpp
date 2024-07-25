@@ -13,7 +13,7 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   char *dst1 = args->inputs[1];
   int compressed_size = *((int *) args->inputs[2]);
 
-  int decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
+  uLong decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
     /* dst is provisioned by allocator to have max dest size */
 
   ts0[id] = sampleCoderdtsc();
@@ -21,7 +21,7 @@ void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   ts1[id] = sampleCoderdtsc();
 
   uint32_t hash = furc_hash(dst1, decompressed_size, 16);
-  LOG_PRINT(LOG_DEBUG, "Hashing: %s\n", dst1);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %s\n", dst1);
   ts2[id] = sampleCoderdtsc();
 
   requests_completed ++;
@@ -62,7 +62,7 @@ void compressed_mc_req_allocator(int total_requests,
     gpcore_do_compress((void *) (ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]),
       (void *) query.c_str(), query.size(), &avail_out);
 
-    LOG_PRINT(LOG_DEBUG, "Compressed size: %d\n", avail_out);
+    LOG_PRINT(LOG_VERBOSE, "Compressed size: %d\n", avail_out);
 
     /* and a dst payload to decompress into */
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] =
@@ -97,7 +97,7 @@ void alloc_decomp_and_hash_offload_args(int total_requests,
     gpcore_do_compress((void *) off_args[i]->src_payload,
       (void *) query.c_str(), query.size(), &avail_out);
 
-    LOG_PRINT(LOG_DEBUG, "Compressed Size: %d\n", avail_out);
+    LOG_PRINT(LOG_VERBOSE, "Compressed Size: %d\n", avail_out);
 
     /* and a dst payload to decompress into */
     off_args[i]->dst_payload = (char *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
@@ -129,4 +129,99 @@ void free_decomp_and_hash_offload_args(int total_requests, timed_offload_request
     free(off_args_ptr[i]);
   }
   free(off_args_ptr);
+}
+
+void yielding_decompress_and_hash_request_stamped(
+  fcontext_transfer_t arg){
+
+  timed_offload_request_args *args =
+    (timed_offload_request_args *) arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  uint64_t src_size = args->src_size;
+  uint64_t dst_size = args->dst_size;
+
+
+  struct hw_desc *desc = args->desc;
+  ax_comp *comp = args->comp;
+
+  ts0[id] = sampleCoderdtsc();
+  /* prep hw desc */
+  prepare_iaa_decompress_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)comp, (uint64_t)src_size);
+  if (! iaa_submit(iaa, desc)){
+    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+    gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    comp->status = IAX_COMP_SUCCESS;
+  }
+
+  ts1[id] = sampleCoderdtsc();
+  fcontext_swap(arg.prev_context, NULL);
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Decompress failed: %d\n", comp->status);
+  }
+  LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
+
+  ts2[id] = sampleCoderdtsc();
+  /* hash the decompressed payload */
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  uint32_t hash = furc_hash((char *)dst, dst_size, 16);
+
+  ts3[id] = sampleCoderdtsc();
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void blocking_decompress_and_hash_request_stamped(
+  fcontext_transfer_t arg){
+
+  timed_offload_request_args *args =
+    (timed_offload_request_args *) arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  uint64_t src_size = args->src_size;
+  uint64_t dst_size = args->dst_size;
+
+
+  struct hw_desc *desc = args->desc;
+  ax_comp *comp = args->comp;
+
+  ts0[id] = sampleCoderdtsc();
+  /* prep hw desc */
+  prepare_iaa_decompress_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)comp, (uint64_t)src_size);
+  acctest_desc_submit(iaa, desc);
+
+  ts1[id] = sampleCoderdtsc();
+  while(comp->status == IAX_COMP_NONE){
+    _mm_pause();
+  }
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
+  }
+  LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
+
+  ts2[id] = sampleCoderdtsc();
+  /* hash the decompressed payload */
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  uint32_t hash = furc_hash((char *)dst, dst_size, 16);
+
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
 }
