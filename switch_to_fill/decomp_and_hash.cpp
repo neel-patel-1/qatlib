@@ -38,18 +38,42 @@ int main(){
   );
   run_blocking_offload_request_brkdown(
     blocking_decompress_and_hash_request_stamped,
-    alloc_decomp_and_hash_offload_args,
-    free_decomp_and_hash_offload_args,
+    alloc_decomp_and_hash_offload_args_stamped,
+    free_decomp_and_hash_offload_args_stamped,
     itr,
     total_requests
   );
-  run_yielding_request_brkdown(
-    yielding_decompress_and_hash_request_stamped,
-    alloc_decomp_and_hash_offload_args,
-    free_decomp_and_hash_offload_args,
+  // run_yielding_request_brkdown(
+  //   yielding_decompress_and_hash_request_stamped,
+  //   alloc_decomp_and_hash_offload_args_stamped,
+  //   free_decomp_and_hash_offload_args_stamped,
+  //   itr,
+  //   total_requests
+  // );
+  int exetime_samples_per_run = 10;
+  run_gpcore_offeredLoad(
+    cpu_decompress_and_hash,
+    compressed_mc_req_allocator,
+    compressed_mc_req_free,
     itr,
     total_requests
   );
+  run_blocking_offered_load(
+    blocking_decompress_and_hash_request,
+    alloc_decomp_and_hash_offload_args,
+    free_decomp_and_hash_offload_args,
+    total_requests,
+    itr
+  );
+  run_yielding_offered_load(
+    yielding_decompress_and_hash_request,
+    alloc_decomp_and_hash_offload_args,
+    free_decomp_and_hash_offload_args,
+    exetime_samples_per_run,
+    total_requests,
+    itr
+  );
+
 
   free_iaa_wq();
 }

@@ -8,7 +8,7 @@ ACCFG_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/a
 INCLUDES = -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) $(IDXD_INCLUDES)
 LIBS = -ldml $(IAA_LIBS) $(ACCFG_LIBS)
 
-all: switch_to_fill walker mlp
+all: switch_to_fill walker mlp decomp_and_hash
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
 	$(CXX) -g -c -o $@ $^  -I./inc
 
@@ -99,4 +99,4 @@ tests/iaa_compress_and_decompress_verify: tests/iaa_compress_and_decompress_veri
 	$(CXX) -g -o $@ $^ $(LIBS)
 
 clean:
-	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o mlp.o tests/*.o
+	rm -f obj/*.o switch_to_fill switch_to_fill.o walker walker.o mlp.o tests/*.o decomp_and_hash

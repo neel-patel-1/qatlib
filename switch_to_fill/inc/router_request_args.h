@@ -8,7 +8,8 @@ typedef struct _offload_request_args{
   ax_comp *comp;
   struct hw_desc *desc;
   char *src_payload;
-  int src_size;
+  uint64_t src_size;
+  uint64_t dst_size;
   char *dst_payload;
   int id;
 } offload_request_args;

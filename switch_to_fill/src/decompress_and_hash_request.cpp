@@ -77,7 +77,7 @@ void compressed_mc_req_allocator(int total_requests,
   *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
 }
 
-void alloc_decomp_and_hash_offload_args(int total_requests,
+void alloc_decomp_and_hash_offload_args_stamped(int total_requests,
   timed_offload_request_args*** p_off_args, ax_comp *comps,
   uint64_t *ts0, uint64_t *ts1, uint64_t *ts2, uint64_t *ts3){
   timed_offload_request_args **off_args =
@@ -120,8 +120,57 @@ void alloc_decomp_and_hash_offload_args(int total_requests,
   *p_off_args = off_args;
 }
 
-void free_decomp_and_hash_offload_args(int total_requests, timed_offload_request_args*** off_args){
+void alloc_decomp_and_hash_offload_args(int total_requests,
+  offload_request_args*** p_off_args, ax_comp *comps){
+  offload_request_args **off_args =
+    (offload_request_args **)malloc(sizeof(offload_request_args *) * total_requests);
+
+  int avail_out = IAA_COMPRESS_MAX_DEST_SIZE; /* using 4MB allocator */
+  std::string query = "/region/cluster/foo:key|#|etc";
+  for(int i=0; i<total_requests; i++){
+    off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+    off_args[i]->comp = &(comps[i]);
+    off_args[i]->id = i;
+
+    /* Offload request needs a src payload to decompress */
+    avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
+    /* compress query into src payload */
+    off_args[i]->src_payload = (char *)malloc(avail_out);
+    gpcore_do_compress((void *) off_args[i]->src_payload,
+      (void *) query.c_str(), query.size(), &avail_out);
+
+    LOG_PRINT(LOG_VERBOSE, "Compressed Size: %d\n", avail_out);
+
+    /* and a dst payload to decompress into */
+    off_args[i]->dst_payload = (char *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
+
+    /* and the size of the compressed payload for decomp */
+    off_args[i]->src_size = (uint64_t)avail_out;
+
+    /* and the size of the original payload for hash */
+    off_args[i]->dst_size = query.size();
+
+    /* and a preallocated desc for prep and submit */
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+
+  }
+  *p_off_args = off_args;
+}
+
+void free_decomp_and_hash_offload_args_stamped(int total_requests, timed_offload_request_args*** off_args){
   timed_offload_request_args **off_args_ptr = *off_args;
+  for(int i=0; i<total_requests; i++){
+    free(off_args_ptr[i]->src_payload);
+    free(off_args_ptr[i]->dst_payload);
+    free(off_args_ptr[i]->desc);
+    free(off_args_ptr[i]);
+  }
+  free(off_args_ptr);
+}
+
+void free_decomp_and_hash_offload_args(int total_requests,
+  offload_request_args*** off_args){
+  offload_request_args **off_args_ptr = *off_args;
   for(int i=0; i<total_requests; i++){
     free(off_args_ptr[i]->src_payload);
     free(off_args_ptr[i]->dst_payload);
@@ -221,6 +270,105 @@ void blocking_decompress_and_hash_request_stamped(
   uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void blocking_decompress_and_hash_request(
+  fcontext_transfer_t arg){
+
+  offload_request_args *args =
+    (offload_request_args *) arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+  int id = args->id;
+  uint64_t src_size = args->src_size;
+  uint64_t dst_size = args->dst_size;
+
+
+  struct hw_desc *desc = args->desc;
+  ax_comp *comp = args->comp;
+
+  /* prep hw desc */
+  prepare_iaa_decompress_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)comp, (uint64_t)src_size);
+  acctest_desc_submit(iaa, desc);
+
+  while(comp->status == IAX_COMP_NONE){
+    _mm_pause();
+  }
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
+  }
+  LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
+
+  /* hash the decompressed payload */
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  uint32_t hash = furc_hash((char *)dst, dst_size, 16);
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void cpu_decompress_and_hash(fcontext_transfer_t arg){
+  timed_gpcore_request_args* args = (timed_gpcore_request_args *)arg.data;
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+
+  char *src1 = args->inputs[0];
+  char *dst1 = args->inputs[1];
+  int compressed_size = *((int *) args->inputs[2]);
+
+  uLong decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
+    /* dst is provisioned by allocator to have max dest size */
+
+  decompressed_size = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
+
+  uint32_t hash = furc_hash(dst1, decompressed_size, 16);
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %s\n", dst1);
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+
+}
+
+void yielding_decompress_and_hash_request(fcontext_transfer_t arg){
+  offload_request_args* args = (offload_request_args *)arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+  int id = args->id;
+  uint64_t src_size = args->src_size;
+  uint64_t dst_size = args->dst_size;
+
+  struct hw_desc *desc = args->desc;
+  ax_comp *comp = args->comp;
+
+  /* prep hw desc */
+  prepare_iaa_decompress_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)comp, (uint64_t)src_size);
+  if (! iaa_submit(iaa, desc)){
+    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+    gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    comp->status = IAX_COMP_SUCCESS;
+  }
+
+  fcontext_swap(arg.prev_context, NULL);
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Decompress failed: %d\n", comp->status);
+  }
+  LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
+
+  /* hash the decompressed payload */
+  LOG_PRINT(LOG_VERBOSE, "Hashing: %s %ld bytes\n", dst, dst_size);
+  uint32_t hash = furc_hash((char *)dst, dst_size, 16);
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
