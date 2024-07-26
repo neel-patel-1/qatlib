@@ -19,7 +19,7 @@ extern "C" {
 
 int input_size = 16384;
 
-int (*input_populate)(char **);
+void (*input_populate)(char **);
 void (*compute_on_input)(void *, int);
 
 static inline void input_gen(char **p_buf){
@@ -30,15 +30,29 @@ static inline void input_gen(char **p_buf){
   *p_buf = buf;
 }
 
+float *item_buf;
 
-static inline void dot_product(void *buf, int size){
-  int i;
-  char *v1 = (char *)buf;
-  char *v2 = (char *)buf + size/2;
-  LOG_PRINT(LOG_DEBUG, "Dot Product\n");
-  for(i = 0; i < size/2; i++){
-    v1[i] = v1[i] * v2[i];
+static inline void input_gen_dp(char **p_buf){
+  char *buf = (char *)malloc(input_size);
+  for(int i = 0; i < input_size; i++){
+    buf[i] = rand() % 256;
   }
+  *p_buf = buf;
+}
+
+
+static inline void dot_product(void *user_buf, int bytes){
+  float sum = 0;
+  float *v1 = (float *)item_buf;
+  float *v2 = (float *)user_buf;
+  int size = bytes / sizeof(float);
+
+  LOG_PRINT(LOG_DEBUG, "Dot Product\n");
+  for(int i=0; i < size; i++){
+    sum += v1[i] * v2[i];
+  }
+  LOG_PRINT(LOG_DEBUG, "Dot Product: %f\n", sum);
+
 }
 
 static inline void linear_access(void *buf, int size){
@@ -51,10 +65,12 @@ static inline void linear_access(void *buf, int size){
 
 void alloc_cpu_memcpy_and_compute_args(int total_requests,
   char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
+    input_populate((char **)&item_buf);
+
     char ***ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***)malloc(total_requests * sizeof(char **));
     for(int i = 0; i < total_requests; i++){
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] = (char **)malloc(3 * sizeof(char *));
-      input_gen(&ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]);
+      input_populate(&ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]);
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] = (char *)malloc(input_size * sizeof(char));
       ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] = (char *)malloc(sizeof(int));
       *((int *) ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2]) = input_size;
@@ -73,6 +89,7 @@ void free_cpu_memcpy_and_compute_args(int total_requests,
       free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i]);
     }
     free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
+    free(item_buf);
 }
 
 void cpu_memcpy_and_compute_stamped(fcontext_transfer_t arg){
@@ -109,6 +126,7 @@ void alloc_offload_memcpy_and_compute_args(
 ){
 
   timed_offload_request_args **off_args = (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+  input_populate((char **)&item_buf);
   for(int i = 0; i < total_requests; i++){
     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
     off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
@@ -137,6 +155,7 @@ void free_offload_memcpy_and_compute_args(
     free(off_args[i]);
   }
   free(off_args);
+  free(item_buf);
 }
 
 void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
@@ -266,6 +285,10 @@ void blocking_memcpy_and_compute(
   {
     _mm_pause();
   }
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Error in offload\n");
+    return;
+  }
 
   compute_on_input(dst, input_size);
 
@@ -321,26 +344,39 @@ void cpu_memcpy_and_compute(
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
-int main(){
+int main(int argc, char **argv){
 
 
   int wq_id = 0;
   int dev_id = 2;
   int wq_type = SHARED;
   int rc;
-  int itr = 10;
-  int total_requests = 100;
+  int itr = 100;
+  int total_requests = 1000;
+  int opt;
 
-  compute_on_input = linear_access;
-  run_gpcore_request_brkdown(
-    cpu_memcpy_and_compute_stamped,
-    alloc_cpu_memcpy_and_compute_args,
-    free_cpu_memcpy_and_compute_args,
-    itr,
-    total_requests
-  );
-
+  input_populate = input_gen_dp;
   compute_on_input = dot_product;
+
+  while((opt = getopt(argc, argv, "t:i:r:s:q:")) != -1){
+    switch(opt){
+      case 't':
+        total_requests = atoi(optarg);
+        break;
+      case 'i':
+        itr = atoi(optarg);
+        break;
+      case 'q':
+        input_size = atoi(optarg);
+        break;
+      default:
+        break;
+    }
+  }
+
+  initialize_dsa_wq(dev_id, wq_id, wq_type);
+
+  LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
   run_gpcore_request_brkdown(
     cpu_memcpy_and_compute_stamped,
     alloc_cpu_memcpy_and_compute_args,
@@ -348,9 +384,6 @@ int main(){
     itr,
     total_requests
   );
-
-  return 0;
-  initialize_dsa_wq(dev_id, wq_id, wq_type);
   run_blocking_offload_request_brkdown(
     blocking_memcpy_and_compute_stamped,
     alloc_offload_memcpy_and_compute_args,
@@ -358,6 +391,12 @@ int main(){
     itr,
     total_requests
   );
+
+
+  free_dsa_wq();
+
+  return 0;
+
   run_yielding_request_brkdown(
     yielding_memcpy_and_compute_stamped,
     alloc_offload_memcpy_and_compute_args,
@@ -395,5 +434,4 @@ int main(){
   );
 
 
-  free_dsa_wq();
 }
