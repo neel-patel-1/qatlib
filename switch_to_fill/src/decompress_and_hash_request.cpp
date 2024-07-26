@@ -210,8 +210,8 @@ void yielding_decompress_and_hash_request_stamped(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if (! iaa_submit(iaa, desc)){
-    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+  if (iaa_submit(iaa, desc) == false){
+    LOG_PRINT(LOG_PERF, "SoftwareFallback\n");
     exit(-1);
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
@@ -262,8 +262,8 @@ void blocking_decompress_and_hash_request_stamped(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if(enqcmd(iaa->wq_reg, desc)){
-    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+  if(iaa_submit(iaa, desc) == false){
+    LOG_PRINT(LOG_PERF, "SoftwareFallback\n");
     exit(-1);
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
@@ -312,8 +312,8 @@ void blocking_decompress_and_hash_request(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if(enqcmd(iaa->wq_reg, desc)){
-    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+  if(iaa_submit(iaa, desc) == false){
+    LOG_PRINT(LOG_PERF, "SoftwareFallback\n");
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
       LOG_PRINT(LOG_ERR, "Error Decompressing\n");
@@ -381,8 +381,8 @@ void yielding_decompress_and_hash_request(fcontext_transfer_t arg){
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if (! iaa_submit(iaa, desc)){
-    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+  if (iaa_submit(iaa, desc) == false){
+    LOG_PRINT(LOG_PERF, "SoftwareFallback\n");
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
       LOG_PRINT(LOG_ERR, "Error Decompressing\n");

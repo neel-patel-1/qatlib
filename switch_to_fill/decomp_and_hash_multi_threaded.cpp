@@ -18,7 +18,7 @@ extern "C" {
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
-int main(){
+int main(int argc, char **argv) {
 
 
   int wq_id = 0;
@@ -35,7 +35,7 @@ int main(){
     256 * 1024, 1024 * 1024}; // 100 * 100
   std::string append_string = query;
 
-  int query_size = 4096;
+  int query_size = argc > 1 ? atoi(argv[1]) : 31;
   while(query.size() < query_size){
     query += append_string;
   }
@@ -47,6 +47,13 @@ int main(){
 
     run_blocking_offload_request_brkdown(
       blocking_decompress_and_hash_request_stamped,
+      alloc_decomp_and_hash_offload_args_stamped,
+      free_decomp_and_hash_offload_args_stamped,
+      itr,
+      total_requests
+    );
+    run_yielding_request_brkdown(
+      yielding_decompress_and_hash_request_stamped,
       alloc_decomp_and_hash_offload_args_stamped,
       free_decomp_and_hash_offload_args_stamped,
       itr,
