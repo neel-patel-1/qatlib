@@ -153,6 +153,8 @@ void yielding_request_offered_load_synchronized(
     offload_req_xfer, off_req_state, self,
     exetime, idx);
 
+  pthread_barrier_wait(tear_down_barrier);
+
   /* teardown */
   free_contexts(off_req_state, total_requests);
   free(offload_req_xfer);
@@ -160,7 +162,6 @@ void yielding_request_offered_load_synchronized(
 
   offload_args_free(total_requests, &off_args);
 
-  pthread_barrier_wait(tear_down_barrier);
 
   fcontext_destroy(self);
 }
@@ -287,7 +288,8 @@ void start_multi_thread_test(
   int total_requests,
   int num_exe_time_samples_per_run,
   int itr,
-  int num_workers
+  int num_workers,
+  enum runner_type runner_type
 ){
   int cores[num_workers];
   pthread_t threads[num_workers];
@@ -308,7 +310,7 @@ void start_multi_thread_test(
     args->request_fn = request_fn;
     args->offload_args_allocator = offload_args_allocator;
     args->offload_args_free = offload_args_free;
-    args->runner_type = BLOCKING;
+    args->runner_type = runner_type;
     args->itr = itr;
     args->test_start_barrier = &test_start_barrier;
     args->tear_down_barrier = &tear_down_barrier;
@@ -335,13 +337,13 @@ int main(){
   int wq_type = SHARED;
   int rc;
   int itr = 2;
-  int total_requests = 1000;
+  int total_requests = 100;
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
   std::string append_string = query;
 
 
-  int num_workers = 4;
+  int num_workers = 1;
   int cores[num_workers];
   pthread_t threads[num_workers];
   pthread_barrier_t test_start_barrier;
@@ -360,41 +362,6 @@ int main(){
     query += append_string;
   }
 
-  // pthread_barrier_init(&test_start_barrier, NULL, num_workers);
-  // pthread_barrier_init(&tear_down_barrier, NULL, num_workers);
-  // for(int i=0; i<num_workers; i++){
-  //   args = (runner_thread_args *)malloc(sizeof(runner_thread_args));
-  //   args->itr = itr;
-  //   args->total_requests = total_requests;
-  //   args->request_fn = blocking_decompress_and_hash_request;
-  //   args->offload_args_allocator = alloc_decomp_and_hash_offload_args;
-  //   args->offload_args_free = free_decomp_and_hash_offload_args;
-  //   args->runner_type = BLOCKING;
-  //   args->itr = itr;
-  //   args->test_start_barrier = &test_start_barrier;
-  //   args->tear_down_barrier = &tear_down_barrier;
-  //   rc = create_thread_pinned(&(threads[i]), runner_thread_fn, args, cores[i]);
-  //   if (rc){
-  //     LOG_PRINT(LOG_ERR, "Error creating thread\n");
-  //     exit(-1);
-  //   }
-  // }
-  // for(auto thread: threads){
-  //   pthread_join(thread, NULL);
-  // }
-  // pthread_barrier_destroy(&test_start_barrier);
-  // pthread_barrier_destroy(&tear_down_barrier);
-
-  start_multi_thread_test(
-    blocking_decompress_and_hash_request,
-    alloc_decomp_and_hash_offload_args,
-    free_decomp_and_hash_offload_args,
-    total_requests,
-    -1,
-    itr,
-    num_workers
-  );
-
   // start_multi_thread_test(
   //   blocking_decompress_and_hash_request,
   //   alloc_decomp_and_hash_offload_args,
@@ -402,7 +369,20 @@ int main(){
   //   total_requests,
   //   -1,
   //   itr,
-  //   num_workers);
+  //   num_workers,
+  //   BLOCKING
+  // );
+
+  start_multi_thread_test(
+    yielding_decompress_and_hash_request,
+    alloc_decomp_and_hash_offload_args,
+    free_decomp_and_hash_offload_args,
+    total_requests,
+    1,
+    itr,
+    num_workers,
+    YIELDING
+  );
 
 
     // run_gpcore_request_brkdown(
