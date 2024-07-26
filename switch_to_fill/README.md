@@ -14,3 +14,19 @@ Design:
 * There are "Latency Breakdown" and "Closed System Throughput" Executors
 * "Latency Breakdown" executor shows where the time goes during the execution of a request
 * "Closed System Throughput" executor implements a FCFS scheduling policy and determines the offered load when executing the passed in request on a single GPCore with optional offloads to on-chip accelerators
+
+
+
+
+
+
+
+
+
+
+### Issues:
+problem: executing multiple kernel threads results in one kernel thread losing access to a result array used to track request end-to-end execution time breakdowns (timestamps)
+Reproduce:
+```
+make decomp_and_hash_multi_threaded; sudo ./decomp_and_hash_multi_threaded
+```
