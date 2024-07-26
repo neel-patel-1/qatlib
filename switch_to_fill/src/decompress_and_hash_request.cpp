@@ -261,7 +261,14 @@ void blocking_decompress_and_hash_request_stamped(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  acctest_desc_submit(iaa, desc);
+  if(enqcmd(iaa->wq_reg, desc)){
+    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    if(rc != 0){
+      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+    }
+    comp->status = IAX_COMP_SUCCESS;
+  }
 
   ts1[id] = sampleCoderdtsc();
   while(comp->status == IAX_COMP_NONE){
@@ -303,7 +310,14 @@ void blocking_decompress_and_hash_request(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  acctest_desc_submit(iaa, desc);
+  if(enqcmd(iaa->wq_reg, desc)){
+    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+    if(rc != 0){
+      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+    }
+    comp->status = IAX_COMP_SUCCESS;
+  }
 
   while(comp->status == IAX_COMP_NONE){
     _mm_pause();
