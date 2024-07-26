@@ -362,16 +362,16 @@ int main(){
     query += append_string;
   }
 
-  // start_multi_thread_test(
-  //   blocking_decompress_and_hash_request,
-  //   alloc_decomp_and_hash_offload_args,
-  //   free_decomp_and_hash_offload_args,
-  //   total_requests,
-  //   -1,
-  //   itr,
-  //   num_workers,
-  //   BLOCKING
-  // );
+  start_multi_thread_test(
+    blocking_decompress_and_hash_request,
+    alloc_decomp_and_hash_offload_args,
+    free_decomp_and_hash_offload_args,
+    total_requests,
+    -1,
+    itr,
+    num_workers,
+    BLOCKING
+  );
 
   start_multi_thread_test(
     yielding_decompress_and_hash_request,
