@@ -211,7 +211,8 @@ void yielding_decompress_and_hash_request_stamped(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
   if (! iaa_submit(iaa, desc)){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+    exit(-1);
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
       LOG_PRINT(LOG_ERR, "Error Decompressing\n");
@@ -262,7 +263,8 @@ void blocking_decompress_and_hash_request_stamped(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
   if(enqcmd(iaa->wq_reg, desc)){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
+    exit(-1);
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
       LOG_PRINT(LOG_ERR, "Error Decompressing\n");
@@ -380,7 +382,7 @@ void yielding_decompress_and_hash_request(fcontext_transfer_t arg){
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
   if (! iaa_submit(iaa, desc)){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+    LOG_PRINT(LOG_DEBUG, "SoftwareFallback\n");
     int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
     if(rc != 0){
       LOG_PRINT(LOG_ERR, "Error Decompressing\n");
