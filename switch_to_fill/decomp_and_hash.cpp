@@ -15,6 +15,66 @@ extern "C" {
 }
 #include "decompress_and_hash_request.hpp"
 
+enum runner_type {
+  GPCORE,
+  BLOCKING,
+  YIELDING
+};
+
+typedef struct _runner_thread_args{
+  enum runner_type runner_type;
+  int itr;
+  int total_requests;
+  fcontext_fn_t request_fn;
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3);
+  void (* offload_args_free)(int, timed_offload_request_args***);
+  void (* cpu_payload_alloc)(int, char****);
+  void (* cpu_payload_free)(int, char****);
+} runner_thread_args;
+
+void *runner_thread_fn(void *arg){
+  runner_thread_args *args = (runner_thread_args *)arg;
+  fcontext_fn_t request_fn = args->request_fn;
+  int itr = args->itr;
+  int total_requests = args->total_requests;
+  enum runner_type runner_type = args->runner_type;
+
+  switch(runner_type){
+    case GPCORE:
+      run_gpcore_request_brkdown(
+        request_fn,
+        args->cpu_payload_alloc,
+        args->cpu_payload_free,
+        itr,
+        total_requests
+      );
+      break;
+    case BLOCKING:
+      run_blocking_offload_request_brkdown(
+        request_fn,
+        args->offload_args_allocator,
+        args->offload_args_free,
+        itr,
+        total_requests
+      );
+      break;
+    case YIELDING:
+      run_yielding_request_brkdown(
+        request_fn,
+        args->offload_args_allocator,
+        args->offload_args_free,
+        itr,
+        total_requests
+      );
+      break;
+  }
+
+  return NULL;
+}
 
 int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
@@ -34,6 +94,11 @@ int main(){
   // int query_sizes[] = {31, 256, 1024, 4096, 16384, 65536,
   //   256 * 1024, 1024 * 1024}; // 100 * 100
   std::string append_string = query;
+  pthread_t runner_thread;
+  runner_thread_args args;
+  args.itr = itr;
+  args.total_requests = total_requests;
+
 
   int query_sizes[] = {65536}; /* testing a single large size -- trigger software fallback*/
 
@@ -42,13 +107,13 @@ int main(){
     while(query.size() < query_size){
       query += append_string;
     }
-    run_gpcore_request_brkdown(
-      cpu_decompress_and_hash_stamped,
-      compressed_mc_req_allocator,
-      compressed_mc_req_free,
-      itr,
-      total_requests
-    );
+    // run_gpcore_request_brkdown(
+    //   cpu_decompress_and_hash_stamped,
+    //   compressed_mc_req_allocator,
+    //   compressed_mc_req_free,
+    //   itr,
+    //   total_requests
+    // );
     run_blocking_offload_request_brkdown(
       blocking_decompress_and_hash_request_stamped,
       alloc_decomp_and_hash_offload_args_stamped,
