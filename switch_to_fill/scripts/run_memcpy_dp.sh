@@ -6,7 +6,7 @@ QUERY_SIZES=( 64    256  1024 4096 16384 65536 262144 1048576 )
 ITERATIONS=(  100   100  100  100  100   10    10     10  )
 REQUESTS=(    10000 1000 1000 1000 1000  100   100    100 )
 
-CORES=( 1 )
+CORES=( 20 )
 
 # Initialize memcpy_dp_logs
 mkdir -p memcpy_dp_logs

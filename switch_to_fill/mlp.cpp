@@ -392,18 +392,13 @@ int main(int argc, char **argv){
     total_requests
   );
 
-
-  free_dsa_wq();
-
-  return 0;
-
-  run_yielding_request_brkdown(
-    yielding_memcpy_and_compute_stamped,
-    alloc_offload_memcpy_and_compute_args,
-    free_offload_memcpy_and_compute_args,
-    itr,
-    total_requests
-  );
+  // run_yielding_request_brkdown(
+  //   yielding_memcpy_and_compute_stamped,
+  //   alloc_offload_memcpy_and_compute_args,
+  //   free_offload_memcpy_and_compute_args,
+  //   itr,
+  //   total_requests
+  // );
   /* some vars needed for yield*/
   int num_exe_time_samples_per_run = 10; /* 10 samples per iter*/
 
@@ -424,14 +419,16 @@ int main(int argc, char **argv){
   itr
  );
 
-  run_yielding_offered_load(
+ run_yielding_offered_load(
   yielding_memcpy_and_compute,
-  alloc_offload_memcpy_and_compute_args,
-  free_offload_memcpy_and_compute_args,
-  num_exe_time_samples_per_run,
-  total_requests,
-  itr
-  );
+    alloc_offload_memcpy_and_compute_args,
+    free_offload_memcpy_and_compute_args,
+    num_exe_time_samples_per_run,
+    total_requests,
+    itr
+ );
 
+  free_dsa_wq();
+  return 0;
 
 }
