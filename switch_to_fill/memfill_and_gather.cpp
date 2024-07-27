@@ -209,8 +209,18 @@ void cpu_memcpy_and_compute_stamped(
   uint64_t *ts1 = args->ts1;
   uint64_t *ts2 = args->ts2;
 
+  int num_ents;
+  num_ents = input_size / sizeof(float);
+
+  ts0[id] = sampleCoderdtsc();
   memset((void*) feature_buf, 0x0, input_size);
 
+  ts1[id] = sampleCoderdtsc();
+  for(int i = 0; i < num_accesses; i++){
+    feature_buf[indirect_array[i]] = 1.0;
+  }
+
+  ts2[id] = sampleCoderdtsc();
   if(gLogLevel >= LOG_DEBUG){ /* validate code */
     validate_feature_vec(feature_buf, indirect_array);
   }
@@ -220,7 +230,7 @@ void cpu_memcpy_and_compute_stamped(
 }
 
 
-int gLogLevel = LOG_DEBUG;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
@@ -233,6 +243,13 @@ int main(int argc, char **argv){
   initialize_dsa_wq(dev_id, wq_id, wq_type);
 
   input_size = 1024;
+
+  run_gpcore_request_brkdown(
+    cpu_memcpy_and_compute_stamped,
+    alloc_cpu_memcpy_and_compute_args,
+    free_cpu_memcpy_and_compute_args,
+    itr, total_requests
+  );
 
   run_blocking_offload_request_brkdown(
     blocking_memcpy_and_compute_stamped,
