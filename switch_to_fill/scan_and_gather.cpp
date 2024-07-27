@@ -340,7 +340,7 @@ int main(int argc, char **argv){
 
   /* validate */
   LOG_PRINT(LOG_DEBUG, "sw_len: %d\n", sw_len);
-  for(uint32_t i = 0; i < sw_len; i++){
+  for(uint32_t i = 0; i < (sw_len/sizeof(uint32_t)); i++){
     LOG_PRINT(LOG_DEBUG, "dst1[%d] = %u\n", i, dst1[i]);
   }
 
