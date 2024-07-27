@@ -235,7 +235,8 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   uint64_t comp, uint64_t xfer_size,
   uint32_t num_inputs, uint32_t low_val, uint32_t high_val
 ){
-  uint8_t *aecs = (uint8_t *)malloc(IAA_COMPRESS_AECS_SIZE);
+  uint8_t *aecs =
+    (uint8_t *)aligned_alloc(IAA_COMPRESS_AECS_SIZE, IAA_COMPRESS_AECS_SIZE);
   struct iaa_filter_aecs_t iaa_filter_aecs =
   {
     .rsvd = 0,
@@ -256,7 +257,7 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   memset(hw, 0, sizeof(struct hw_desc));
   hw->flags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR
     | IDXD_OP_FLAG_RD_SRC2_AECS;
-  hw->flags = 65550;
+  hw->flags = 65550 | IDXD_OP_FLAG_BOF;
   hw->opcode = IAX_OPCODE_EXTRACT;
   hw->src_addr = src1;
   hw->dst_addr = dst1;
@@ -314,7 +315,9 @@ int main(int argc, char **argv){
   /* high val*/
   uint32_t high_val = low_val + (iaa_num_inputs - 1);
   uint32_t expected_size = high_val - low_val;
-  uint32_t *src1 = (uint32_t *)malloc(iaa_num_inputs * sizeof(uint32_t));
+  uint32_t *src1 =
+    (uint32_t *)aligned_alloc(ADDR_ALIGNMENT,
+      iaa_num_inputs * sizeof(uint32_t));
   uint32_t *dst1 = (uint32_t *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
   struct iaa_filter_aecs_t aecs =
   {
@@ -353,11 +356,9 @@ int main(int argc, char **argv){
   /* hw */
   char *src2 = (char *)malloc(IAA_COMPRESS_AECS_SIZE);
   memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
-  // prepare_iaa_compress_desc_with_preallocated_comp
-  // (
-  //   &desc, (uint64_t)src1, (uint64_t)src2, (uint64_t)dst1,
-  //   (uint64_t)&comp, IAA_COMPRESS_MAX_DEST_SIZE
-  // );
+
+
+
   prepare_iaa_filter_desc_with_preallocated_comp(
     &desc, (uint64_t)src1, (uint64_t)dst1,
     (uint64_t)comp, IAA_COMPRESS_MAX_DEST_SIZE,
