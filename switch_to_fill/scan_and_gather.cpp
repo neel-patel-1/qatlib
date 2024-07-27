@@ -232,7 +232,8 @@ void cpu_memcpy_and_compute_stamped(
 
 void prepare_iaa_filter_desc_with_preallocated_comp(
   struct hw_desc *hw, uint64_t src1, uint64_t dst1,
-  uint64_t comp, uint64_t xfer_size, uint32_t low_val, uint32_t high_val
+  uint64_t comp, uint64_t xfer_size,
+  uint32_t num_inputs, uint32_t low_val, uint32_t high_val
 ){
   uint8_t *aecs = (uint8_t *)malloc(IAA_COMPRESS_AECS_SIZE);
   struct iaa_filter_aecs_t iaa_filter_aecs =
@@ -253,13 +254,13 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   memset(hw, 0, sizeof(struct hw_desc));
   hw->flags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR
     | IDXD_OP_FLAG_RD_SRC2_AECS;
+  hw->iax_num_inputs = num_inputs;
   hw->opcode = IAX_OPCODE_EXTRACT;
   hw->src_addr = src1;
   hw->src2_addr = (uint64_t)aecs;
   hw->dst_addr = dst1;
   hw->xfer_size = xfer_size;
 
-  // 124 128
 
   memset((void *)comp, 0, sizeof(ax_comp));
   hw->completion_addr = comp;
@@ -301,12 +302,13 @@ int main(int argc, char **argv){
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
-  /* construct a buffer containing the values we */
-  /* low val*/
+  int input_size = 1024 * 1024;
+  uint32_t iaa_num_inputs = input_size / sizeof(uint32_t);
+
+    /* low val*/
   uint32_t low_val = 10;
   /* high val*/
-  uint32_t high_val = 40;
-  uint32_t iaa_num_inputs = 128;
+  uint32_t high_val = low_val + (iaa_num_inputs - 1);
   uint32_t expected_size = high_val - low_val;
   uint32_t *src1 = (uint32_t *)malloc(iaa_num_inputs * sizeof(uint32_t));
   uint32_t *dst1 = (uint32_t *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
@@ -335,11 +337,26 @@ int main(int argc, char **argv){
   sw_len = iaa_do_extract((void *)dst1, (void *)src1,
     (void *)&aecs, iaa_num_inputs, iaa_filter_flags);
 
+
   /* validate */
   LOG_PRINT(LOG_DEBUG, "sw_len: %d\n", sw_len);
   for(uint32_t i = 0; i < sw_len; i++){
     LOG_PRINT(LOG_DEBUG, "dst1[%d] = %u\n", i, dst1[i]);
   }
+
+  /* hw */
+  // prepare_iaa_filter_desc_with_preallocated_comp(
+  //   &desc, (uint64_t)src1, (uint64_t)dst1,
+  //   (uint64_t)&comp, IAA_COMPRESS_MAX_DEST_SIZE, low_val, high_val
+  // );
+  // iaa_submit(iaa, &desc);
+  // while(comp.status == IAX_COMP_NONE){
+  //   _mm_pause();
+  // }
+  // if(comp.status != IAX_COMP_SUCCESS){
+  //   LOG_PRINT(LOG_ERR, "Error in offload: %x\n", comp.status);
+  //   return -1;
+  // }
 
   free_iaa_wq();
 
