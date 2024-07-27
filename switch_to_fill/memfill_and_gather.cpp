@@ -17,8 +17,8 @@ extern "C" {
 #include "submit.hpp"
 #include <algorithm>
 
-int input_size = 16384; /* sizes the feature buffer */
-int num_accesses = 10; /* tells number of accesses */
+int input_size = 10; /* sizes the feature buffer */
+int num_accesses = 1; /* tells number of accesses */
 
 void (*compute_on_input)(void *, int);
 
@@ -54,10 +54,10 @@ void alloc_offload_memfill_and_gather_args( /* is this scatter ?*/
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
     off_args[i]->comp = &comps[i];
     off_args[i]->id = i;
-    off_args[i]->ts0 = &ts0[i];
-    off_args[i]->ts1 = &ts1[i];
-    off_args[i]->ts2 = &ts2[i];
-    off_args[i]->ts3 = &ts3[i];
+    off_args[i]->ts0 = ts0;
+    off_args[i]->ts1 = ts1;
+    off_args[i]->ts2 = ts2;
+    off_args[i]->ts3 = ts3;
   }
 
   *p_off_args = off_args;
@@ -120,6 +120,8 @@ void blocking_memcpy_and_compute_stamped(
   /* populate feature buf using indrecet array*/
   for(int i = 0; i < num_accesses; i++){
     feature_buf[indirect_array[i]] = 1.0;
+    LOG_PRINT( LOG_DEBUG, "feature_buf[%d] = %f\n",
+      indirect_array[i], feature_buf[indirect_array[i]]);
     sorted_idxs[i] = indirect_array[i];
   }
 
@@ -128,21 +130,22 @@ void blocking_memcpy_and_compute_stamped(
     std::sort(sorted_idxs, sorted_idxs + num_accesses);
     int sorted_idx = 0;
     for(int i=0; i<num_ents; i++){
+      // LOG_PRINT( LOG_DEBUG, "feature_buf[%d] = %f\n",
+      //   i, feature_buf[i]);
       if (i == sorted_idxs[sorted_idx]){
         if (feature_buf[i] != 1.0){
-          LOG_PRINT(LOG_ERR, "Error in feature buf idx: %d ent: %f\n",
-            i, feature_buf[i]);
+          LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
+            sorted_idx, i, feature_buf[i], sorted_idxs[sorted_idx]);
           return;
         }
         sorted_idx++;
-      } else {
-        if (feature_buf[i] != 0.0){
-          LOG_PRINT(LOG_ERR, "Error in feature buf idx: %d ent: %f\n",
-            i, feature_buf[i]);
+      } else if (feature_buf[i] != 0.0){
+          LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
+            sorted_idx, i, feature_buf[i], sorted_idxs[sorted_idx]);
           return;
-        }
+
       }
-  }
+    }
   }
 
   requests_completed ++;
