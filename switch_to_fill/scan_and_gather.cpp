@@ -236,7 +236,7 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   uint32_t num_inputs, uint32_t low_val, uint32_t high_val
 ){
   uint8_t *aecs =
-    (uint8_t *)aligned_alloc(IAA_COMPRESS_AECS_SIZE, IAA_COMPRESS_AECS_SIZE);
+    (uint8_t *)aligned_alloc(IAA_FILTER_AECS_SIZE, IAA_FILTER_AECS_SIZE);
   struct iaa_filter_aecs_t iaa_filter_aecs =
   {
     .rsvd = 0,
@@ -248,10 +248,10 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   };
 
   /* prepare aecs */
-  memset(aecs, 0, IAA_COMPRESS_AECS_SIZE);
+  memset(aecs, 0, IAA_FILTER_AECS_SIZE);
   iaa_filter_aecs.low_filter_param = low_val;
   iaa_filter_aecs.high_filter_param = high_val;
-  memcpy(aecs, (void *)&iaa_filter_aecs, IAA_COMPRESS_AECS_SIZE);
+  memcpy(aecs, (void *)&iaa_filter_aecs, IAA_FILTER_AECS_SIZE);
 
   /* prepare hw */
   memset(hw, 0, sizeof(struct hw_desc));
