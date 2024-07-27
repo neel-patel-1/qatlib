@@ -234,15 +234,33 @@ int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
-  int dev_id = 2;
+  int dev_id = 0;
   int wq_type = SHARED;
   int rc;
   int itr = 100;
   int total_requests = 1000;
+  int opt;
+
+  while((opt = getopt(argc, argv, "t:i:r:s:q:a:")) != -1){
+    switch(opt){
+      case 't':
+        total_requests = atoi(optarg);
+        break;
+      case 'i':
+        itr = atoi(optarg);
+        break;
+      case 'q':
+        input_size = atoi(optarg);
+        break;
+      case 'a':
+        num_accesses = atoi(optarg);
+        break;
+      default:
+        break;
+    }
+  }
 
   initialize_dsa_wq(dev_id, wq_id, wq_type);
-
-  input_size = 1024;
 
   run_gpcore_request_brkdown(
     cpu_memcpy_and_compute_stamped,
