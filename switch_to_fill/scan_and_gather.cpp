@@ -301,5 +301,21 @@ int main(int argc, char **argv){
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
+  /* construct a buffer containing the values we */
+  /* low val*/
+  uint32_t low_val = 10;
+  /* high val*/
+  uint32_t high_val = 20;
+  uint32_t expected_size = high_val - low_val;
+  uint32_t *src1 = (uint32_t *)malloc(expected_size * sizeof(uint32_t));
+  for(uint32_t i = 0; i < expected_size; i++){
+    src1[i] = i;
+  }
+  uint32_t *dst1 = (uint32_t *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
+  struct hw_desc desc;
+  ax_comp comp;
+
+  free_iaa_wq();
+
 
 }
