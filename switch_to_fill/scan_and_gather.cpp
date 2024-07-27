@@ -231,7 +231,7 @@ void cpu_memcpy_and_compute_stamped(
 }
 
 void prepare_iaa_filter_desc_with_preallocated_comp(
-  struct hw_desc *hw, uint64_t src1, uint64_t src2, uint64_t dst1,
+  struct hw_desc *hw, uint64_t src1, uint64_t dst1,
   uint64_t comp, uint64_t xfer_size, uint32_t low_val, uint32_t high_val
 ){
   uint8_t *aecs = (uint8_t *)malloc(IAA_COMPRESS_AECS_SIZE);
@@ -251,9 +251,11 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
 
 
   memset(hw, 0, sizeof(struct hw_desc));
-  hw->flags = 65550;
+  hw->flags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR
+    | IDXD_OP_FLAG_RD_SRC2_AECS;
   hw->opcode = IAX_OPCODE_EXTRACT;
   hw->src_addr = src1;
+  hw->src2_addr = (uint64_t)aecs;
   hw->dst_addr = dst1;
   hw->xfer_size = xfer_size;
 
@@ -261,10 +263,10 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
 
   memset((void *)comp, 0, sizeof(ax_comp));
   hw->completion_addr = comp;
-  hw->iax_compr_flags = 14;
-  hw->iax_src2_addr = src2;
-  hw->iax_src2_xfer_size = IAA_COMPRESS_AECS_SIZE;
+  hw->iax_src2_xfer_size = 32;
   hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
+  hw->iax_filter_flags = 124;
+  hw->iax_num_inputs = 128;
 }
 
 int gLogLevel = LOG_PERF;
