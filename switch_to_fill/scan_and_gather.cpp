@@ -5,6 +5,7 @@
 #include "ch3_hash.h"
 #include "runners.h"
 #include "gpcore_compress.h"
+#include "iaa_filter.h"
 
 extern "C" {
   #include "fcontext.h"
@@ -229,12 +230,48 @@ void cpu_memcpy_and_compute_stamped(
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void prepare_iaa_filter_desc_with_preallocated_comp(
+  struct hw_desc *hw, uint64_t src1, uint64_t src2, uint64_t dst1,
+  uint64_t comp, uint64_t xfer_size, uint32_t low_val, uint32_t high_val
+){
+  uint8_t *aecs = (uint8_t *)malloc(IAA_COMPRESS_AECS_SIZE);
+  struct iaa_filter_aecs_t iaa_filter_aecs =
+  {
+    .rsvd = 0,
+    .rsvd2 = 0,
+    .rsvd3 = 0,
+    .rsvd4 = 0,
+    .rsvd5 = 0,
+    .rsvd6 = 0
+  };
+  memset(aecs, 0, IAA_COMPRESS_AECS_SIZE);
+  iaa_filter_aecs.low_filter_param = low_val;
+  iaa_filter_aecs.high_filter_param = high_val;
+  memcpy(aecs, (void *)&iaa_filter_aecs, IAA_COMPRESS_AECS_SIZE);
+
+
+  memset(hw, 0, sizeof(struct hw_desc));
+  hw->flags = 65550;
+  hw->opcode = IAX_OPCODE_EXTRACT;
+  hw->src_addr = src1;
+  hw->dst_addr = dst1;
+  hw->xfer_size = xfer_size;
+
+  // 124 128
+
+  memset((void *)comp, 0, sizeof(ax_comp));
+  hw->completion_addr = comp;
+  hw->iax_compr_flags = 14;
+  hw->iax_src2_addr = src2;
+  hw->iax_src2_xfer_size = IAA_COMPRESS_AECS_SIZE;
+  hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
+}
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
-  int dev_id = 2;
+  int dev_id = 3;
   int wq_type = SHARED;
   int rc;
   int itr = 100;
@@ -260,21 +297,7 @@ int main(int argc, char **argv){
     }
   }
 
-  initialize_dsa_wq(dev_id, wq_id, wq_type);
-
-  run_gpcore_request_brkdown(
-    cpu_memcpy_and_compute_stamped,
-    alloc_cpu_memcpy_and_compute_args,
-    free_cpu_memcpy_and_compute_args,
-    itr, total_requests
-  );
-
-  run_blocking_offload_request_brkdown(
-    blocking_memcpy_and_compute_stamped,
-    alloc_offload_memfill_and_gather_args,
-    free_offload_memfill_and_gather_args,
-    itr, total_requests
-  );
+  initialize_iaa_wq(dev_id, wq_id, wq_type);
 
 
 }

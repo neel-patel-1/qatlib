@@ -8,7 +8,7 @@ ACCFG_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/a
 INCLUDES = -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) $(IDXD_INCLUDES)
 LIBS = -ldml $(IAA_LIBS) $(ACCFG_LIBS)
 
-all: switch_to_fill walker mlp decomp_and_hash decomp_and_hash_multi_threaded memfill_and_gather
+all: switch_to_fill walker mlp decomp_and_hash decomp_and_hash_multi_threaded memfill_and_gather scan_and_gather
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
 	$(CXX) -g -c -o $@ $^  -I./inc
 
@@ -84,6 +84,22 @@ memfill_and_gather: $(MLP_OBJS) memfill_and_gather.o
 memfill_and_gather_clean:
 	rm -f memfill_and_gather memfill_and_gather.o
 
+scan_and_gather_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/context_management.o \
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/ch3_hash.o \
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/dsa_offloads.o \
+	obj/decompress_and_hash_request.o
+scan_and_gather.o: scan_and_gather.cpp
+	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+scan_and_gather: $(MLP_OBJS) scan_and_gather.o
+	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+scan_and_gather_clean:
+	rm -f scan_and_gather scan_and_gather.o
+
 DECOMP_AND_HASH_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
@@ -132,4 +148,7 @@ clean:
 	rm -f obj/*.o switch_to_fill switch_to_fill.o \
 		walker walker.o \
 		mlp mlp.o tests/*.o \
-		decomp_and_hash decomp_and_hash.o decomp_and_hash_multi_threaded
+		decomp_and_hash decomp_and_hash.o decomp_and_hash_multi_threaded \
+		decomp_and_hash_multi_threaded.o \
+		memfill_and_gather memfill_and_gather.o \
+		scan_and_gather scan_and_gather.o
