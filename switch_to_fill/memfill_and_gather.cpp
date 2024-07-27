@@ -38,29 +38,35 @@ static inline void indirect_array_gen(int **p_indirect_array){
 
 void alloc_offload_memfill_and_gather_args( /* is this scatter ?*/
   int total_requests,
-  offload_request_args *** p_off_args,
-  ax_comp *comps
+  timed_offload_request_args *** p_off_args,
+  ax_comp *comps, uint64_t *ts0,
+  uint64_t *ts1, uint64_t *ts2,
+  uint64_t *ts3
 ){
 
-  offload_request_args **off_args =
-    (offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+  timed_offload_request_args **off_args =
+    (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
   for(int i = 0; i < total_requests; i++){
-    off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
     off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
     indirect_array_gen((int **)&(off_args[i]->dst_payload)); /* use dst buf to house the indirect array*/
     off_args[i]->src_size =  input_size;
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
     off_args[i]->comp = &comps[i];
     off_args[i]->id = i;
+    off_args[i]->ts0 = &ts0[i];
+    off_args[i]->ts1 = &ts1[i];
+    off_args[i]->ts2 = &ts2[i];
+    off_args[i]->ts3 = &ts3[i];
   }
 
   *p_off_args = off_args;
 }
 void free_offload_memfill_and_gather_args(
   int total_requests,
-  offload_request_args *** p_off_args
+  timed_offload_request_args *** p_off_args
 ){
-  offload_request_args **off_args = *p_off_args;
+  timed_offload_request_args **off_args = *p_off_args;
   for(int i = 0; i < total_requests; i++){
     free(off_args[i]->src_payload);
     free(off_args[i]->dst_payload);
@@ -70,19 +76,29 @@ void free_offload_memfill_and_gather_args(
   free(off_args);
 }
 
-void blocking_memcpy_and_compute(
+void blocking_memcpy_and_compute_stamped(
   fcontext_transfer_t arg
 ){
-  offload_request_args *args = (offload_request_args *)arg.data;
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
 
-  char *src = args->src_payload;
-  char *dst = args->dst_payload;
+  float *feature_buf = (float *)(args->src_payload);
+  int *indirect_array = (int *)(args->dst_payload);
   int id = args->id;
   ax_comp *comp = args->comp;
   struct hw_desc *desc = args->desc;
+  int sorted_idxs[num_accesses];
 
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+
+  int num_ents;
+  num_ents = input_size / sizeof(float);
+
+  ts0[id] = sampleCoderdtsc();
   prepare_dsa_memfill_desc_with_preallocated_comp(
-    desc, (uint64_t)src, (uint64_t)dst,
+    desc, 0x0, (uint64_t)feature_buf,
     (uint64_t)args->comp, (uint64_t)input_size
   );
   if (!dsa_submit(dsa, desc)){
@@ -90,6 +106,7 @@ void blocking_memcpy_and_compute(
     return;
   }
 
+  ts1[id] = sampleCoderdtsc();
   while(comp->status == IAX_COMP_NONE)
   {
     _mm_pause();
@@ -99,11 +116,34 @@ void blocking_memcpy_and_compute(
     return;
   }
 
-  if(gLogLevel == LOG_DEBUG){
-    LOG_PRINT(LOG_DEBUG, "Request %d completed\n", id);
+  ts2[id] = sampleCoderdtsc();
+  /* populate feature buf using indrecet array*/
+  for(int i = 0; i < num_accesses; i++){
+    feature_buf[indirect_array[i]] = 1.0;
+    sorted_idxs[i] = indirect_array[i];
   }
 
-  compute_on_input(dst, input_size);
+  ts3[id] = sampleCoderdtsc();
+  if(gLogLevel == LOG_DEBUG){
+    std::sort(sorted_idxs, sorted_idxs + num_accesses);
+    int sorted_idx = 0;
+    for(int i=0; i<num_ents; i++){
+      if (i == sorted_idxs[sorted_idx]){
+        if (feature_buf[i] != 1.0){
+          LOG_PRINT(LOG_ERR, "Error in feature buf idx: %d ent: %f\n",
+            i, feature_buf[i]);
+          return;
+        }
+        sorted_idx++;
+      } else {
+        if (feature_buf[i] != 0.0){
+          LOG_PRINT(LOG_ERR, "Error in feature buf idx: %d ent: %f\n",
+            i, feature_buf[i]);
+          return;
+        }
+      }
+  }
+  }
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
@@ -117,43 +157,19 @@ int main(int argc, char **argv){
   int dev_id = 2;
   int wq_type = SHARED;
   int rc;
-
-  int sorted_idxs[num_accesses];
-  int num_ents;
+  int itr = 100;
+  int total_requests = 1000;
 
   initialize_dsa_wq(dev_id, wq_id, wq_type);
 
   input_size = 1024;
-  num_ents = input_size / sizeof(float);
 
-  float *feature_buf = (float *)malloc(input_size * sizeof(float));
-  int *indirect_array = (int *)malloc(num_accesses * sizeof(int));
-  indirect_array_gen(&indirect_array);
-  memset(feature_buf, 0, input_size * sizeof(float));
+  run_blocking_offload_request_brkdown(
+    blocking_memcpy_and_compute_stamped,
+    alloc_offload_memfill_and_gather_args,
+    free_offload_memfill_and_gather_args,
+    itr, total_requests
+  );
 
-  /* populate feature buf using indrecet array*/
-  for(int i = 0; i < num_accesses; i++){
-    feature_buf[indirect_array[i]] = 1.0;
-    sorted_idxs[i] = indirect_array[i];
-  }
-  std::sort(sorted_idxs, sorted_idxs + num_accesses);
-
-
-  /* validate feature buf entries */
-  int sorted_idx = 0;
-  for(int i=0; i<num_ents; i++){
-    if (i == sorted_idxs[sorted_idx]){
-      if (feature_buf[i] != 1.0){
-        LOG_PRINT(LOG_ERR, "Error in feature buf\n");
-        return -1;
-      }
-      sorted_idx++;
-    } else {
-      if (feature_buf[i] != 0.0){
-        LOG_PRINT(LOG_ERR, "Error in feature buf\n");
-        return -1;
-      }
-    }
-  }
 
 }
