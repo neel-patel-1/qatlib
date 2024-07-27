@@ -326,7 +326,9 @@ int main(int argc, char **argv){
     .rsvd6 = 0
   };
   struct hw_desc desc; /* hw */
-  ax_comp comp;
+  ax_comp *comp =
+    (ax_comp *)aligned_alloc(
+      iaa->compl_size, sizeof(ax_comp));
   uint32_t iaa_filter_flags = 124;
   uint32_t sw_len = 0;
 
@@ -349,17 +351,24 @@ int main(int argc, char **argv){
   // }
 
   /* hw */
+  char *src2 = (char *)malloc(IAA_COMPRESS_AECS_SIZE);
+  memcpy(src2, iaa_compress_aecs, IAA_COMPRESS_AECS_SIZE);
+  // prepare_iaa_compress_desc_with_preallocated_comp
+  // (
+  //   &desc, (uint64_t)src1, (uint64_t)src2, (uint64_t)dst1,
+  //   (uint64_t)&comp, IAA_COMPRESS_MAX_DEST_SIZE
+  // );
   prepare_iaa_filter_desc_with_preallocated_comp(
     &desc, (uint64_t)src1, (uint64_t)dst1,
-    (uint64_t)&comp, IAA_COMPRESS_MAX_DEST_SIZE,
+    (uint64_t)comp, IAA_COMPRESS_MAX_DEST_SIZE,
     low_val, high_val, iaa_num_inputs
   );
   iaa_submit(iaa, &desc);
-  while(comp.status == IAX_COMP_NONE){
+  while(comp->status == IAX_COMP_NONE){
     _mm_pause();
   }
-  if(comp.status != IAX_COMP_SUCCESS){
-    LOG_PRINT(LOG_ERR, "Error in offload: %x\n", comp.status);
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Error in offload: %x\n", comp->status);
     return -1;
   }
 
