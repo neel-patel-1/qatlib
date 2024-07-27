@@ -5,12 +5,12 @@
 #include "ch3_hash.h"
 #include "runners.h"
 #include "gpcore_compress.h"
-#include "iaa_filter.h"
 
 extern "C" {
   #include "fcontext.h"
   #include "iaa.h"
   #include "accel_test.h"
+  #include "iaa_filter.h"
   #include "iaa_compress.h"
   #include <zlib.h>
 }
@@ -269,7 +269,7 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   hw->iax_num_inputs = 128;
 }
 
-int gLogLevel = LOG_PERF;
+int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
@@ -308,12 +308,30 @@ int main(int argc, char **argv){
   uint32_t high_val = 20;
   uint32_t expected_size = high_val - low_val;
   uint32_t *src1 = (uint32_t *)malloc(expected_size * sizeof(uint32_t));
+  uint32_t *dst1 = (uint32_t *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
+  struct iaa_filter_aecs_t *aecs = (struct iaa_filter_aecs_t *)malloc(IAA_COMPRESS_AECS_SIZE);
+  struct hw_desc desc; /* hw */
+  ax_comp comp;
+  uint32_t iaa_num_inputs = 128;
+  uint32_t iaa_filter_flags = 124;
+  uint32_t sw_len = 0;
+
+  /* seq populate*/
   for(uint32_t i = 0; i < expected_size; i++){
     src1[i] = i;
   }
-  uint32_t *dst1 = (uint32_t *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
-  struct hw_desc desc;
-  ax_comp comp;
+
+  /* sw */
+  aecs->low_filter_param = low_val;
+  aecs->high_filter_param = high_val;
+  sw_len = iaa_do_extract((void *)dst1, (void *)src1,
+    (void *)aecs, iaa_num_inputs, iaa_filter_flags);
+
+  /* validate */
+  LOG_PRINT(LOG_DEBUG, "sw_len: %d\n", sw_len);
+  for(uint32_t i = 0; i < sw_len; i++){
+    LOG_PRINT(LOG_DEBUG, "dst1[%d] = %u\n", i, dst1[i]);
+  }
 
   free_iaa_wq();
 
