@@ -17,10 +17,43 @@ extern "C" {
 #include "submit.hpp"
 #include <algorithm>
 
-int input_size = 10; /* sizes the feature buffer */
-int num_accesses = 1; /* tells number of accesses */
+int input_size = 100; /* sizes the feature buffer */
+int num_accesses = 10; /* tells number of accesses */
 
 void (*compute_on_input)(void *, int);
+
+static inline void print_sorted_array(int *sorted_idxs, int num_accesses){
+  for(int i = 0; i < num_accesses; i++){
+    LOG_PRINT(LOG_DEBUG, "sorted_idxs[%d] = %d\n", i, sorted_idxs[i]);
+  }
+}
+
+static inline void validate_feature_vec(float *feature_buf, int *indirect_array){
+  int num_ents;
+  num_ents = input_size / sizeof(float);
+  int sorted_idxs[num_accesses];
+  std::sort(indirect_array, indirect_array + num_accesses);
+  int sorted_idx = 0;
+  for(int i=0; i<num_ents; i++){
+    if (i == indirect_array[sorted_idx]){
+      if (feature_buf[i] != 1.0){
+        print_sorted_array(indirect_array, num_accesses);
+        LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
+          sorted_idx, i, feature_buf[i], indirect_array[sorted_idx]);
+        return;
+      }
+      while (indirect_array[sorted_idx] == i){
+        sorted_idx++;
+      }
+    } else if (feature_buf[i] != 0.0){
+        print_sorted_array(indirect_array, num_accesses);
+        LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
+          sorted_idx, i, feature_buf[i], indirect_array[sorted_idx]);
+        return;
+
+    }
+  }
+}
 
 static inline void indirect_array_gen(int **p_indirect_array){
   int num_feature_ent = input_size / sizeof(float);
@@ -86,7 +119,6 @@ void blocking_memcpy_and_compute_stamped(
   int id = args->id;
   ax_comp *comp = args->comp;
   struct hw_desc *desc = args->desc;
-  int sorted_idxs[num_accesses];
 
   uint64_t *ts0 = args->ts0;
   uint64_t *ts1 = args->ts1;
@@ -120,32 +152,35 @@ void blocking_memcpy_and_compute_stamped(
   /* populate feature buf using indrecet array*/
   for(int i = 0; i < num_accesses; i++){
     feature_buf[indirect_array[i]] = 1.0;
-    LOG_PRINT( LOG_DEBUG, "feature_buf[%d] = %f\n",
-      indirect_array[i], feature_buf[indirect_array[i]]);
-    sorted_idxs[i] = indirect_array[i];
   }
 
   ts3[id] = sampleCoderdtsc();
-  if(gLogLevel == LOG_DEBUG){
-    std::sort(sorted_idxs, sorted_idxs + num_accesses);
-    int sorted_idx = 0;
-    for(int i=0; i<num_ents; i++){
-      // LOG_PRINT( LOG_DEBUG, "feature_buf[%d] = %f\n",
-      //   i, feature_buf[i]);
-      if (i == sorted_idxs[sorted_idx]){
-        if (feature_buf[i] != 1.0){
-          LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
-            sorted_idx, i, feature_buf[i], sorted_idxs[sorted_idx]);
-          return;
-        }
-        sorted_idx++;
-      } else if (feature_buf[i] != 0.0){
-          LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
-            sorted_idx, i, feature_buf[i], sorted_idxs[sorted_idx]);
-          return;
 
-      }
-    }
+  if(gLogLevel >= LOG_DEBUG){ /* validate code */
+    validate_feature_vec(feature_buf, indirect_array);
+  }
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void cpu_memcpy_and_compute_stamped(
+  fcontext_transfer_t arg
+){
+  timed_gpcore_request_args *args = (timed_gpcore_request_args *)arg.data;
+
+  float *feature_buf = (float *)(args->inputs[0]);
+  int *indirect_array = (int *)(args->inputs[1]);
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+
+  memset((void*) feature_buf, 0x0, input_size);
+
+  if(gLogLevel >= LOG_DEBUG){ /* validate code */
+    validate_feature_vec(feature_buf, indirect_array);
   }
 
   requests_completed ++;
