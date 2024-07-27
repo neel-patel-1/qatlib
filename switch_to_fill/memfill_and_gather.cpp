@@ -164,6 +164,38 @@ void blocking_memcpy_and_compute_stamped(
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void alloc_cpu_memcpy_and_compute_args(
+  int total_requests,
+  char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
+
+  char ***ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads =
+    (char ***)malloc(total_requests * sizeof(char **));
+
+  for(int i = 0; i < total_requests; i++){
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] =
+      (char **)malloc(2 * sizeof(char *));
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] = (char *)malloc(input_size * sizeof(char));
+    indirect_array_gen((int **)&(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1]));
+  }
+  *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads =
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
+}
+
+void free_cpu_memcpy_and_compute_args(
+  int total_requests,
+  char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads
+){
+  char ***ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads =
+    *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
+
+  for(int i = 0; i < total_requests; i++){
+    free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]);
+    free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1]);
+    free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i]);
+  }
+  free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
+}
+
 void cpu_memcpy_and_compute_stamped(
   fcontext_transfer_t arg
 ){
