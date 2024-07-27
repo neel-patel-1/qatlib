@@ -20,6 +20,10 @@ done
 
 qidx=0
 for q in "${QUERY_SIZES[@]}"; do
+    NUM_ACCESSES=10
+    floats=$(( $q / 32 ))
+    [ $floats -lt $NUM_ACCESSES ] && NUM_ACCESSES=$floats
+
     for i in "${CORES[@]}";
     do
         #iterations corresponding to current the query size
