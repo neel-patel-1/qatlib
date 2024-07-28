@@ -444,6 +444,10 @@ int main(int argc, char **argv){
         break;
       case 'o':
         no_latency = true;
+        break;
+      case 'd':
+        dev_id = atoi(optarg);
+        break;
       default:
         break;
     }

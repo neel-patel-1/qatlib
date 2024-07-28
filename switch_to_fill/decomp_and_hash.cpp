@@ -18,29 +18,48 @@ extern "C" {
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
-int main(){
-
+int main(int argc, char **argv){
 
   int wq_id = 0;
-  int dev_id = 3;
+  int dev_id = 2;
   int wq_type = SHARED;
   int rc;
   int itr = 100;
   int total_requests = 1000;
+  int opt;
+  bool no_latency = false;
+  int query_size = 64;
+
+  while((opt = getopt(argc, argv, "t:i:r:s:q:d:")) != -1){
+    switch(opt){
+      case 't':
+        total_requests = atoi(optarg);
+        break;
+      case 'i':
+        itr = atoi(optarg);
+        break;
+      case 'o':
+        no_latency = true;
+        break;
+      case 'q':
+        query_size = atoi(optarg);
+        break;
+      case 'd':
+        dev_id = atoi(optarg);
+        break;
+      default:
+        break;
+    }
+  }
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
-  // int query_sizes[] = {31, 256, 1024, 4096, 16384, 65536}; // 10 x 10000
-  // int query_sizes[] = {256 * 1024, 1024 * 1024}; // 10 x 100
-  int query_sizes[] = {31, 256, 1024, 4096, 16384, 65536,
-    256 * 1024, 1024 * 1024}; // 100 * 100
+
   std::string append_string = query;
+  while(query.size() < query_size){
+    query += append_string;
+  }
 
-
-  for (auto query_size : query_sizes){
-    LOG_PRINT(LOG_PERF, "QuerySize %d\n", query_size);
-    while(query.size() < query_size){
-      query += append_string;
-    }
+  if(! no_latency){
     run_gpcore_request_brkdown(
       cpu_decompress_and_hash_stamped,
       compressed_mc_req_allocator,
@@ -55,13 +74,8 @@ int main(){
       itr,
       total_requests
     );
-    // run_yielding_request_brkdown(
-    //   yielding_decompress_and_hash_request_stamped,
-    //   alloc_decomp_and_hash_offload_args_stamped,
-    //   free_decomp_and_hash_offload_args_stamped,
-    //   itr,
-    //   total_requests
-    // );
+  }
+
     int exetime_samples_per_run = 10;
     run_gpcore_offeredLoad(
       cpu_decompress_and_hash,
@@ -85,7 +99,7 @@ int main(){
       total_requests,
       itr
     );
-  }
+
 
   free_iaa_wq();
 }
