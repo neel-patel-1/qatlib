@@ -1,7 +1,12 @@
 #!/bin/bash
 
+source configs/phys_core.sh
+source configs/devid.sh
+
 QUERY_SIZES=( 64    256  1024 4096 16384 65536 262144 1048576 )
-CORE=20
+
+[ -z "$CORE" ] && echo "CORE is not set" && exit 1
+[ -z "$DEVID" ] && echo "DEVID is not set" && exit 1
 
 for q in ${QUERY_SIZES[@]}; do
   grep -v main memfill_and_gather_logs/core_${CORE}_querysize_${q}.log \
