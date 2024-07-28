@@ -101,7 +101,7 @@ void offload_compressed_payload_allocator(int total_requests,
   *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
 }
 
-void cpu_decomp_and_scatter(
+void cpu_decomp_and_scatter_stamped(
   fcontext_transfer_t arg
 ){
   timed_gpcore_request_args *args = (timed_gpcore_request_args *)arg.data;
@@ -135,7 +135,35 @@ void cpu_decomp_and_scatter(
   fcontext_swap(arg.prev_context, NULL);
 }
 
-void alloc_offload_decomp_and_scatter_args( /* is this scatter ?*/
+void cpu_decomp_and_scatter(
+  fcontext_transfer_t arg
+){
+  gpcore_request_args *args = (gpcore_request_args *)arg.data;
+
+  int id = args->id;
+
+  char *src1 = args->inputs[0];
+  float *dst1 = (float *)(args->inputs[1]);
+  int compressed_size = *((int *) args->inputs[2]);
+  int *indir_arr = (int *) args->inputs[3];
+
+  uLong decompressed_size = IAA_COMPRESS_MAX_DEST_SIZE;
+    /* dst is provisioned by allocator to have max dest size */
+
+  int rc = gpcore_do_decompress(dst1, src1, compressed_size, &decompressed_size);
+  if(rc != 0){
+    LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+  }
+
+  for(int i=0; i<num_accesses; i++){
+    dst1[indir_arr[i]] = 1.0;
+  }
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void alloc_offload_decomp_and_scatter_args_timed( /* is this scatter ?*/
   int total_requests,
   timed_offload_request_args *** p_off_args,
   ax_comp *comps, uint64_t *ts0,
@@ -180,11 +208,61 @@ void alloc_offload_decomp_and_scatter_args( /* is this scatter ?*/
   *p_off_args = off_args;
 }
 
-void free_offload_decomp_and_scatter_args(
+void alloc_offload_decomp_and_scatter_args(int total_requests,
+  offload_request_args *** p_off_args,
+  ax_comp *comps){
+  offload_request_args **off_args =
+    (offload_request_args **)malloc(total_requests * sizeof(offload_request_args *));
+
+  std::string payload = gen_compressible_string("/region/cluster/foo:key|#|etc");
+
+  int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
+  for(int i = 0; i < total_requests; i++){
+    off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+
+    off_args[i]->comp = &(comps[i]);
+    off_args[i]->id = i;
+
+    /* comp'd source */
+    avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
+    off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
+    gpcore_do_compress((void *) off_args[i]->src_payload,
+          (void *) payload.c_str(), payload.size(), &avail_out);
+    off_args[i]->src_size = avail_out;
+    LOG_PRINT(LOG_VERBOSE, "Compressed size: %d\n", avail_out);
+
+    /* decompressed dst */
+    off_args[i]->dst_payload = (char *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
+    off_args[i]->dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
+
+    indirect_array_gen((int **)&(off_args[i]->aux_payload)); /* use dst buf to house the indirect array*/
+
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+  }
+
+  *p_off_args = off_args;
+}
+
+void free_offload_decomp_and_scatter_args_timed(
   int total_requests,
   timed_offload_request_args *** p_off_args
 ){
   timed_offload_request_args **off_args = *p_off_args;
+  for(int i = 0; i < total_requests; i++){
+    free(off_args[i]->src_payload);
+    free(off_args[i]->dst_payload);
+    free(off_args[i]->aux_payload);
+    free(off_args[i]->desc);
+    free(off_args[i]);
+  }
+  free(off_args);
+}
+
+void free_offload_decomp_and_scatter_args(
+  int total_requests,
+  offload_request_args *** p_off_args
+){
+  offload_request_args **off_args = *p_off_args;
   for(int i = 0; i < total_requests; i++){
     free(off_args[i]->src_payload);
     free(off_args[i]->dst_payload);
@@ -250,6 +328,51 @@ void blocking_decomp_and_scatter_request_stamped(
 }
 
 
+void blocking_decomp_and_scatter_request(
+  fcontext_transfer_t arg){
+  offload_request_args *args =
+      (offload_request_args *) arg.data;
+
+    char *src = args->src_payload;
+    float *dst = (float *)(args->dst_payload);
+    int *indir_arr = (int *)(args->aux_payload);
+    int id = args->id;
+    uint64_t src_size = args->src_size;
+    uint64_t dst_size = args->dst_size;
+
+    struct hw_desc *desc = args->desc;
+    ax_comp *comp = args->comp;
+
+    prepare_iaa_decompress_desc_with_preallocated_comp(
+      desc, (uint64_t)src, (uint64_t)dst,
+      (uint64_t)comp, (uint64_t)src_size);
+    if(iaa_submit(iaa, desc) == false){
+      LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+
+      int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+      if(rc != 0){
+        LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+      }
+      comp->status = IAX_COMP_SUCCESS;
+    }
+
+    while(comp->status == IAX_COMP_NONE){
+      _mm_pause();
+    }
+    if(comp->status != IAX_COMP_SUCCESS){
+      LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
+    }
+    LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
+
+    for(int i=0; i<num_accesses; i++){
+      dst[indir_arr[i]] = 1.0;
+    }
+
+
+    requests_completed ++;
+    fcontext_swap(arg.prev_context, NULL);
+}
+
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
@@ -260,8 +383,9 @@ int main(int argc, char **argv){
   int itr = 1;
   int total_requests = 1;
   int opt;
+  bool no_latency = false;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:a:")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:a:o")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -275,6 +399,8 @@ int main(int argc, char **argv){
       case 'a':
         num_accesses = atoi(optarg);
         break;
+      case 'o':
+        no_latency = true;
       default:
         break;
     }
@@ -282,18 +408,34 @@ int main(int argc, char **argv){
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
-  run_gpcore_request_brkdown(
+  if(! no_latency ){
+    run_gpcore_request_brkdown(
+      cpu_decomp_and_scatter_stamped,
+      cpu_compressed_payload_allocator,
+      free_cpu_compressed_payloads,
+      itr, total_requests
+    );
+
+    run_blocking_offload_request_brkdown(
+      blocking_decomp_and_scatter_request_stamped,
+      alloc_offload_decomp_and_scatter_args_timed,
+      free_offload_decomp_and_scatter_args_timed,
+      itr, total_requests
+    );
+  }
+
+  run_gpcore_offeredLoad(
     cpu_decomp_and_scatter,
     cpu_compressed_payload_allocator,
     free_cpu_compressed_payloads,
     itr, total_requests
   );
 
-  run_blocking_offload_request_brkdown(
-    blocking_decomp_and_scatter_request_stamped,
+  run_blocking_offered_load(
+    blocking_decomp_and_scatter_request,
     alloc_offload_decomp_and_scatter_args,
     free_offload_decomp_and_scatter_args,
-    itr, total_requests
+    total_requests, itr
   );
 
   free_iaa_wq();
