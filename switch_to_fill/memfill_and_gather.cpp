@@ -23,7 +23,7 @@ int num_accesses = 10; /* tells number of accesses */
 
 void (*compute_on_input)(void *, int);
 
-void alloc_offload_memfill_and_gather_args( /* is this scatter ?*/
+void alloc_offload_memfill_and_gather_args_timed( /* is this scatter ?*/
   int total_requests,
   timed_offload_request_args *** p_off_args,
   ax_comp *comps, uint64_t *ts0,
@@ -49,11 +49,46 @@ void alloc_offload_memfill_and_gather_args( /* is this scatter ?*/
 
   *p_off_args = off_args;
 }
+void alloc_offload_memfill_and_gather_args( /* is this scatter ?*/
+  int total_requests,
+  offload_request_args *** p_off_args,
+  ax_comp *comps
+){
+
+  offload_request_args **off_args =
+    (offload_request_args **)malloc(total_requests * sizeof(offload_request_args *));
+  for(int i = 0; i < total_requests; i++){
+    off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));
+    off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
+    indirect_array_gen((int **)&(off_args[i]->dst_payload)); /* use dst buf to house the indirect array*/
+    off_args[i]->src_size =  input_size;
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+    off_args[i]->comp = &comps[i];
+    off_args[i]->id = i;
+  }
+
+  *p_off_args = off_args;
+}
+
 void free_offload_memfill_and_gather_args(
   int total_requests,
   timed_offload_request_args *** p_off_args
 ){
   timed_offload_request_args **off_args = *p_off_args;
+  for(int i = 0; i < total_requests; i++){
+    free(off_args[i]->src_payload);
+    free(off_args[i]->dst_payload);
+    free(off_args[i]->desc);
+    free(off_args[i]);
+  }
+  free(off_args);
+}
+
+void free_offload_memfill_and_gather_args(
+  int total_requests,
+  offload_request_args *** p_off_args
+){
+  offload_request_args **off_args = *p_off_args;
   for(int i = 0; i < total_requests; i++){
     free(off_args[i]->src_payload);
     free(off_args[i]->dst_payload);
@@ -109,6 +144,101 @@ void blocking_memcpy_and_compute_stamped(
   }
 
   ts3[id] = sampleCoderdtsc();
+
+  if(gLogLevel >= LOG_DEBUG){ /* validate code */
+    validate_scatter_array(scatter_array, indirect_array);
+  }
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void blocking_memcpy_and_compute(
+  fcontext_transfer_t arg
+){
+  offload_request_args *args = (offload_request_args *)arg.data;
+
+  float *scatter_array = (float *)(args->src_payload);
+  int *indirect_array = (int *)(args->dst_payload);
+  int id = args->id;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+  int num_ents;
+  num_ents = input_size / sizeof(float);
+
+  prepare_dsa_memfill_desc_with_preallocated_comp(
+    desc, 0x0, (uint64_t)scatter_array,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  if (!dsa_submit(dsa, desc)){
+    LOG_PRINT(LOG_ERR, "Error submitting request\n");
+    return;
+  }
+
+
+  while(comp->status == IAX_COMP_NONE)
+  {
+    _mm_pause();
+  }
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Error in offload\n");
+    return;
+  }
+
+
+  /* populate feature buf using indrecet array*/
+  for(int i = 0; i < num_accesses; i++){
+    scatter_array[indirect_array[i]] = 1.0;
+  }
+
+
+
+  if(gLogLevel >= LOG_DEBUG){ /* validate code */
+    validate_scatter_array(scatter_array, indirect_array);
+  }
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+void yielding_memcpy_and_compute(
+  fcontext_transfer_t arg
+){
+  offload_request_args *args = (offload_request_args *)arg.data;
+
+  float *scatter_array = (float *)(args->src_payload);
+  int *indirect_array = (int *)(args->dst_payload);
+  int id = args->id;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+  int num_ents;
+  num_ents = input_size / sizeof(float);
+
+  prepare_dsa_memfill_desc_with_preallocated_comp(
+    desc, 0x0, (uint64_t)scatter_array,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  if (!dsa_submit(dsa, desc)){
+    LOG_PRINT(LOG_ERR, "Error submitting request\n");
+    return;
+  } else{
+    fcontext_swap(arg.prev_context, NULL);
+  }
+
+  if(comp->status != IAX_COMP_SUCCESS){
+    LOG_PRINT(LOG_ERR, "Error in offload\n");
+    return;
+  }
+
+
+  /* populate feature buf using indrecet array*/
+  for(int i = 0; i < num_accesses; i++){
+    scatter_array[indirect_array[i]] = 1.0;
+  }
+
+
 
   if(gLogLevel >= LOG_DEBUG){ /* validate code */
     validate_scatter_array(scatter_array, indirect_array);
@@ -183,19 +313,48 @@ void cpu_memcpy_and_compute_stamped(
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void cpu_memcpy_and_compute(
+  fcontext_transfer_t arg
+){
+  gpcore_request_args *args = (gpcore_request_args *)arg.data;
+
+  float *scatter_array = (float *)(args->inputs[0]);
+  int *indirect_array = (int *)(args->inputs[1]);
+
+  int id = args->id;
+
+  int num_ents;
+  num_ents = input_size / sizeof(float);
+
+  memset((void*) scatter_array, 0x0, input_size);
+
+  for(int i = 0; i < num_accesses; i++){
+    scatter_array[indirect_array[i]] = 1.0;
+  }
+
+  if(gLogLevel >= LOG_DEBUG){ /* validate code */
+    validate_scatter_array(scatter_array, indirect_array);
+  }
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
+
+
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
-  int dev_id = 2;
+  int dev_id = 0;
   int wq_type = SHARED;
   int rc;
   int itr = 100;
   int total_requests = 1000;
+  bool no_latency = false;
   int opt;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:a:")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:a:o")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -209,6 +368,9 @@ int main(int argc, char **argv){
       case 'a':
         num_accesses = atoi(optarg);
         break;
+      case 'o':
+        no_latency = true;
+        break;
       default:
         break;
     }
@@ -216,19 +378,38 @@ int main(int argc, char **argv){
 
   initialize_dsa_wq(dev_id, wq_id, wq_type);
 
-  run_gpcore_request_brkdown(
-    cpu_memcpy_and_compute_stamped,
+  if(! no_latency ){
+    run_gpcore_request_brkdown(
+      cpu_memcpy_and_compute_stamped,
+      alloc_cpu_memcpy_and_compute_args,
+      free_cpu_memcpy_and_compute_args,
+      itr, total_requests
+    );
+
+    run_blocking_offload_request_brkdown(
+      blocking_memcpy_and_compute_stamped,
+      alloc_offload_memfill_and_gather_args_timed,
+      free_offload_memfill_and_gather_args,
+      itr, total_requests
+    );
+  }
+  run_gpcore_offeredLoad(
+    cpu_memcpy_and_compute,
     alloc_cpu_memcpy_and_compute_args,
     free_cpu_memcpy_and_compute_args,
     itr, total_requests
   );
-
-  run_blocking_offload_request_brkdown(
-    blocking_memcpy_and_compute_stamped,
+  run_blocking_offered_load(
+    blocking_memcpy_and_compute,
     alloc_offload_memfill_and_gather_args,
     free_offload_memfill_and_gather_args,
-    itr, total_requests
+    total_requests, itr
   );
-
+  run_yielding_offered_load(
+    yielding_memcpy_and_compute,
+    alloc_offload_memfill_and_gather_args,
+    free_offload_memfill_and_gather_args,
+    10, total_requests, itr
+  );
 
 }
