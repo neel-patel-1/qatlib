@@ -373,6 +373,49 @@ void blocking_decomp_and_scatter_request(
     fcontext_swap(arg.prev_context, NULL);
 }
 
+void yielding_decomp_and_scatter(
+  fcontext_transfer_t arg){
+  offload_request_args *args =
+      (offload_request_args *) arg.data;
+
+    char *src = args->src_payload;
+    float *dst = (float *)(args->dst_payload);
+    int *indir_arr = (int *)(args->aux_payload);
+    int id = args->id;
+    uint64_t src_size = args->src_size;
+    uint64_t dst_size = args->dst_size;
+
+    struct hw_desc *desc = args->desc;
+    ax_comp *comp = args->comp;
+
+    prepare_iaa_decompress_desc_with_preallocated_comp(
+      desc, (uint64_t)src, (uint64_t)dst,
+      (uint64_t)comp, (uint64_t)src_size);
+    if(iaa_submit(iaa, desc) == false){
+      LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
+
+      int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
+      if(rc != 0){
+        LOG_PRINT(LOG_ERR, "Error Decompressing\n");
+      }
+      comp->status = IAX_COMP_SUCCESS;
+    } else {
+      fcontext_swap(arg.prev_context, NULL);
+    }
+
+    if(comp->status != IAX_COMP_SUCCESS){
+      LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
+    }
+    LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
+
+    for(int i=0; i<num_accesses; i++){
+      dst[indir_arr[i]] = 1.0;
+    }
+
+    requests_completed ++;
+    fcontext_swap(arg.prev_context, NULL);
+}
+
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
@@ -436,6 +479,13 @@ int main(int argc, char **argv){
     alloc_offload_decomp_and_scatter_args,
     free_offload_decomp_and_scatter_args,
     total_requests, itr
+  );
+
+  run_yielding_offered_load(
+    yielding_decomp_and_scatter,
+    alloc_offload_decomp_and_scatter_args,
+    free_offload_decomp_and_scatter_args,
+    10, total_requests, itr
   );
 
   free_iaa_wq();
