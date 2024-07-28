@@ -11,6 +11,7 @@ typedef struct _offload_request_args{
   uint64_t src_size;
   uint64_t dst_size;
   char *dst_payload;
+  char *aux_payload; /* users - decomp_and_scatter, memfill_and_gather */
   int id;
 } offload_request_args;
 
