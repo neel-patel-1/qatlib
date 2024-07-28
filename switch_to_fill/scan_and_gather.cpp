@@ -255,9 +255,9 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
 
   /* prepare hw */
   memset(hw, 0, sizeof(struct hw_desc));
-  hw->flags = IDXD_OP_FLAG_BOF | IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR
-    | IDXD_OP_FLAG_RD_SRC2_AECS;
-  hw->flags = 65550 | IDXD_OP_FLAG_BOF;
+  hw->flags |= (IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR);
+  hw->flags |= IDXD_OP_FLAG_BOF;
+  hw->flags |= IDXD_OP_FLAG_RD_SRC2_AECS;
   hw->opcode = IAX_OPCODE_EXTRACT;
   hw->src_addr = src1;
   hw->dst_addr = dst1;
@@ -268,7 +268,7 @@ void prepare_iaa_filter_desc_with_preallocated_comp(
   hw->iax_filter_flags = 124;
   hw->src2_addr = (uint64_t)aecs;
   hw->iax_src2_xfer_size = IAA_FILTER_AECS_SIZE;
-  hw->iax_max_dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
+  hw->iax_max_dst_size = IAA_FILTER_MAX_DEST_SIZE;
 
   /* comp */
   memset((void *)comp, 0, sizeof(ax_comp));
@@ -307,18 +307,20 @@ int main(int argc, char **argv){
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
-  int input_size = 1024 * 1024;
+  int input_size = 128 * 4;
   uint32_t iaa_num_inputs = input_size / sizeof(uint32_t);
 
     /* low val*/
   uint32_t low_val = 10;
   /* high val*/
-  uint32_t high_val = low_val + (iaa_num_inputs - 1);
+  uint32_t high_val = iaa_num_inputs-1;
   uint32_t expected_size = high_val - low_val;
   uint32_t *src1 =
     (uint32_t *)aligned_alloc(ADDR_ALIGNMENT,
       iaa_num_inputs * sizeof(uint32_t));
-  uint32_t *dst1 = (uint32_t *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
+  uint32_t *dst1 =
+    (uint32_t *)aligned_alloc(ADDR_ALIGNMENT,
+      IAA_FILTER_MAX_DEST_SIZE);
   struct iaa_filter_aecs_t aecs =
   {
     .rsvd = 0,
@@ -362,7 +364,7 @@ int main(int argc, char **argv){
   prepare_iaa_filter_desc_with_preallocated_comp(
     &desc, (uint64_t)src1, (uint64_t)dst1,
     (uint64_t)comp, IAA_COMPRESS_MAX_DEST_SIZE,
-    low_val, high_val, iaa_num_inputs
+    iaa_num_inputs, low_val, high_val
   );
   iaa_submit(iaa, &desc);
   while(comp->status == IAX_COMP_NONE){
