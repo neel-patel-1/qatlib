@@ -8,7 +8,15 @@ ACCFG_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/a
 INCLUDES = -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) $(IDXD_INCLUDES)
 LIBS = -ldml $(IAA_LIBS) $(ACCFG_LIBS)
 
-all: switch_to_fill walker mlp decomp_and_hash decomp_and_hash_multi_threaded memfill_and_gather scan_and_gather
+all: switch_to_fill \
+	walker \
+	mlp \
+	decomp_and_hash \
+	decomp_and_hash_multi_threaded \
+	memfill_and_gather scan_and_gather \
+	decomp_and_scatter \
+	tests
+
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
 	$(CXX) -g -c -o $@ $^  -I./inc
 
@@ -76,13 +84,32 @@ MEMFILL_AND_GATHER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/dsa_offloads.o \
-	obj/decompress_and_hash_request.o
+	obj/decompress_and_hash_request.o \
+	obj/gather_scatter.o
 memfill_and_gather.o: memfill_and_gather.cpp
 	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
-memfill_and_gather: $(MLP_OBJS) memfill_and_gather.o
+memfill_and_gather: $(MEMFILL_AND_GATHER_OBJS) memfill_and_gather.o
 	$(CXX) -g -o $@ $^ -ldml $(LIBS)
 memfill_and_gather_clean:
 	rm -f memfill_and_gather memfill_and_gather.o
+
+DECOMP_AND_SCATTER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/context_management.o \
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/ch3_hash.o \
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/dsa_offloads.o \
+	obj/decompress_and_hash_request.o \
+	obj/gather_scatter.o \
+	obj/gather_scatter.o
+decomp_and_scatter.o: decomp_and_scatter.cpp
+	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+decomp_and_scatter: $(DECOMP_AND_SCATTER_OBJS) decomp_and_scatter.o
+	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+decomp_and_scatter_clean:
+	rm -f decomp_and_scatter decomp_and_scatter.o
 
 scan_and_gather_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
@@ -129,6 +156,7 @@ decomp_and_hash_multi_threaded: $(DECOMP_AND_HASH_OBJS) decomp_and_hash_multi_th
 	$(CXX) -g -o $@ $^ -ldml $(LIBS)
 decomp_and_hash_multi_threaded_clean:
 	rm -f decomp_and_hash_multi_threaded decomp_and_hash_multi_threaded.o
+
 
 TEST_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
