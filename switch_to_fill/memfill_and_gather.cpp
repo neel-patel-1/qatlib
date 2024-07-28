@@ -4,7 +4,7 @@
 #include "iaa_offloads.h"
 #include "ch3_hash.h"
 #include "runners.h"
-#include "gpcore_compress.h"
+#include "gather_scatter.h"
 
 extern "C" {
   #include "fcontext.h"
@@ -16,58 +16,12 @@ extern "C" {
 #include "dsa_offloads.h"
 #include "submit.hpp"
 #include <algorithm>
+#include "gather_scatter.h"
 
 int input_size = 100; /* sizes the feature buffer */
 int num_accesses = 10; /* tells number of accesses */
 
 void (*compute_on_input)(void *, int);
-
-static inline void print_sorted_array(int *sorted_idxs, int num_accesses){
-  for(int i = 0; i < num_accesses; i++){
-    LOG_PRINT(LOG_DEBUG, "sorted_idxs[%d] = %d\n", i, sorted_idxs[i]);
-  }
-}
-
-static inline void validate_feature_vec(float *feature_buf, int *indirect_array){
-  int num_ents;
-  num_ents = input_size / sizeof(float);
-  int sorted_idxs[num_accesses];
-  std::sort(indirect_array, indirect_array + num_accesses);
-  int sorted_idx = 0;
-  for(int i=0; i<num_ents; i++){
-    if (i == indirect_array[sorted_idx]){
-      if (feature_buf[i] != 1.0){
-        print_sorted_array(indirect_array, num_accesses);
-        LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
-          sorted_idx, i, feature_buf[i], indirect_array[sorted_idx]);
-        return;
-      }
-      while (indirect_array[sorted_idx] == i){
-        sorted_idx++;
-      }
-    } else if (feature_buf[i] != 0.0){
-        print_sorted_array(indirect_array, num_accesses);
-        LOG_PRINT(LOG_ERR, "Error in feature buf sidx: %d idx: %d ent: %f next_expected_one_hot %d\n",
-          sorted_idx, i, feature_buf[i], indirect_array[sorted_idx]);
-        return;
-
-    }
-  }
-}
-
-static inline void indirect_array_gen(int **p_indirect_array){
-  int num_feature_ent = input_size / sizeof(float);
-  int max_val = num_feature_ent - 1;
-  int min_val = 0;
-
-  int *indirect_array = (int *)malloc(num_accesses * sizeof(int));
-
-  for(int i=0; i<num_accesses; i++){
-    int idx = (rand() % (max_val - min_val + 1)) + min_val;
-    indirect_array[i] = (float)idx;
-  }
-  *p_indirect_array = (int *)indirect_array;
-}
 
 void alloc_offload_memfill_and_gather_args( /* is this scatter ?*/
   int total_requests,
@@ -114,7 +68,7 @@ void blocking_memcpy_and_compute_stamped(
 ){
   timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
 
-  float *feature_buf = (float *)(args->src_payload);
+  float *scatter_array = (float *)(args->src_payload);
   int *indirect_array = (int *)(args->dst_payload);
   int id = args->id;
   ax_comp *comp = args->comp;
@@ -130,7 +84,7 @@ void blocking_memcpy_and_compute_stamped(
 
   ts0[id] = sampleCoderdtsc();
   prepare_dsa_memfill_desc_with_preallocated_comp(
-    desc, 0x0, (uint64_t)feature_buf,
+    desc, 0x0, (uint64_t)scatter_array,
     (uint64_t)args->comp, (uint64_t)input_size
   );
   if (!dsa_submit(dsa, desc)){
@@ -151,13 +105,13 @@ void blocking_memcpy_and_compute_stamped(
   ts2[id] = sampleCoderdtsc();
   /* populate feature buf using indrecet array*/
   for(int i = 0; i < num_accesses; i++){
-    feature_buf[indirect_array[i]] = 1.0;
+    scatter_array[indirect_array[i]] = 1.0;
   }
 
   ts3[id] = sampleCoderdtsc();
 
   if(gLogLevel >= LOG_DEBUG){ /* validate code */
-    validate_feature_vec(feature_buf, indirect_array);
+    validate_scatter_array(scatter_array, indirect_array);
   }
 
   requests_completed ++;
@@ -201,7 +155,7 @@ void cpu_memcpy_and_compute_stamped(
 ){
   timed_gpcore_request_args *args = (timed_gpcore_request_args *)arg.data;
 
-  float *feature_buf = (float *)(args->inputs[0]);
+  float *scatter_array = (float *)(args->inputs[0]);
   int *indirect_array = (int *)(args->inputs[1]);
 
   int id = args->id;
@@ -213,16 +167,16 @@ void cpu_memcpy_and_compute_stamped(
   num_ents = input_size / sizeof(float);
 
   ts0[id] = sampleCoderdtsc();
-  memset((void*) feature_buf, 0x0, input_size);
+  memset((void*) scatter_array, 0x0, input_size);
 
   ts1[id] = sampleCoderdtsc();
   for(int i = 0; i < num_accesses; i++){
-    feature_buf[indirect_array[i]] = 1.0;
+    scatter_array[indirect_array[i]] = 1.0;
   }
 
   ts2[id] = sampleCoderdtsc();
   if(gLogLevel >= LOG_DEBUG){ /* validate code */
-    validate_feature_vec(feature_buf, indirect_array);
+    validate_scatter_array(scatter_array, indirect_array);
   }
 
   requests_completed ++;
