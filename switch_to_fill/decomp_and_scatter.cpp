@@ -201,7 +201,7 @@ void blocking_decomp_and_scatter_request_stamped(
       (timed_offload_request_args *) arg.data;
 
     char *src = args->src_payload;
-    char *dst = (char *)(args->dst_payload);
+    float *dst = (float *)(args->dst_payload);
     int *indir_arr = (int *)(args->aux_payload);
     int id = args->id;
     uint64_t *ts0 = args->ts0;
@@ -216,7 +216,6 @@ void blocking_decomp_and_scatter_request_stamped(
 
     ts0[id] = sampleCoderdtsc();
 
-    LOG_PRINT(LOG_VERBOSE, "Decompressing: %d\n", src_size);
     prepare_iaa_decompress_desc_with_preallocated_comp(
       desc, (uint64_t)src, (uint64_t)dst,
       (uint64_t)comp, (uint64_t)src_size);
@@ -240,6 +239,9 @@ void blocking_decomp_and_scatter_request_stamped(
     LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
 
     ts2[id] = sampleCoderdtsc();
+    for(int i=0; i<num_accesses; i++){
+      dst[indir_arr[i]] = 1.0;
+    }
 
     ts3[id] = sampleCoderdtsc();
 
@@ -248,7 +250,7 @@ void blocking_decomp_and_scatter_request_stamped(
 }
 
 
-int gLogLevel = LOG_VERBOSE;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
@@ -280,12 +282,12 @@ int main(int argc, char **argv){
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
-  // run_gpcore_request_brkdown(
-  //   cpu_decomp_and_scatter,
-  //   cpu_compressed_payload_allocator,
-  //   free_cpu_compressed_payloads,
-  //   itr, total_requests
-  // );
+  run_gpcore_request_brkdown(
+    cpu_decomp_and_scatter,
+    cpu_compressed_payload_allocator,
+    free_cpu_compressed_payloads,
+    itr, total_requests
+  );
 
   run_blocking_offload_request_brkdown(
     blocking_decomp_and_scatter_request_stamped,
