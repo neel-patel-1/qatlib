@@ -20,8 +20,9 @@ typedef struct _timed_offload_request_args{
   struct hw_desc *desc;
   char *src_payload;
   uint64_t src_size;
-  char *dst_payload;
   uint64_t dst_size;
+  char *dst_payload;
+  char *aux_payload; /* users - decomp_and_scatter, memfill_and_gather */
   int id;
   uint64_t *ts0;
   uint64_t *ts1;
