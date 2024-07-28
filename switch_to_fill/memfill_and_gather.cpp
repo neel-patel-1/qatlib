@@ -354,7 +354,7 @@ int main(int argc, char **argv){
   bool no_latency = false;
   int opt;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:a:o")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:a:od:")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -370,6 +370,9 @@ int main(int argc, char **argv){
         break;
       case 'o':
         no_latency = true;
+        break;
+      case 'd':
+        dev_id = atoi(optarg);
         break;
       default:
         break;
