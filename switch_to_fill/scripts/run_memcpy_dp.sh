@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # sudo python3 scripts/accel_conf.py --load=configs/iaa-1n1d8e1w128q-s-n2.conf
+source configs/phys_core.sh
 
 QUERY_SIZES=( 64    256  1024 4096 16384 65536 262144 1048576 )
-ITERATIONS=(  100   100  100  100  100   10    10     10  )
-REQUESTS=(    10000 1000 1000 1000 1000  100   100    100 )
+ITERATIONS=(  10   10  10  10  10   10    10     10  )
+REQUESTS=(    100 100 100 100 100  100   100    100 )
 
-CORES=( 20 )
+[ -z "$CORE" ] && echo "CORE is not set" && exit 1
 
 # Initialize memcpy_dp_logs
 mkdir -p memcpy_dp_logs

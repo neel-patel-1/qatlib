@@ -2,11 +2,11 @@
 
 # sudo python3 scripts/accel_conf.py --load=configs/iaa-1n1d8e1w128q-s-n2.conf
 
-QUERY_SIZES=( 64    256  1024 4096 16384 65536 262144 1048576 )
-ITERATIONS=(  100   100  100  100  100   10    10     10  )
-REQUESTS=(    10000 1000 1000 1000 1000  100   100    100 )
+QUERY_SIZES=( 256  64  1024 4096 16384 65536 262144 1048576 )
+ITERATIONS=(  10   10  10  10  10   10    10     10  )
+REQUESTS=(    100 100 100 100 100  10   10    10 )
 
-CORES=( 20 )
+CORES=( 1 )
 NUM_ACCESSES=10
 
 # Initialize decomp_and_scatter_logs
@@ -26,7 +26,7 @@ for q in "${QUERY_SIZES[@]}"; do
     do
         #iterations corresponding to current the query size
         iters=${ITERATIONS[$j]}
-        taskset -c $i sudo ./memfill_and_gather \
+        taskset -c $i sudo ./decomp_and_scatter \
             -q $q \
             -a $NUM_ACCESSES \
             -t ${REQUESTS[$qidx]} \

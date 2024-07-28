@@ -354,11 +354,12 @@ int main(int argc, char **argv){
   int itr = 100;
   int total_requests = 1000;
   int opt;
+  bool no_latency = false;
 
   input_populate = input_gen_dp;
   compute_on_input = dot_product;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:d:")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -369,6 +370,12 @@ int main(int argc, char **argv){
       case 'q':
         input_size = atoi(optarg);
         break;
+      case 'o':
+        no_latency = true;
+        break;
+      case 'd':
+        dev_id = atoi(optarg);
+        break;
       default:
         break;
     }
@@ -377,56 +384,50 @@ int main(int argc, char **argv){
   initialize_dsa_wq(dev_id, wq_id, wq_type);
 
   LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
-  run_gpcore_request_brkdown(
-    cpu_memcpy_and_compute_stamped,
-    alloc_cpu_memcpy_and_compute_args,
-    free_cpu_memcpy_and_compute_args,
-    itr,
-    total_requests
-  );
-  run_blocking_offload_request_brkdown(
-    blocking_memcpy_and_compute_stamped,
-    alloc_offload_memcpy_and_compute_args,
-    free_offload_memcpy_and_compute_args,
-    itr,
-    total_requests
-  );
+  if(!no_latency){
+    run_gpcore_request_brkdown(
+      cpu_memcpy_and_compute_stamped,
+      alloc_cpu_memcpy_and_compute_args,
+      free_cpu_memcpy_and_compute_args,
+      itr,
+      total_requests
+    );
+    run_blocking_offload_request_brkdown(
+      blocking_memcpy_and_compute_stamped,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      itr,
+      total_requests
+    );
+  }
 
-  // run_yielding_request_brkdown(
-  //   yielding_memcpy_and_compute_stamped,
-  //   alloc_offload_memcpy_and_compute_args,
-  //   free_offload_memcpy_and_compute_args,
-  //   itr,
-  //   total_requests
-  // );
-  /* some vars needed for yield*/
   int num_exe_time_samples_per_run = 10; /* 10 samples per iter*/
 
- run_gpcore_offeredLoad(
-    cpu_memcpy_and_compute,
-    alloc_cpu_memcpy_and_compute_args,
-    free_cpu_memcpy_and_compute_args,
-    itr,
-    total_requests
-  );
+  run_gpcore_offeredLoad(
+      cpu_memcpy_and_compute,
+      alloc_cpu_memcpy_and_compute_args,
+      free_cpu_memcpy_and_compute_args,
+      itr,
+      total_requests
+    );
 
 
- run_blocking_offered_load(
-  blocking_memcpy_and_compute,
-  alloc_offload_memcpy_and_compute_args,
-  free_offload_memcpy_and_compute_args,
-  total_requests,
-  itr
- );
-
- run_yielding_offered_load(
-  yielding_memcpy_and_compute,
+  run_blocking_offered_load(
+    blocking_memcpy_and_compute,
     alloc_offload_memcpy_and_compute_args,
     free_offload_memcpy_and_compute_args,
-    num_exe_time_samples_per_run,
     total_requests,
     itr
- );
+  );
+
+  run_yielding_offered_load(
+    yielding_memcpy_and_compute,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      num_exe_time_samples_per_run,
+      total_requests,
+      itr
+  );
 
   free_dsa_wq();
   return 0;

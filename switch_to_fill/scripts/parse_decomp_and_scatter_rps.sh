@@ -1,7 +1,9 @@
 #!/bin/bash
 
+source configs/phys_core.sh
+
 QUERY_SIZES=( 64    256  1024 4096 16384 65536 262144 1048576 )
-CORE=20
+[ -z "$CORE" ] && echo "CORE is not set" && exit 1
 for i in ${QUERY_SIZES[@]}; do
     gp_rps=$(grep GPCore decomp_and_scatter_logs/core_${CORE}_querysize_${i}.log | \
       awk '{sum+=$5} END{print sum}' )
