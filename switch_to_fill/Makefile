@@ -8,6 +8,8 @@ ACCFG_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/a
 INCLUDES = -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) $(IDXD_INCLUDES)
 LIBS = -ldml $(IAA_LIBS) $(ACCFG_LIBS)
 
+FLAGS = -O2
+
 all: switch_to_fill \
 	walker \
 	mlp \
@@ -18,37 +20,37 @@ all: switch_to_fill \
 	tests
 
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
-	$(CXX) -g -c -o $@ $^  -I./inc
+	$(CXX) $(FLAGS) -c -o $@ $^  -I./inc
 
 obj/make_x86_64_sysv_elf_gas.o: src/make_x86_64_sysv_elf_gas.S
-	$(CXX) -g -c -o $@ $^  -I./inc
+	$(CXX) $(FLAGS) -c -o $@ $^  -I./inc
 
 obj/ontop_x86_64_sysv_elf_gas.o: src/ontop_x86_64_sysv_elf_gas.S
-	$(CXX) -g -c -o $@ $^  -I./inc
+	$(CXX) $(FLAGS) -c -o $@ $^  -I./inc
 
 obj/context_fast.o: src/context_fast.S
-	$(CXX) -g -c -o $@ $^  -I./inc
+	$(CXX) $(FLAGS) -c -o $@ $^  -I./inc
 
 router.pb.o: src/router.pb.cc
-	$(CXX) -g -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
+	$(CXX) $(FLAGS) -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
 
 obj/%.o: src/%.cpp
-	$(CXX) -g -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf` -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf` -fpermissive
 
 switch_to_fill.o: switch_to_fill.cpp
-	$(CXX) -g -c -o $@ $^  $(INCLUDES)
+	$(CXX) $(FLAGS) -c -o $@ $^  $(INCLUDES)
 SWITCH_TO_FILL_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o router.pb.o \
 	obj/emul_ax.o obj/thread_utils.o  obj/offload.o obj/router_requests.o \
 	obj/ch3_hash.o obj/request_executors.o obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o
 switch_to_fill: $(SWITCH_TO_FILL_OBJS) switch_to_fill.o router.pb.o
-	$(CXX) -g $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf` \
+	$(CXX) $(FLAGS) $(FCONTEXT_OBJ) -o $@ $^ `pkg-config --cflags --libs protobuf` \
 	-ldml
 
 
 walker.o: walker.cpp
-	$(CXX) -g -c -o $@ $^  -I./inc $(INCLUDES)
+	$(CXX) $(FLAGS) -c -o $@ $^  -I./inc $(INCLUDES)
 WALKER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
 	obj/walker_requests.o obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
@@ -56,7 +58,7 @@ WALKER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/request_executors.o obj/runners.o
 walker: $(WALKER_OBJS) walker.o
-	$(CXX) -g -o $@ $^ -ldml
+	$(CXX) $(FLAGS) -o $@ $^ -ldml
 
 
 
@@ -70,9 +72,9 @@ MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/dsa_offloads.o \
 	obj/decompress_and_hash_request.o
 mlp.o: mlp.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 mlp: $(MLP_OBJS) mlp.o
-	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 mlp_clean:
 	rm -f mlp mlp.o
 
@@ -87,9 +89,9 @@ MEMFILL_AND_GATHER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/decompress_and_hash_request.o \
 	obj/gather_scatter.o
 memfill_and_gather.o: memfill_and_gather.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 memfill_and_gather: $(MEMFILL_AND_GATHER_OBJS) memfill_and_gather.o
-	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 memfill_and_gather_clean:
 	rm -f memfill_and_gather memfill_and_gather.o
 
@@ -105,9 +107,9 @@ DECOMP_AND_SCATTER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/gather_scatter.o \
 	obj/gather_scatter.o
 decomp_and_scatter.o: decomp_and_scatter.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 decomp_and_scatter: $(DECOMP_AND_SCATTER_OBJS) decomp_and_scatter.o
-	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_scatter_clean:
 	rm -f decomp_and_scatter decomp_and_scatter.o
 
@@ -121,9 +123,9 @@ scan_and_gather_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_g
 	obj/dsa_offloads.o \
 	obj/decompress_and_hash_request.o
 scan_and_gather.o: scan_and_gather.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 scan_and_gather: $(MLP_OBJS) scan_and_gather.o
-	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 scan_and_gather_clean:
 	rm -f scan_and_gather scan_and_gather.o
 
@@ -136,9 +138,9 @@ DECOMP_AND_HASH_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_g
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/decompress_and_hash_request.o
 decomp_and_hash.o: decomp_and_hash.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 decomp_and_hash: $(DECOMP_AND_HASH_OBJS) decomp_and_hash.o
-	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_hash_clean:
 	rm -f decomp_and_hash decomp_and_hash.o
 
@@ -151,9 +153,9 @@ DECOMP_AND_HASH_MT_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/decompress_and_hash_request.o
 decomp_and_hash_multi_threaded.o: decomp_and_hash_multi_threaded.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 decomp_and_hash_multi_threaded: $(DECOMP_AND_HASH_OBJS) decomp_and_hash_multi_threaded.o
-	$(CXX) -g -o $@ $^ -ldml $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_hash_multi_threaded_clean:
 	rm -f decomp_and_hash_multi_threaded decomp_and_hash_multi_threaded.o
 
@@ -168,9 +170,9 @@ TEST_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/decompress_and_hash_request.o
 tests: tests/iaa_compress_and_decompress_verify
 tests/iaa_compress_and_decompress_verify.o: tests/iaa_compress_and_decompress_verify.cpp
-	$(CXX) -g -c -o $@ $^ $(INCLUDES) -fpermissive
+	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 tests/iaa_compress_and_decompress_verify: tests/iaa_compress_and_decompress_verify.o $(TEST_OBJS)
-	$(CXX) -g -o $@ $^ $(LIBS)
+	$(CXX) $(FLAGS) -o $@ $^ $(LIBS)
 
 clean:
 	rm -f obj/*.o switch_to_fill switch_to_fill.o \

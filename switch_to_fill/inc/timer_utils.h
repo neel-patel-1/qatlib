@@ -10,7 +10,8 @@ static inline uint64_t sampleCoderdtsc(void)
 {
     volatile unsigned long a, d;
 
-    asm volatile("rdtsc" : "=a"(a), "=d"(d));
+    asm volatile("lfence;rdtsc" : "=a"(a), "=d"(d));
+    asm volatile("lfence;");
     return (((uint64_t)a) | (((uint64_t)d) << UPPER_HALF_OF_REGISTER));
 }
 
