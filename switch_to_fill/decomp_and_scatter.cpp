@@ -252,7 +252,7 @@ int gLogLevel = LOG_VERBOSE;
 bool gDebugParam = false;
 int main(int argc, char **argv){
   int wq_id = 0;
-  int dev_id = 2;
+  int dev_id = 3;
   int wq_type = SHARED;
   int rc;
   int itr = 1;
