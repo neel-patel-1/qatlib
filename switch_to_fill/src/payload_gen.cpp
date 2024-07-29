@@ -6,3 +6,9 @@ std::string gen_compressible_string(std::string payload, int input_size){
   }
   return payload;
 }
+void gen_compressible_string_in_place(std::string &payload, int input_size){
+  std::string append_string = payload;
+  while(payload.size() < input_size){
+    payload += append_string;
+  }
+}

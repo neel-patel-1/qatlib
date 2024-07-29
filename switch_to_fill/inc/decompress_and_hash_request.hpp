@@ -15,7 +15,7 @@ extern "C" {
 #include "payload_gen.h"
 
 extern int input_size; /* defined in decomp_and_hash.cpp*/
-
+extern std::string query;
 
 void compressed_mc_req_free(int total_requests, char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
 void compressed_mc_req_allocator(int total_requests,

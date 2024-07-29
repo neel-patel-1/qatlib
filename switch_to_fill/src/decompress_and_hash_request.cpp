@@ -2,6 +2,8 @@
 
 #include "print_utils.h"
 
+std::string query = "/region/cluster/foo:key|#|etc";
+
 void cpu_decompress_and_hash_stamped(fcontext_transfer_t arg){
   timed_gpcore_request_args* args = (timed_gpcore_request_args *)arg.data;
 
@@ -89,7 +91,12 @@ void alloc_decomp_and_hash_offload_args_stamped(int total_requests,
     (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE; /* using 4MB allocator */
-  std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  // std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  // gen_compressible_string_in_place(query, input_size);
+  std::string append_string = query;
+  while(query.size() < input_size){
+    query += append_string;
+  }
   for(int i=0; i<total_requests; i++){
     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
     off_args[i]->comp = &(comps[i]);

@@ -189,8 +189,9 @@ void alloc_offload_decomp_and_scatter_args(int total_requests,
   offload_request_args **off_args =
     (offload_request_args **)malloc(total_requests * sizeof(offload_request_args *));
 
-  std::string payload =
-    gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  // std::string payload = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  std::string payload = "/region/cluster/foo:key|#|etc";
+  gen_compressible_string_in_place(payload, input_size);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
   for(int i = 0; i < total_requests; i++){
