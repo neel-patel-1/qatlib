@@ -1,4 +1,5 @@
 #include "memcpy_dp_request.h"
+#include "wait.h"
 
 void free_cpu_memcpy_and_compute_args(int total_requests,
   char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
@@ -103,10 +104,7 @@ void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
     return;
   }
   ts1[id] = sampleCoderdtsc();
-  while(comp->status == IAX_COMP_NONE)
-  {
-    _mm_pause();
-  }
+  spin_on(comp);
 
   ts2[id] = sampleCoderdtsc();
   compute_on_input(dst, input_size);
