@@ -1,6 +1,7 @@
 #include "decompress_and_hash_request.hpp"
 
 #include "print_utils.h"
+#include "wait.h"
 
 std::string query = "/region/cluster/foo:key|#|etc";
 
@@ -260,9 +261,7 @@ void blocking_decompress_and_hash_request_stamped(
   blocking_iaa_submit(iaa, desc);
 
   ts1[id] = sampleCoderdtsc();
-  while(comp->status == IAX_COMP_NONE){
-    _mm_pause();
-  }
+  spin_on(comp);
   if(comp->status != IAX_COMP_SUCCESS){
     LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
   }

@@ -19,7 +19,7 @@ extern "C" {
 void hash_interleaved(fcontext_transfer_t arg);
 void antagonist_interleaved(fcontext_transfer_t arg);
 
-int gLogLevel = LOG_VERBOSE;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 
 int input_size = 16384;

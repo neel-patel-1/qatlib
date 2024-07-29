@@ -166,7 +166,6 @@ void hash_interleaved(fcontext_transfer_t arg){
   ax_comp *p_sig = (ax_comp *)arg.data;
   fcontext_transfer_t parent_pointer;
   while(1){
-    _mm_pause();
     probe_point(p_sig, arg.prev_context);
   }
   LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
