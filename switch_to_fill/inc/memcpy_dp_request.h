@@ -12,6 +12,7 @@ extern "C" {
 
 #include "dsa_offloads.h"
 
+/* from mlp.cpp */
 extern int input_size;
 extern void (*input_populate)(char **);
 extern void (*compute_on_input)(void *, int);

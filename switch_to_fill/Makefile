@@ -73,7 +73,8 @@ MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
-	obj/dsa_offloads.o
+	obj/dsa_offloads.o \
+	obj/memcpy_dp_request.o
 mlp.o: mlp.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 mlp: $(MLP_OBJS) mlp.o
@@ -127,7 +128,7 @@ scan_and_gather_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_g
 	obj/decompress_and_hash_request.o
 scan_and_gather.o: scan_and_gather.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
-scan_and_gather: $(MLP_OBJS) scan_and_gather.o
+scan_and_gather: $(scan_and_gather_OBJS) scan_and_gather.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -ldml $(LIBS)
 scan_and_gather_clean:
 	rm -f scan_and_gather scan_and_gather.o

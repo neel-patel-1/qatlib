@@ -17,6 +17,8 @@ extern "C" {
 #include "dsa_offloads.h"
 #include "submit.hpp"
 #include "memcpy_dp_request.h"
+#include "filler_dp.h"
+#include "filler_antagonist.h"
 
 int input_size = 16384;
 
@@ -24,6 +26,7 @@ void (*input_populate)(char **);
 void (*compute_on_input)(void *, int);
 
 float *item_buf;
+float *user_filler_buf;
 
 static inline void input_gen_dp(char **p_buf){
   char *buf = (char *)malloc(input_size);
@@ -105,6 +108,25 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
+    run_yielding_interleaved_request_brkdown(
+      yielding_memcpy_and_compute_stamped,
+      dotproduct_interleaved,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      itr,
+      total_requests
+    );
+    run_yielding_interleaved_request_brkdown(
+      yielding_memcpy_and_compute_stamped,
+      antagonist_interleaved,
+      alloc_offload_memcpy_and_compute_args,
+      free_offload_memcpy_and_compute_args,
+      itr,
+      total_requests
+    );
+
+    input_populate((char **)&user_filler_buf); /* populate a buffer for the filler to use for its dp */
+
   }
 
   int num_exe_time_samples_per_run = 10; /* 10 samples per iter*/
