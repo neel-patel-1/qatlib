@@ -53,7 +53,7 @@ void compressed_mc_req_allocator(int total_requests,
 
   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
 
-  std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  // std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
   int num_inputs_per_request = 3;
@@ -91,12 +91,7 @@ void alloc_decomp_and_hash_offload_args_stamped(int total_requests,
     (timed_offload_request_args **)malloc(sizeof(timed_offload_request_args *) * total_requests);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE; /* using 4MB allocator */
-  // std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
-  // gen_compressible_string_in_place(query, input_size);
-  std::string append_string = query;
-  while(query.size() < input_size){
-    query += append_string;
-  }
+
   for(int i=0; i<total_requests; i++){
     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
     off_args[i]->comp = &(comps[i]);
@@ -138,7 +133,7 @@ void alloc_decomp_and_hash_offload_args(int total_requests,
     (offload_request_args **)malloc(sizeof(offload_request_args *) * total_requests);
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE; /* using 4MB allocator */
-  std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  // std::string query = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
 
   for(int i=0; i<total_requests; i++){
     off_args[i] = (offload_request_args *)malloc(sizeof(offload_request_args));

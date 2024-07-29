@@ -186,7 +186,7 @@ void execute_yielding_requests_interleaved(
       /* exec probed kernel */
       if( interleaved_not_started)
       {
-        fcontext_swap(interleaved_state->context, &(comps[requests_completed]));
+        interleaved_xfer = fcontext_swap(interleaved_state->context, &(comps[requests_completed]));
         interleaved_not_started = false;
       } else {
         interleaved_xfer =
