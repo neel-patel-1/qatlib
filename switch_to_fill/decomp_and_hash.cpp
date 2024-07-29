@@ -14,20 +14,8 @@ extern "C" {
   #include <zlib.h>
 }
 #include "decompress_and_hash_request.hpp"
-
-
-void dummy_interleaved(fcontext_transfer_t arg){
-  ax_comp *comp = (ax_comp *)arg.data;
-  while(1){
-    _mm_pause();
-    if(comp->status == COMP_STATUS_COMPLETED){
-      fcontext_transfer_t parent_resume =
-        fcontext_swap( arg.prev_context, NULL);
-      comp = (ax_comp *)parent_resume.data;
-    }
-  }
-  LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
-}
+#include "filler_hash.h"
+void hash_interleaved(fcontext_transfer_t arg);
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
@@ -97,7 +85,7 @@ int main(int argc, char **argv){
     );
     run_yielding_interleaved_request_brkdown(
       yielding_decompress_and_hash_request_stamped,
-      dummy_interleaved,
+      hash_interleaved,
       alloc_decomp_and_hash_offload_args_stamped,
       free_decomp_and_hash_offload_args_stamped,
       itr,

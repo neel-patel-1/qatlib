@@ -71,6 +71,17 @@ void run_yielding_best_case_request_brkdown(
   void (* offload_args_free)(int, timed_offload_request_args***),
   int iter, int total_requests
 );
+void run_yielding_interleaved_request_brkdown(
+  fcontext_fn_t req_fn,
+  fcontext_fn_t inter_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int iter, int total_requests
+);
 
 
 #endif
