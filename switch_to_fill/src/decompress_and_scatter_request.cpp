@@ -126,6 +126,7 @@ void blocking_decomp_and_scatter_request_stamped(
     float *dst = (float *)(args->dst_payload);
     int *indir_arr = (int *)(args->aux_payload);
     int id = args->id;
+    uint64_t pre_submit, pre_wait, pre_scatter, post_scatter;
     uint64_t *ts0 = args->ts0;
     uint64_t *ts1 = args->ts1;
     uint64_t *ts2 = args->ts2;
@@ -136,14 +137,14 @@ void blocking_decomp_and_scatter_request_stamped(
     struct hw_desc *desc = args->desc;
     ax_comp *comp = args->comp;
 
-    ts0[id] = sampleCoderdtsc();
+    pre_submit = sampleCoderdtsc();
 
     prepare_iaa_decompress_desc_with_preallocated_comp(
       desc, (uint64_t)src, (uint64_t)dst,
       (uint64_t)comp, (uint64_t)src_size);
     blocking_iaa_submit(iaa, desc);
 
-    ts1[id] = sampleCoderdtsc();
+    pre_wait = sampleCoderdtsc();
     while(comp->status == IAX_COMP_NONE){
       _mm_pause();
     }
@@ -152,14 +153,18 @@ void blocking_decomp_and_scatter_request_stamped(
     }
     LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
 
-    ts2[id] = sampleCoderdtsc();
+    pre_scatter = sampleCoderdtsc();
     for(int i=0; i<num_accesses; i++){
       dst[indir_arr[i]] = 1.0;
     }
 
-    ts3[id] = sampleCoderdtsc();
+    post_scatter = sampleCoderdtsc();
 
     requests_completed ++;
+    ts0[id] = pre_submit;
+    ts1[id] = pre_wait;
+    ts2[id] = pre_scatter;
+    ts3[id] = post_scatter;
     fcontext_swap(arg.prev_context, NULL);
 }
 
