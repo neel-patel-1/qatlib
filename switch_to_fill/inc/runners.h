@@ -61,5 +61,16 @@ void run_yielding_offered_load(
   void (* offload_args_free)(int, offload_request_args***),
   int num_exe_time_samples_per_run,
   int total_requests, int iter);
+void run_yielding_best_case_request_brkdown(
+  fcontext_fn_t req_fn,
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int iter, int total_requests
+);
+
 
 #endif

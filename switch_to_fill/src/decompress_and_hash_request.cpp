@@ -215,7 +215,7 @@ void yielding_decompress_and_hash_request_stamped(
   ts1[id] = sampleCoderdtsc();
   fcontext_swap(arg.prev_context, NULL);
   if(comp->status != IAX_COMP_SUCCESS){
-    LOG_PRINT(LOG_ERR, "Decompress failed: %d\n", comp->status);
+    LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
   }
   LOG_PRINT(LOG_VERBOSE, "Decompressed size: %d\n", comp->iax_output_size);
 

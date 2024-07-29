@@ -122,6 +122,46 @@ void execute_yielding_requests_closed_system_request_breakdown(
   LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
 }
 
+void execute_yielding_requests_best_case(
+  int total_requests,
+  ax_comp *comps, timed_offload_request_args **off_args,
+  fcontext_transfer_t *offload_req_xfer,
+  fcontext_state_t **off_req_state,
+  fcontext_state_t *self,
+  uint64_t *off_times, uint64_t *yield_to_resume_times, uint64_t *hash_times, int idx)
+{
+
+  /*
+  while(reqs < total)
+  xfer = start_yielding_req
+  wait_for_yielding_reqs_comp
+  resume_yielding_req(xfer)
+  */
+  while(requests_completed < total_requests){
+    offload_req_xfer[requests_completed] =
+        fcontext_swap(off_req_state[requests_completed]->context, off_args[requests_completed]);
+    while(comps[requests_completed].status != COMP_STATUS_COMPLETED){
+      _mm_pause();
+    }
+    fcontext_swap(offload_req_xfer[requests_completed].prev_context, NULL);
+  }
+
+  /* get the time stamps from one of the requests */
+  uint64_t *ts0 = off_args[0]->ts0;
+  uint64_t *ts1 = off_args[0]->ts1;
+  uint64_t *ts2 = off_args[0]->ts2;
+  uint64_t *ts3 = off_args[0]->ts3;
+  uint64_t diff[total_requests];
+  avg_samples_from_arrays(diff, off_times[idx], ts1, ts0, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Offload time: %lu\n", off_times[idx]);
+  avg_samples_from_arrays(diff, yield_to_resume_times[idx], ts2, ts1, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "YieldToResumeDelay: %lu\n", yield_to_resume_times[idx]);
+  avg_samples_from_arrays(diff, hash_times[idx], ts3, ts2, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
+}
+
+
+
 void execute_blocking_requests_closed_system_with_sampling(
   int requests_sampling_interval, int total_requests,
   uint64_t *sampling_interval_completion_times, int sampling_interval_timestamps,
