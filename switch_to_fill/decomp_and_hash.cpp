@@ -18,8 +18,13 @@ extern "C" {
 
 void dummy_interleaved(fcontext_transfer_t arg){
   ax_comp *comp = (ax_comp *)arg.data;
-  while(comp->status != COMP_STATUS_COMPLETED){
+  while(1){
     _mm_pause();
+    if(comp->status == COMP_STATUS_COMPLETED){
+      fcontext_transfer_t parent_resume =
+        fcontext_swap( arg.prev_context, NULL);
+      comp = (ax_comp *)parent_resume.data;
+    }
   }
   LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
 }
