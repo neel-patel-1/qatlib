@@ -210,15 +210,7 @@ void yielding_decompress_and_hash_request_stamped(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if (iaa_submit(iaa, desc) == false){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
-
-    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
-    if(rc != 0){
-      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
-    }
-    comp->status = IAX_COMP_SUCCESS;
-  }
+  blocking_iaa_submit(iaa, desc);
 
   ts1[id] = sampleCoderdtsc();
   fcontext_swap(arg.prev_context, NULL);
@@ -262,15 +254,7 @@ void blocking_decompress_and_hash_request_stamped(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if(iaa_submit(iaa, desc) == false){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
-
-    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
-    if(rc != 0){
-      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
-    }
-    comp->status = IAX_COMP_SUCCESS;
-  }
+  blocking_iaa_submit(iaa, desc);
 
   ts1[id] = sampleCoderdtsc();
   while(comp->status == IAX_COMP_NONE){
@@ -312,14 +296,7 @@ void blocking_decompress_and_hash_request(
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if(iaa_submit(iaa, desc) == false){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
-    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
-    if(rc != 0){
-      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
-    }
-    comp->status = IAX_COMP_SUCCESS;
-  }
+  blocking_iaa_submit(iaa, desc);
 
   while(comp->status == IAX_COMP_NONE){
     _mm_pause();
@@ -381,14 +358,7 @@ void yielding_decompress_and_hash_request(fcontext_transfer_t arg){
   prepare_iaa_decompress_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)comp, (uint64_t)src_size);
-  if (iaa_submit(iaa, desc) == false){
-    LOG_PRINT(LOG_VERBOSE, "SoftwareFallback\n");
-    int rc = gpcore_do_decompress((void *)dst, (void *)src, src_size, &dst_size);
-    if(rc != 0){
-      LOG_PRINT(LOG_ERR, "Error Decompressing\n");
-    }
-    comp->status = IAX_COMP_SUCCESS;
-  }
+  blocking_iaa_submit(iaa, desc);
 
   fcontext_swap(arg.prev_context, NULL);
   if(comp->status != IAX_COMP_SUCCESS){
