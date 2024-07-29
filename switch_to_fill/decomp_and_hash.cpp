@@ -15,7 +15,9 @@ extern "C" {
 }
 #include "decompress_and_hash_request.hpp"
 #include "filler_hash.h"
+#include "filler_antagonist.h"
 void hash_interleaved(fcontext_transfer_t arg);
+void antagonist_interleaved(fcontext_transfer_t arg);
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
@@ -76,13 +78,6 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
-    run_yielding_best_case_request_brkdown(
-      yielding_decompress_and_hash_request_stamped,
-      alloc_decomp_and_hash_offload_args_stamped,
-      free_decomp_and_hash_offload_args_stamped,
-      itr,
-      total_requests
-    );
     run_yielding_interleaved_request_brkdown(
       yielding_decompress_and_hash_request_stamped,
       hash_interleaved,
@@ -91,7 +86,14 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
-
+    run_yielding_interleaved_request_brkdown(
+      yielding_decompress_and_hash_request_stamped,
+      antagonist_interleaved,
+      alloc_decomp_and_hash_offload_args_stamped,
+      free_decomp_and_hash_offload_args_stamped,
+      itr,
+      total_requests
+    );
   }
 
     int exetime_samples_per_run = 10;
