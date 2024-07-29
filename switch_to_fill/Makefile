@@ -105,7 +105,9 @@ DECOMP_AND_SCATTER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/dsa_offloads.o \
 	obj/decompress_and_hash_request.o \
 	obj/gather_scatter.o \
-	obj/gather_scatter.o
+	obj/gather_scatter.o \
+	obj/payload_gen.o \
+	obj/decompress_and_scatter_request.o
 decomp_and_scatter.o: decomp_and_scatter.cpp
 	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 decomp_and_scatter: $(DECOMP_AND_SCATTER_OBJS) decomp_and_scatter.o
