@@ -107,5 +107,17 @@ void yielding_best_case_request_breakdown(
   int total_requests,
   uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
 );
+void yielding_same_interleaved_request_breakdown(
+  fcontext_fn_t request_fn,
+  fcontext_fn_t interleave_fn, /* should take a comp record as arg and check it every 200 cycles */
+  void (* offload_args_allocator)
+    (int, timed_offload_request_args***,
+      ax_comp *comps, uint64_t *ts0,
+      uint64_t *ts1, uint64_t *ts2,
+      uint64_t *ts3),
+  void (* offload_args_free)(int, timed_offload_request_args***),
+  int total_requests,
+  uint64_t *offload_time, uint64_t *wait_time, uint64_t *kernel2_time, int idx
+);
 
 #endif

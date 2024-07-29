@@ -16,6 +16,14 @@ extern "C" {
 #include "decompress_and_hash_request.hpp"
 
 
+void dummy_interleaved(fcontext_transfer_t arg){
+  ax_comp *comp = (ax_comp *)arg.data;
+  while(comp->status != COMP_STATUS_COMPLETED){
+    _mm_pause();
+  }
+  LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
+}
+
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 
@@ -54,6 +62,11 @@ int main(int argc, char **argv){
   }
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
+  std::string append_string = query;
+  while(query.size() < input_size){
+    query += append_string;
+  }
+
 
   if(! no_latency){
     run_gpcore_request_brkdown(
@@ -77,6 +90,15 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
+    run_yielding_interleaved_request_brkdown(
+      yielding_decompress_and_hash_request_stamped,
+      dummy_interleaved,
+      alloc_decomp_and_hash_offload_args_stamped,
+      free_decomp_and_hash_offload_args_stamped,
+      itr,
+      total_requests
+    );
+
   }
 
     int exetime_samples_per_run = 10;
