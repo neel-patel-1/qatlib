@@ -69,8 +69,7 @@ MLP_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
-	obj/dsa_offloads.o \
-	obj/decompress_and_hash_request.o
+	obj/dsa_offloads.o
 mlp.o: mlp.cpp
 	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 mlp: $(MLP_OBJS) mlp.o
@@ -86,7 +85,6 @@ MEMFILL_AND_GATHER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/dsa_offloads.o \
-	obj/decompress_and_hash_request.o \
 	obj/gather_scatter.o
 memfill_and_gather.o: memfill_and_gather.cpp
 	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
@@ -104,7 +102,6 @@ DECOMP_AND_SCATTER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/dsa_offloads.o \
 	obj/decompress_and_hash_request.o \
-	obj/gather_scatter.o \
 	obj/gather_scatter.o \
 	obj/payload_gen.o \
 	obj/decompress_and_scatter_request.o
@@ -138,13 +135,14 @@ DECOMP_AND_HASH_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_g
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/payload_gen.o \
 	obj/decompress_and_hash_request.o
 decomp_and_hash.o: decomp_and_hash.cpp
 	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
 decomp_and_hash: $(DECOMP_AND_HASH_OBJS) decomp_and_hash.o
 	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_hash_clean:
-	rm -f decomp_and_hash decomp_and_hash.o
+	rm -f decomp_and_hash decomp_and_hash.o obj/decompress_and_hash_request.o
 
 DECOMP_AND_HASH_MT_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
@@ -153,10 +151,11 @@ DECOMP_AND_HASH_MT_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/payload_gen.o \
 	obj/decompress_and_hash_request.o
 decomp_and_hash_multi_threaded.o: decomp_and_hash_multi_threaded.cpp
 	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
-decomp_and_hash_multi_threaded: $(DECOMP_AND_HASH_OBJS) decomp_and_hash_multi_threaded.o
+decomp_and_hash_multi_threaded: $(DECOMP_AND_HASH_MT_OBJS) decomp_and_hash_multi_threaded.o
 	$(CXX) $(FLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_hash_multi_threaded_clean:
 	rm -f decomp_and_hash_multi_threaded decomp_and_hash_multi_threaded.o
@@ -168,8 +167,7 @@ TEST_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/context_management.o \
 	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
 	obj/ch3_hash.o \
-	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
-	obj/decompress_and_hash_request.o
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o
 tests: tests/iaa_compress_and_decompress_verify
 tests/iaa_compress_and_decompress_verify.o: tests/iaa_compress_and_decompress_verify.cpp
 	$(CXX) $(FLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive

@@ -24,6 +24,8 @@ enum runner_type {
   YIELDING
 };
 
+int input_size;
+
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
@@ -40,7 +42,6 @@ int main(int argc, char **argv){
   enum runner_type run_typ = BLOCKING;
   int runner_num;
   int query_size = 64;
-  std::string append_string = query;
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
@@ -60,15 +61,11 @@ int main(int argc, char **argv){
         num_exe_time_samples_per_run = atoi(optarg);
         break;
       case 'q':
-        query_size = atoi(optarg);
+        input_size = atoi(optarg);
         break;
       default:
         break;
     }
-  }
-
-  while(query.size() < query_size){
-    query += append_string;
   }
 
   switch(run_typ){

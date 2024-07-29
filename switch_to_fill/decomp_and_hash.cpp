@@ -18,6 +18,8 @@ extern "C" {
 
 int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
+
+int input_size = 16384;
 int main(int argc, char **argv){
 
   int wq_id = 0;
@@ -28,7 +30,6 @@ int main(int argc, char **argv){
   int total_requests = 1000;
   int opt;
   bool no_latency = false;
-  int query_size = 64;
 
   while((opt = getopt(argc, argv, "t:i:r:s:q:d:")) != -1){
     switch(opt){
@@ -42,7 +43,7 @@ int main(int argc, char **argv){
         no_latency = true;
         break;
       case 'q':
-        query_size = atoi(optarg);
+        input_size = atoi(optarg);
         break;
       case 'd':
         dev_id = atoi(optarg);
@@ -53,11 +54,6 @@ int main(int argc, char **argv){
   }
   initialize_iaa_wq(dev_id, wq_id, wq_type);
 
-
-  std::string append_string = query;
-  while(query.size() < query_size){
-    query += append_string;
-  }
 
   if(! no_latency){
     run_gpcore_request_brkdown(

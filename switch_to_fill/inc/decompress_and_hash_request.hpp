@@ -12,8 +12,9 @@ extern "C" {
 #include "ch3_hash.h"
 #include <string>
 #include "submit.hpp"
+#include "payload_gen.h"
 
-extern std::string query;
+extern int input_size; /* defined in decomp_and_hash.cpp*/
 
 
 void compressed_mc_req_free(int total_requests, char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
