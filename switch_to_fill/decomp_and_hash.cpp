@@ -19,7 +19,7 @@ extern "C" {
 void hash_interleaved(fcontext_transfer_t arg);
 void antagonist_interleaved(fcontext_transfer_t arg);
 
-int gLogLevel = LOG_PERF;
+int gLogLevel = LOG_VERBOSE;
 bool gDebugParam = false;
 
 int input_size = 16384;
@@ -32,9 +32,9 @@ int main(int argc, char **argv){
   int itr = 100;
   int total_requests = 1000;
   int opt;
-  bool no_latency = false;
+  bool no_latency = false, no_thrpt = false;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:d:")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:d:h")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -44,6 +44,9 @@ int main(int argc, char **argv){
         break;
       case 'o':
         no_latency = true;
+        break;
+      case 'h':
+        no_thrpt = true;
         break;
       case 'q':
         input_size = atoi(optarg);
@@ -96,6 +99,7 @@ int main(int argc, char **argv){
     );
   }
 
+  if (! no_thrpt){
     int exetime_samples_per_run = 10;
     run_gpcore_offeredLoad(
       cpu_decompress_and_hash,
@@ -119,7 +123,7 @@ int main(int argc, char **argv){
       total_requests,
       itr
     );
-
+  }
 
   free_iaa_wq();
 }
