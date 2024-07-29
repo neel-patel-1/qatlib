@@ -178,7 +178,9 @@ clean:
 	rm -f obj/*.o switch_to_fill switch_to_fill.o \
 		walker walker.o \
 		mlp mlp.o tests/*.o \
-		decomp_and_hash decomp_and_hash.o decomp_and_hash_multi_threaded \
+		decomp_and_hash decomp_and_hash.o \
+		decomp_and_hash_multi_threaded \
 		decomp_and_hash_multi_threaded.o \
 		memfill_and_gather memfill_and_gather.o \
+		decomp_and_scatter decomp_and_scatter.o \
 		scan_and_gather scan_and_gather.o
