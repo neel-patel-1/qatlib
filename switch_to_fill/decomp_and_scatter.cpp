@@ -35,7 +35,7 @@ int main(int argc, char **argv){
   int opt;
   bool no_latency = false;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:a:o")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:a:od:")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -61,6 +61,11 @@ int main(int argc, char **argv){
   }
 
   initialize_iaa_wq(dev_id, wq_id, wq_type);
+
+  std::string append_string = payload;
+  while(payload.size() < input_size){
+    payload += append_string;
+  }
 
   if(! no_latency ){
     run_gpcore_request_brkdown(

@@ -17,7 +17,7 @@ extern "C" {
 /* defined in decomp_and_scatter.cpp */
 extern int input_size;
 extern int num_accesses;
-
+extern std::string payload;
 
 void blocking_decomp_and_scatter_request(
   fcontext_transfer_t arg);
