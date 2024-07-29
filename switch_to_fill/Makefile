@@ -4,11 +4,15 @@ IDXD_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-confi
 ACCFG_INCLUDES = -I/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/accfg
 IAA_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/test -liaa -lz -lcrypto
 ACCFG_LIBS = -L/home/n869p538/spr-accel-profiling/interrupt_qat_dc/idxd-config/accfg/lib -laccel-config
-
 INCLUDES = -I./inc $(IAA_INCLUDES) $(ACCFG_INCLUDES) $(IDXD_INCLUDES)
 LIBS = -ldml $(IAA_LIBS) $(ACCFG_LIBS)
 
 CXXFLAGS = -O2
+
+ALL_OBJ = $(patsubst src/%.cpp,obj/%.o,$(wildcard src/*.cpp)) \
+	$(patsubst src/%.S,obj/%.o,$(wildcard src/*.S))
+
+.PHONY: all clean
 
 all: switch_to_fill \
 	walker \
@@ -35,7 +39,7 @@ router.pb.o: src/router.pb.cc
 	$(CXX) $(CXXFLAGS) -c -o $@ $^  -I./inc `pkg-config --cflags --libs protobuf`
 
 obj/%.o: src/%.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf` -fpermissive
+	$(CXX) $(CXXFLAGS) -MMD -c -o $@ $^  $(INCLUDES) `pkg-config --cflags --libs protobuf` -fpermissive
 
 switch_to_fill.o: switch_to_fill.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $^  $(INCLUDES)
@@ -137,8 +141,8 @@ DECOMP_AND_HASH_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_g
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/payload_gen.o \
 	obj/decompress_and_hash_request.o
-decomp_and_hash.o: decomp_and_hash.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
+decomp_and_hash.o: decomp_and_hash.cpp inc/filler_hash.h inc/probe_point.h inc/inline/probe_point.ipp
+	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDES) -fpermissive
 decomp_and_hash: $(DECOMP_AND_HASH_OBJS) decomp_and_hash.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_hash_clean:

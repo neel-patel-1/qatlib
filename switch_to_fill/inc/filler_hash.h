@@ -5,11 +5,15 @@
 extern "C" {
   #include "fcontext.h"
 }
-
+#include <string>
+#include "print_utils.h"
+#include "probe_point.h"
+#include "immintrin.h"
+#include "emul_ax.h"
 #include "ch3_hash.h"
 
 extern std::string query;
-ax_comp *preempt_signal;
+preempt_signal *p_sig;
 
 uint64_t murmur_rehash_64A_probed(uint64_t k) {
   const uint64_t m = 0xc6a4a7935bd1e995ULL;
@@ -158,16 +162,12 @@ uint32_t furc_hash_probed(const char* const key, const size_t len, const uint32_
   return 0;
 }
 
-
 void hash_interleaved(fcontext_transfer_t arg){
-  ax_comp *preempt_signal = (ax_comp *)arg.data;
+  ax_comp *p_sig = (ax_comp *)arg.data;
+  fcontext_transfer_t parent_pointer;
   while(1){
     _mm_pause();
-    if(preempt_signal->status == COMP_STATUS_COMPLETED){
-      fcontext_transfer_t parent_resume =
-        fcontext_swap( arg.prev_context, NULL);
-      preempt_signal = (ax_comp *)parent_resume.data;
-    }
+    probe_point(p_sig, arg.prev_context);
   }
   LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
 }
