@@ -21,3 +21,13 @@ Design:
 * run `sudo python3 scripts/accel_conf.py --load=configs/*.conf` to configure a device
 * run `make -j` to compile all tests
 * execute `./scripts/run_*.sh` and `./scripts/parse_*.sh` to execute and parse results
+
+
+### Issues
+* `decomp_*` applications see better decompression performance when the raw payload is allocated in the main function of the application using the following code instead of the `payload_gen.h` functions:
+```c++
+std::string append_string = query;
+while(query.size() < input_size){
+  query += append_string;
+}
+```
