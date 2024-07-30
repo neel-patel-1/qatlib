@@ -21,6 +21,7 @@ extern "C" {
 #include "filler_antagonist.h"
 #include "filler_hash.h"
 #include "posting_list.h"
+#include "wait.h"
 
 int input_size = 16384;
 
@@ -117,11 +118,6 @@ void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
   char *dst = args->dst_payload;
 
   node *ll_head = (node *)args->aux_payload;
-  int nodes_to_traverse = args->dst_size;
-  int to_traverse_before_yield = nodes_to_traverse / 2;
-  int to_traverse_after_yield =
-    nodes_to_traverse - to_traverse_before_yield;
-  int traversed = 0;
 
   int id = args->id;
   uint64_t *ts0 = args->ts0;
@@ -133,12 +129,12 @@ void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
 
   ts0[id] = sampleCoderdtsc();// !
   node *cur = ll_head; /* traverse first half */
-  while(traversed < to_traverse_before_yield){
+  while(cur != NULL ){
     LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
     cur = cur->next;
-    traversed++;
   }
-  glb_node_ptr = cur; /* let same filler know where to resume */
+
+  glb_node_ptr = ll_head; /* let same filler know where to resume */
 
   prepare_dsa_memcpy_desc_with_preallocated_comp(
     desc, (uint64_t)src, (uint64_t)dst,
@@ -150,17 +146,65 @@ void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
   fcontext_swap(arg.prev_context, NULL);
 
   ts2[id] = sampleCoderdtsc();
-  while(traversed < nodes_to_traverse){ /* traverse snd half */
+  cur = ll_head; /* traverse first half */
+  while(cur != NULL ){
     LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
     cur = cur->next;
-    traversed++;
   }
+
   ts3[id] = sampleCoderdtsc();
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
 }
 
+void blocking_traverse_and_offload_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+
+  node *ll_head = (node *)args->aux_payload;
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+  ts0[id] = sampleCoderdtsc();// !
+  node *cur = ll_head; /* traverse first half */
+  while(cur != NULL ){
+    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
+    cur = cur->next;
+  }
+
+  glb_node_ptr = ll_head; /* let same filler know where to resume */
+
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  blocking_dsa_submit(dsa, desc);
+
+  ts1[id] = sampleCoderdtsc();
+  spin_on(comp);
+
+
+  ts2[id] = sampleCoderdtsc();
+  cur = ll_head; /* traverse first half */
+  while(cur != NULL ){
+    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
+    cur = cur->next;
+  }
+
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+}
 
 
 int gLogLevel = LOG_PERF;
@@ -209,9 +253,8 @@ int main(int argc, char **argv){
 
   LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
   if(!no_latency){
-    run_yielding_interleaved_request_brkdown(
-      yielding_traverse_and_offload_stamped,
-      hash_interleaved, /* this is best case approximate */
+    run_blocking_offload_request_brkdown(
+      blocking_traverse_and_offload_stamped,
       alloc_offload_traverse_and_offload_args,
       free_offload_traverse_and_offload_args,
       itr,

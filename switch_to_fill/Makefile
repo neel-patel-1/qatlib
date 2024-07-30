@@ -92,7 +92,7 @@ THREE_PHASE_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/dsa_offloads.o \
 	obj/posting_list.o
-three_phase.o: three_phase.cpp inc/posting_list.h
+three_phase.o: three_phase.cpp inc/posting_list.h inc/filler_antagonist.h
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDES) -fpermissive
 three_phase: $(THREE_PHASE_OBJS) three_phase.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -ldml $(LIBS)

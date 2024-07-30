@@ -22,8 +22,8 @@ void antagonist_interleaved(fcontext_transfer_t arg){
       probe_point();
     }
     LOG_PRINT( LOG_VERBOSE, "Antagonist finished one loop\n");
+    glb = buffer[buf_size - 1];
   }
-  LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
 }
 
 
