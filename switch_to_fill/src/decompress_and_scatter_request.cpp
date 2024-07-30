@@ -1,5 +1,6 @@
 #include "decompress_and_scatter_request.h"
 #include "payload_gen.h"
+#include "wait.h"
 
 
 std::string payload = "/region/cluster/foo:key|#|etc";
@@ -103,9 +104,7 @@ void blocking_decomp_and_scatter_request(
       (uint64_t)comp, (uint64_t)src_size);
     blocking_iaa_submit(iaa, desc);
 
-    while(comp->status == IAX_COMP_NONE){
-      _mm_pause();
-    }
+    spin_on(comp);
     if(comp->status != IAX_COMP_SUCCESS){
       LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
     }
@@ -148,9 +147,7 @@ void blocking_decomp_and_scatter_request_stamped(
     blocking_iaa_submit(iaa, desc);
 
     pre_wait = sampleCoderdtsc();
-    while(comp->status == IAX_COMP_NONE){
-      _mm_pause();
-    }
+    spin_on(comp);
     if(comp->status != IAX_COMP_SUCCESS){
       LOG_PRINT(LOG_ERR, "Decompress failed: 0x%x\n", comp->status);
     }
