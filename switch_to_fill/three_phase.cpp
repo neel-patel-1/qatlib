@@ -16,44 +16,152 @@ extern "C" {
 #include "decompress_and_hash_request.hpp"
 #include "dsa_offloads.h"
 #include "submit.hpp"
-#include "memcpy_dp_request.h"
 
 #include "probe_point.h"
-#include "filler_dp.h"
 #include "filler_antagonist.h"
+#include "posting_list.h"
 
 int input_size = 16384;
 
-void (*input_populate)(char **);
-void (*compute_on_input)(void *, int);
+node *glb_ll_head = NULL; /* in case filler needs to restart */
+node *glb_node_ptr = NULL;
 
-float *item_buf;
-float *user_filler_buf;
+void lltraverse_interleaved(fcontext_transfer_t arg){
+  node *cur = glb_node_ptr;
+  bool traversal_in_progress = true;
 
-static inline void input_gen_dp(char **p_buf){
-  char *buf = (char *)malloc(input_size);
-  for(int i = 0; i < input_size; i++){
-    buf[i] = rand() % 256;
+  init_probe(arg); // init sched ctx and sig
+
+  while (1) {
+    if(is_signal_set(p_sig)){ /*check signal */
+      cur = NULL;
+      traversal_in_progress = false; /* stop the traversal */
+      fcontext_transfer_t parent_resume =
+        fcontext_swap( sched_ctx.prev_context, NULL); /* switch to sched */
+      p_sig = (preempt_signal *)parent_resume.data; /*set the new signal returned from the scheduler */
+    }
+
+    if(cur == NULL){ /* the cur can be null*/
+      if(traversal_in_progress){ // we're either back from a yield or not
+        cur = glb_ll_head; // restart the traversal if we're not
+      } else {
+        cur = glb_node_ptr; // set to node set by main if we are
+      }
+    } else {
+      LOG_PRINT(LOG_DEBUG, "Filler@Node: %d\n", cur->docID);
+      cur = cur->next;
+    }
   }
-  *p_buf = buf;
+
+}
+
+void alloc_offload_traverse_and_offload_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args,
+  ax_comp *comps,
+  uint64_t *ts0,
+  uint64_t *ts1,
+  uint64_t *ts2,
+  uint64_t *ts3
+){
+
+  timed_offload_request_args **off_args =
+    (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+
+  int num_nodes = input_size / sizeof(node);
+
+  /* allocate a global shared linked list once */
+  if(glb_ll_head == NULL){
+    glb_ll_head = build_host_ll(num_nodes);
+  }
+
+  for(int i = 0; i < total_requests; i++){
+    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
+    off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
+    off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
+    off_args[i]->aux_payload = (char *)glb_ll_head;
+    off_args[i]->src_size =  input_size;
+    off_args[i]->dst_size = num_nodes;
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+    off_args[i]->comp = &comps[i];
+    off_args[i]->ts0 = ts0;
+    off_args[i]->ts1 = ts1;
+    off_args[i]->ts2 = ts2;
+    off_args[i]->ts3 = ts3;
+    off_args[i]->id = i;
+  }
+
+  *p_off_args = off_args;
+}
+
+void free_offload_traverse_and_offload_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args
+){
+  timed_offload_request_args **off_args = *p_off_args;
+  for(int i = 0; i < total_requests; i++){
+    free(off_args[i]->src_payload);
+    free(off_args[i]->dst_payload);
+    free(off_args[i]);
+  }
+  free(off_args);
+  free_ll(glb_ll_head);
+}
+
+void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+
+  char *src = args->src_payload;
+  char *dst = args->dst_payload;
+
+  node *ll_head = (node *)args->aux_payload;
+  int nodes_to_traverse = args->dst_size;
+  int to_traverse_before_yield = nodes_to_traverse / 2;
+  int to_traverse_after_yield =
+    nodes_to_traverse - to_traverse_before_yield;
+  int traversed = 0;
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+  ts0[id] = sampleCoderdtsc();// !
+  node *cur = ll_head; /* traverse first half */
+  while(traversed < to_traverse_before_yield){
+    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
+    cur = cur->next;
+    traversed++;
+  }
+  glb_node_ptr = cur; /* let same filler know where to resume */
+
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)src, (uint64_t)dst,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  blocking_dsa_submit(dsa, desc);
+
+  ts1[id] = sampleCoderdtsc();
+  fcontext_swap(arg.prev_context, NULL);
+
+  ts2[id] = sampleCoderdtsc();
+  while(traversed < nodes_to_traverse){ /* traverse snd half */
+    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
+    cur = cur->next;
+    traversed++;
+  }
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
 }
 
 
-static inline void dot_product(void *user_buf, int bytes){
-  float sum = 0;
-  float *v1 = (float *)item_buf;
-  float *v2 = (float *)user_buf;
-  int size = bytes / sizeof(float);
 
-  LOG_PRINT(LOG_DEBUG, "Dot Product\n");
-  for(int i=0; i < size; i++){
-    sum += v1[i] * v2[i];
-  }
-  LOG_PRINT(LOG_DEBUG, "Dot Product: %f\n", sum);
-
-}
-
-int gLogLevel = LOG_PERF;
+int gLogLevel = LOG_DEBUG;
 bool gDebugParam = false;
 int main(int argc, char **argv){
 
@@ -67,9 +175,6 @@ int main(int argc, char **argv){
   int opt;
   bool no_latency = false;
   bool no_thrpt = false;
-
-  input_populate = input_gen_dp;
-  compute_on_input = dot_product;
 
   while((opt = getopt(argc, argv, "t:i:r:s:q:d:h")) != -1){
     switch(opt){
@@ -100,69 +205,22 @@ int main(int argc, char **argv){
 
   LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
   if(!no_latency){
-    run_gpcore_request_brkdown(
-      cpu_memcpy_and_compute_stamped,
-      alloc_cpu_memcpy_and_compute_args,
-      free_cpu_memcpy_and_compute_args,
-      itr,
-      total_requests
-    );
-    run_blocking_offload_request_brkdown(
-      blocking_memcpy_and_compute_stamped,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
-      itr,
-      total_requests
-    );
     run_yielding_interleaved_request_brkdown(
-      yielding_memcpy_and_compute_stamped,
-      dotproduct_interleaved,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
+      yielding_traverse_and_offload_stamped,
+      lltraverse_interleaved,
+      alloc_offload_traverse_and_offload_args,
+      free_offload_traverse_and_offload_args,
       itr,
       total_requests
     );
-    run_yielding_interleaved_request_brkdown(
-      yielding_memcpy_and_compute_stamped,
-      antagonist_interleaved,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
-      itr,
-      total_requests
-    );
-
-    input_populate((char **)&user_filler_buf); /* populate a buffer for the filler to use for its dp */
-
-  }
-
-  int num_exe_time_samples_per_run = 10; /* 10 samples per iter*/
-
-  if(! no_thrpt){
-    run_gpcore_offeredLoad(
-        cpu_memcpy_and_compute,
-        alloc_cpu_memcpy_and_compute_args,
-        free_cpu_memcpy_and_compute_args,
-        itr,
-        total_requests
-      );
-
-
-    run_blocking_offered_load(
-      blocking_memcpy_and_compute,
-      alloc_offload_memcpy_and_compute_args,
-      free_offload_memcpy_and_compute_args,
-      total_requests,
-      itr
-    );
-
-    run_yielding_offered_load(
-      yielding_memcpy_and_compute,
-        alloc_offload_memcpy_and_compute_args,
-        free_offload_memcpy_and_compute_args,
-        num_exe_time_samples_per_run,
-        total_requests,
-        itr
-    );
+    // run_yielding_interleaved_request_brkdown(
+    //   yielding_traverse_and_offload_stamped,
+    //   antagonist_interleaved,
+    //   alloc_offload_traverse_and_offload_args,
+    //   free_offload_traverse_and_offload_args,
+    //   itr,
+    //   total_requests
+    // );
   }
 
   free_dsa_wq();

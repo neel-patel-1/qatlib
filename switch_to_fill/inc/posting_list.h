@@ -11,7 +11,7 @@ extern int pl_len;
 typedef struct _node{
   int docID;
   struct _node *next;
-  uint8_t padding[64 - sizeof(int) - sizeof(struct _node *)];
+  uint8_t padding[40];
 } node;
 
 node *build_llc_ll(int length);
