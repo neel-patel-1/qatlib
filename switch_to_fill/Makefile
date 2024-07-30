@@ -90,6 +90,7 @@ MEMFILL_AND_GATHER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/ch3_hash.o \
 	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
 	obj/dsa_offloads.o \
+	obj/memfill_gather.o \
 	obj/gather_scatter.o
 memfill_and_gather.o: memfill_and_gather.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
