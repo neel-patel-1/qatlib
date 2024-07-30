@@ -15,10 +15,7 @@ REQUESTS=(    100 100 100 100 100  100   100    100 )
 # Initialize memfill_and_gather_logs
 mkdir -p memfill_and_gather_logs
 for q in "${QUERY_SIZES[@]}"; do
-    for i in "${CORES[@]}";
-    do
-        echo -n > memfill_and_gather_logs/core_${i}_querysize_${q}.log
-    done
+    echo -n > memfill_and_gather_logs/core_${CORE}_querysize_${q}.log
 done
 
 qidx=0

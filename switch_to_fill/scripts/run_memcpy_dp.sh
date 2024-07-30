@@ -14,10 +14,7 @@ REQUESTS=(    100 100 100 100 100  100   100    100 )
 # Initialize memcpy_dp_logs
 mkdir -p memcpy_dp_logs
 for q in "${QUERY_SIZES[@]}"; do
-    for i in "${CORES[@]}";
-    do
-        echo -n > memcpy_dp_logs/core_${i}_querysize_${q}.log
-    done
+    echo -n > memcpy_dp_logs/core_${CORE}_querysize_${q}.log
 done
 
 qidx=0

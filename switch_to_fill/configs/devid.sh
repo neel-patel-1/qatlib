@@ -1,1 +1,1 @@
-export DEVID=1
+export DEVID=0
