@@ -110,8 +110,8 @@ DECOMP_AND_SCATTER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_el
 	obj/gather_scatter.o \
 	obj/payload_gen.o \
 	obj/decompress_and_scatter_request.o
-decomp_and_scatter.o: decomp_and_scatter.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
+decomp_and_scatter.o: decomp_and_scatter.cpp inc/probe_point.h inc/inline/probe_point.ipp
+	$(CXX) $(CXXFLAGS) -c -o $@ $< $(INCLUDES) -fpermissive
 decomp_and_scatter: $(DECOMP_AND_SCATTER_OBJS) decomp_and_scatter.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -ldml $(LIBS)
 decomp_and_scatter_clean:

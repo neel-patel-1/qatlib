@@ -15,6 +15,13 @@ Design:
 * "Latency Breakdown" executor shows where the time goes during the execution of a request
 * "Closed System Throughput" executor implements a FCFS scheduling policy and determines the offered load when executing the passed in request on a single GPCore with optional offloads to on-chip accelerators
 
+### Impact of gpcore sharing between requests
+* We need to define a filler task that executes in the gaps during execution
+  * Examples can be found in `inc/filler_*`
+  * Including `probe_point.h` makes the filler task aware of the worker-local scheduler context and preemption signal used for yielding back to the main request
+  * by invoking `probe_point()` the worker-local scheduler is resumed
+  * when the scheduler resumes the yielding filler task that called `probe_point()` it updates the preemption signal
+    * This enables filler tasks to cooperatively yield by only calling (1) `init_probe(arg)` to set the scheduler and initialize the global preemption signal and (2) `probe_point()` to check the preemption signal and yield to the scheduler
 
 ### To begin
 * Go to configs/devid.sh and configs/phys_core.sh and set the iax/dsa device and submitting core

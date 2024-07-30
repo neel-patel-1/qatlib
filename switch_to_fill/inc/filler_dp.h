@@ -9,7 +9,6 @@ extern "C" {
 #include "immintrin.h"
 #include "emul_ax.h"
 
-preempt_signal *p_sig;
 extern float *item_buf; /* defined in mlp.cpp */
 extern float *user_filler_buf; /* defined in mlp.cpp */
 extern int input_size;
@@ -23,10 +22,11 @@ void dotproduct_interleaved(fcontext_transfer_t arg){
   float *v2 = (float *)user_filler_buf;
   int size = input_size / sizeof(float);
 
+  init_probe(arg);
 
   while(1){
     for(int i=0; i < size; i++){
-      probe_point(p_sig, arg.prev_context);
+      probe_point();
       sum += v1[i] * v2[i];
     }
   }

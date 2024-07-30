@@ -18,9 +18,28 @@ extern "C" {
 #include "submit.hpp"
 #include <algorithm>
 #include "decompress_and_scatter_request.h"
+#include "filler_antagonist.h"
+
+#include "probe_point.h"
+void antagonist_interleaved(fcontext_transfer_t arg);
 
 int input_size = 16384; /* sizes the feature buffer */
 int num_accesses = 10; /* tells number of accesses */
+int *glob_indir_arr = NULL;
+float *glob_dst_buf;
+
+void scatter_interleaved(fcontext_transfer_t arg){
+  volatile int glb = 0;
+  init_probe(arg);
+  fcontext_transfer_t parent_pointer;
+  while(1){
+    for(int i=0; i<num_accesses; i++){
+      glob_dst_buf[glob_indir_arr[i]] = 1.0;
+      probe_point();
+    }
+    LOG_PRINT( LOG_VERBOSE, "Antagonist finished one loop\n");
+  }
+}
 
 
 int gLogLevel = LOG_PERF;
@@ -34,6 +53,7 @@ int main(int argc, char **argv){
   int total_requests = 1;
   int opt;
   bool no_latency = false;
+
 
   while((opt = getopt(argc, argv, "t:i:r:s:q:a:od:")) != -1){
     switch(opt){
@@ -81,6 +101,26 @@ int main(int argc, char **argv){
       free_offload_decomp_and_scatter_args_timed,
       itr, total_requests
     );
+
+    glob_dst_buf = (float *)malloc(sizeof(float) * input_size); /* alloc filler's buf*/
+    run_yielding_interleaved_request_brkdown(
+      yielding_decomp_and_scatter_stamped,
+      scatter_interleaved,
+      alloc_offload_decomp_and_scatter_args_timed,
+      free_offload_decomp_and_scatter_args_timed,
+      itr,
+      total_requests
+    );
+    run_yielding_interleaved_request_brkdown(
+      yielding_decomp_and_scatter_stamped,
+      antagonist_interleaved,
+      alloc_offload_decomp_and_scatter_args_timed,
+      free_offload_decomp_and_scatter_args_timed,
+      itr,
+      total_requests
+    );
+
+
   }
 
   run_gpcore_offeredLoad(

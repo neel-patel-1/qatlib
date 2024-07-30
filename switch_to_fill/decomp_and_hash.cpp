@@ -14,8 +14,12 @@ extern "C" {
   #include <zlib.h>
 }
 #include "decompress_and_hash_request.hpp"
+#include "probe_point.h"
 #include "filler_hash.h"
 #include "filler_antagonist.h"
+
+
+
 void hash_interleaved(fcontext_transfer_t arg);
 void antagonist_interleaved(fcontext_transfer_t arg);
 

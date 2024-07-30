@@ -13,7 +13,7 @@ extern "C" {
 #include "ch3_hash.h"
 
 extern std::string query;
-preempt_signal *p_sig;
+extern preempt_signal *p_sig;
 
 uint64_t murmur_rehash_64A_probed(uint64_t k) {
   const uint64_t m = 0xc6a4a7935bd1e995ULL;
@@ -163,10 +163,9 @@ uint32_t furc_hash_probed(const char* const key, const size_t len, const uint32_
 }
 
 void hash_interleaved(fcontext_transfer_t arg){
-  ax_comp *p_sig = (ax_comp *)arg.data;
-  fcontext_transfer_t parent_pointer;
+  init_probe(arg);
   while(1){
-    probe_point(p_sig, arg.prev_context);
+    probe_point();
   }
   LOG_PRINT( LOG_DEBUG, "Dummy interleaved saw comp\n");
 }

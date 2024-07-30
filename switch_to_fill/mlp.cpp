@@ -17,6 +17,8 @@ extern "C" {
 #include "dsa_offloads.h"
 #include "submit.hpp"
 #include "memcpy_dp_request.h"
+
+#include "probe_point.h"
 #include "filler_dp.h"
 #include "filler_antagonist.h"
 
