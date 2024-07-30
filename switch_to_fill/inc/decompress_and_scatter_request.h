@@ -18,6 +18,7 @@ extern "C" {
 extern int input_size;
 extern int num_accesses;
 extern std::string payload;
+extern int *glob_indir_arr;
 
 void blocking_decomp_and_scatter_request(
   fcontext_transfer_t arg);
