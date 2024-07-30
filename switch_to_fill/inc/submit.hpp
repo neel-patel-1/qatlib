@@ -10,6 +10,8 @@ static void blocking_iaa_submit(struct acctest_context *iaa,
 
 static bool dsa_submit(struct acctest_context *dsa,
   struct hw_desc *desc);
+static void blocking_dsa_submit(struct acctest_context *dsa,
+  struct hw_desc *desc);
 
 #include "inline/submit.ipp"
 

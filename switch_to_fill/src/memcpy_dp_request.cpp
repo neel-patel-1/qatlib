@@ -99,10 +99,7 @@ void blocking_memcpy_and_compute_stamped(fcontext_transfer_t arg){
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)args->comp, (uint64_t)input_size
   );
-  if (!dsa_submit(dsa, desc)){
-    LOG_PRINT(LOG_ERR, "Error submitting request\n");
-    return;
-  }
+  blocking_dsa_submit(dsa, desc);
   ts1[id] = sampleCoderdtsc();
   spin_on(comp);
 
@@ -132,10 +129,7 @@ void yielding_memcpy_and_compute_stamped(fcontext_transfer_t arg){
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)args->comp, (uint64_t)input_size
   );
-  if (!dsa_submit(dsa, desc)){
-    LOG_PRINT(LOG_ERR, "Error submitting request\n");
-    return;
-  }
+  blocking_dsa_submit(dsa, desc);
   ts1[id] = sampleCoderdtsc();
   fcontext_swap(arg.prev_context, NULL);
 
@@ -195,10 +189,7 @@ void blocking_memcpy_and_compute(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)args->comp, (uint64_t)input_size
   );
-  if (!dsa_submit(dsa, desc)){
-    LOG_PRINT(LOG_ERR, "Error submitting request\n");
-    return;
-  }
+  blocking_dsa_submit(dsa, desc);
 
   while(comp->status == IAX_COMP_NONE)
   {
@@ -230,10 +221,7 @@ void yielding_memcpy_and_compute(
     desc, (uint64_t)src, (uint64_t)dst,
     (uint64_t)args->comp, (uint64_t)input_size
   );
-  if (!dsa_submit(dsa, desc)){
-    LOG_PRINT(LOG_ERR, "Error submitting request\n");
-    return;
-  }
+  blocking_dsa_submit(dsa, desc);
 
   fcontext_swap(arg.prev_context, NULL);
 
