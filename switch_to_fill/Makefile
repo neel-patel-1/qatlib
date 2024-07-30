@@ -21,6 +21,7 @@ all: switch_to_fill \
 	decomp_and_hash_multi_threaded \
 	memfill_and_gather scan_and_gather \
 	decomp_and_scatter \
+	three_phase \
 	tests
 
 obj/jump_x86_64_sysv_elf_gas.o: src/jump_x86_64_sysv_elf_gas.S
@@ -81,6 +82,22 @@ mlp: $(MLP_OBJS) mlp.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -ldml $(LIBS)
 mlp_clean:
 	rm -f mlp mlp.o
+
+THREE_PHASE_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
+	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
+	obj/emul_ax.o obj/thread_utils.o  obj/offload.o \
+	obj/context_management.o \
+	obj/rps.o obj/dsa_alloc.o obj/stats.o obj/test_harness.o \
+	obj/ch3_hash.o \
+	obj/request_executors.o obj/runners.o obj/iaa_offloads.o \
+	obj/dsa_offloads.o \
+	obj/memcpy_dp_request.o
+three_phase.o: three_phase.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $^ $(INCLUDES) -fpermissive
+three_phase: $(MLP_OBJS) three_phase.o
+	$(CXX) $(CXXFLAGS) -o $@ $^ -ldml $(LIBS)
+three_phase_clean:
+	rm -f three_phase three_phase.o
 
 MEMFILL_AND_GATHER_OBJS = obj/jump_x86_64_sysv_elf_gas.o obj/make_x86_64_sysv_elf_gas.o \
 	obj/ontop_x86_64_sysv_elf_gas.o obj/context_fast.o \
@@ -189,4 +206,5 @@ clean:
 		decomp_and_hash_multi_threaded.o \
 		memfill_and_gather memfill_and_gather.o \
 		decomp_and_scatter decomp_and_scatter.o \
+		three_phase.o three_phase \
 		scan_and_gather scan_and_gather.o
