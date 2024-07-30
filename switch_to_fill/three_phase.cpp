@@ -19,6 +19,7 @@ extern "C" {
 
 #include "probe_point.h"
 #include "filler_antagonist.h"
+#include "filler_hash.h"
 #include "posting_list.h"
 
 int input_size = 16384;
@@ -208,6 +209,15 @@ int main(int argc, char **argv){
 
   LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
   if(!no_latency){
+    run_yielding_interleaved_request_brkdown(
+      yielding_traverse_and_offload_stamped,
+      hash_interleaved, /* this is best case approximate */
+      alloc_offload_traverse_and_offload_args,
+      free_offload_traverse_and_offload_args,
+      itr,
+      total_requests
+    );
+
     run_yielding_interleaved_request_brkdown(
       yielding_traverse_and_offload_stamped,
       lltraverse_interleaved,
