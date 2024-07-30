@@ -160,6 +160,47 @@ void execute_yielding_requests_best_case(
   LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
 }
 
+void execute_yielding_requests_multiple_filler_requests(
+  int total_requests,
+  ax_comp *comps, timed_offload_request_args **off_args,
+  fcontext_transfer_t *offload_req_xfer,
+  fcontext_state_t **off_req_state,
+  fcontext_state_t **filler_req_state,
+  uint64_t *off_times, uint64_t *yield_to_resume_times, uint64_t *hash_times, int idx)
+{
+
+  bool interleaved_started = false;
+  fcontext_transfer_t xfer;
+  /* have our context switch overhead and get re-entrancy too*/
+  while(requests_completed < total_requests){
+    offload_req_xfer[requests_completed] =
+        fcontext_swap(off_req_state[requests_completed]->context, off_args[requests_completed]);
+    interleaved_started = false;
+    while(comps[requests_completed].status != COMP_STATUS_COMPLETED){
+      if(! interleaved_started ){
+        xfer = fcontext_swap(filler_req_state[requests_completed]->context, &(comps[requests_completed]));
+        interleaved_started = true;
+      } else {
+        xfer = fcontext_swap(xfer.prev_context,  &(comps[requests_completed]));
+      }
+    }
+    fcontext_swap(offload_req_xfer[requests_completed].prev_context, NULL);
+  }
+
+  /* get the time stamps from one of the requests */
+  uint64_t *ts0 = off_args[0]->ts0;
+  uint64_t *ts1 = off_args[0]->ts1;
+  uint64_t *ts2 = off_args[0]->ts2;
+  uint64_t *ts3 = off_args[0]->ts3;
+  uint64_t diff[total_requests];
+  avg_samples_from_arrays(diff, off_times[idx], ts1, ts0, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "Offload time: %lu\n", off_times[idx]);
+  avg_samples_from_arrays(diff, yield_to_resume_times[idx], ts2, ts1, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "YieldToResumeDelay: %lu\n", yield_to_resume_times[idx]);
+  avg_samples_from_arrays(diff, hash_times[idx], ts3, ts2, requests_completed);
+  LOG_PRINT( LOG_DEBUG, "HashTime: %lu\n", hash_times[idx]);
+}
+
 
 void execute_yielding_requests_interleaved(
   int total_requests,
