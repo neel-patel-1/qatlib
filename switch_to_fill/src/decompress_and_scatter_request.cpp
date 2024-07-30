@@ -179,11 +179,12 @@ void free_offload_decomp_and_scatter_args(
   for(int i = 0; i < total_requests; i++){
     free(off_args[i]->src_payload);
     free(off_args[i]->dst_payload);
-    free(off_args[i]->aux_payload);
     free(off_args[i]->desc);
     free(off_args[i]);
   }
   free(off_args);
+  free(glob_indir_arr);
+  glob_indir_arr = NULL;
 }
 
 void alloc_offload_decomp_and_scatter_args(int total_requests,
@@ -192,9 +193,11 @@ void alloc_offload_decomp_and_scatter_args(int total_requests,
   offload_request_args **off_args =
     (offload_request_args **)malloc(total_requests * sizeof(offload_request_args *));
 
-  // std::string payload = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
-  // std::string payload = "/region/cluster/foo:key|#|etc";
-  // gen_compressible_string_in_place(payload, input_size);
+  if(glob_indir_arr == NULL){
+    /* gen the indir arr */
+    indirect_array_gen(&glob_indir_arr);
+
+  }
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
   for(int i = 0; i < total_requests; i++){
@@ -215,7 +218,7 @@ void alloc_offload_decomp_and_scatter_args(int total_requests,
     off_args[i]->dst_payload = (char *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
     off_args[i]->dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
 
-    indirect_array_gen((int **)&(off_args[i]->aux_payload)); /* use dst buf to house the indirect array*/
+    off_args[i]->aux_payload = (char *)glob_indir_arr;
 
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
   }
@@ -234,7 +237,12 @@ void alloc_offload_decomp_and_scatter_args_timed( /* is this scatter ?*/
   timed_offload_request_args **off_args =
     (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
 
-  // std::string payload = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+
+  if(glob_indir_arr == NULL){
+    /* gen the indir arr */
+    indirect_array_gen(&glob_indir_arr);
+
+  }
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
   for(int i = 0; i < total_requests; i++){
@@ -255,7 +263,7 @@ void alloc_offload_decomp_and_scatter_args_timed( /* is this scatter ?*/
     off_args[i]->dst_payload = (char *)malloc(IAA_COMPRESS_MAX_DEST_SIZE);
     off_args[i]->dst_size = IAA_COMPRESS_MAX_DEST_SIZE;
 
-    indirect_array_gen((int **)&(off_args[i]->aux_payload)); /* use dst buf to house the indirect array*/
+    off_args[i]->aux_payload = (char *)glob_indir_arr;
 
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
 
@@ -337,18 +345,23 @@ void free_cpu_compressed_payloads(int total_requests,
     free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0]);
     free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1]);
     free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2]);
-    free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][3]);
 
     free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i]);
   }
   free(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads);
+  free(glob_indir_arr);
+  glob_indir_arr = NULL;
 }
 
 void cpu_compressed_payload_allocator(int total_requests,
   char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
 
-  // std::string payload = gen_compressible_string("/region/cluster/foo:key|#|etc", input_size);
+  if(glob_indir_arr == NULL){
+    /* gen the indir arr */
+    indirect_array_gen(&glob_indir_arr);
+
+  }
 
   int avail_out = IAA_COMPRESS_MAX_DEST_SIZE;
   int num_inputs_per_request = 4;
@@ -370,7 +383,7 @@ void cpu_compressed_payload_allocator(int total_requests,
       (char *) malloc(IAA_COMPRESS_MAX_DEST_SIZE);
 
     /* and an indirection array */
-    indirect_array_gen((int **)&(ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][3]));
+    ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][3] = (char *) glob_indir_arr;
 
     /* and the size of the compressed payload for decomp */
     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] =
@@ -390,27 +403,10 @@ void free_offload_decomp_and_scatter_args_timed(
   for(int i = 0; i < total_requests; i++){
     free(off_args[i]->src_payload);
     free(off_args[i]->dst_payload);
-    free(off_args[i]->aux_payload);
     free(off_args[i]->desc);
     free(off_args[i]);
   }
+  free(glob_indir_arr);
+  glob_indir_arr = NULL;
   free(off_args);
 }
-// void offload_compressed_payload_allocator(int total_requests,
-//   char ****ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads){
-//   char *** ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = (char ***) malloc(total_requests * sizeof(char **));
-//   int num_inputs_per_request = 4;
-//   for(int i = 0; i < total_requests; i++){
-//     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i] =
-//       (char **) malloc(sizeof(char *) * num_inputs_per_request); /* only one input to each request */
-//     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][0] =
-//       (char *) malloc(IAA_COMPRESS_MAX_DEST_SIZE);
-//     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][1] =
-//       (char *) malloc(IAA_COMPRESS_MAX_DEST_SIZE);
-//     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][2] =
-//       (char *) malloc(sizeof(int));
-//     ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads[i][3] =
-//       (char *) malloc(num_accesses * sizeof(int));
-//   }
-//   *ptr_toPtr_toArrOfPtrs_toArrOfPtrs_toInputPayloads = ptr_toArrOfPtrs_toArrOfPtrs_toInputPayloads;
-// }
