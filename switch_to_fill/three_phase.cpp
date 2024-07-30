@@ -106,6 +106,7 @@ void free_offload_traverse_and_offload_args(
   }
   free(off_args);
   free_ll(glb_ll_head);
+  glb_ll_head = NULL;
 }
 
 void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
@@ -161,7 +162,7 @@ void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
 
 
 
-int gLogLevel = LOG_DEBUG;
+int gLogLevel = LOG_PERF;
 bool gDebugParam = false;
 int main(int argc, char **argv){
 
@@ -176,7 +177,7 @@ int main(int argc, char **argv){
   bool no_latency = false;
   bool no_thrpt = false;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:d:h")) != -1){
+  while((opt = getopt(argc, argv, "t:i:r:s:q:d:hf")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -196,6 +197,8 @@ int main(int argc, char **argv){
       case 'd':
         dev_id = atoi(optarg);
         break;
+      case 'f':
+        gLogLevel = LOG_DEBUG;
       default:
         break;
     }
@@ -213,14 +216,14 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
-    // run_yielding_interleaved_request_brkdown(
-    //   yielding_traverse_and_offload_stamped,
-    //   antagonist_interleaved,
-    //   alloc_offload_traverse_and_offload_args,
-    //   free_offload_traverse_and_offload_args,
-    //   itr,
-    //   total_requests
-    // );
+    run_yielding_interleaved_request_brkdown(
+      yielding_traverse_and_offload_stamped,
+      antagonist_interleaved,
+      alloc_offload_traverse_and_offload_args,
+      free_offload_traverse_and_offload_args,
+      itr,
+      total_requests
+    );
   }
 
   free_dsa_wq();

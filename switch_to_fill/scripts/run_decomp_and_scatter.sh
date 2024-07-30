@@ -26,6 +26,7 @@ for q in "${QUERY_SIZES[@]}"; do
     #iterations corresponding to current the query size
     iters=${ITERATIONS[$j]}
     taskset -c $CORE sudo ./decomp_and_scatter \
+        -d $DEVID \
         -q $q \
         -a $NUM_ACCESSES \
         -t ${REQUESTS[$qidx]} \
