@@ -188,7 +188,7 @@ void alloc_offload_serialized_access_args(
     off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
     off_args[i]->aux_payload =
       (char *)create_random_chain_starting_at(input_size,
-        (void **) &(off_args[i]->dst_payload)); /* ax buf buf to chase after copy */
+        (void **) (off_args[i]->dst_payload)); /* ax buf buf to chase after copy */
     off_args[i]->src_size =  host_buf_bytes_acc; /* parameter describing number of bytes to access from host buf */
     off_args[i]->dst_size = ax_buf_bytes_acc; /* parameter describing number of bytes to access from ax buf*/
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
@@ -221,7 +221,9 @@ void blocking_offload_and_access_stamped(fcontext_transfer_t arg){
  void **host_pchase_st = (void **)args->src_payload;
  void **memcpy_src = (void **)args->aux_payload;
  void **ax_pchase_st = (void **)args->dst_payload;
- int num_pre_accesses = args->src_size / sizeof(void *);
+ int num_pre_accesses = input_size / sizeof(void *);
+ int num_ax_accesses = args->dst_size / sizeof(void *);
+ int num_host_accesses = args->src_size / sizeof(void *);
 
   int id = args->id;
   uint64_t *ts0 = args->ts0;
@@ -235,9 +237,67 @@ void blocking_offload_and_access_stamped(fcontext_transfer_t arg){
  /*access the whole host buf to start*/
   ts0[id] = sampleCoderdtsc();
   chase_pointers(host_pchase_st, num_pre_accesses);
+
   ts1[id] = sampleCoderdtsc();
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)memcpy_src, (uint64_t)ax_pchase_st,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  blocking_dsa_submit(dsa, desc);
+  spin_on(comp);
 
   ts2[id] = sampleCoderdtsc();
+  LOG_PRINT(LOG_DEBUG, "%d HostAccesses\n" , num_host_accesses);
+  chase_pointers(host_pchase_st, num_host_accesses);
+  LOG_PRINT(LOG_DEBUG, "%d AXAccesses\n" , num_ax_accesses);
+  chase_pointers(ax_pchase_st, num_ax_accesses);
+
+
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+
+}
+
+void yielding_offload_and_access_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+ void **host_pchase_st = (void **)args->src_payload;
+ void **memcpy_src = (void **)args->aux_payload;
+ void **ax_pchase_st = (void **)args->dst_payload;
+ int num_pre_accesses = input_size / sizeof(void *);
+ int num_ax_accesses = args->dst_size / sizeof(void *);
+ int num_host_accesses = args->src_size / sizeof(void *);
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+
+ /*access the whole host buf to start*/
+  ts0[id] = sampleCoderdtsc();
+  chase_pointers(host_pchase_st, num_pre_accesses);
+
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)memcpy_src, (uint64_t)ax_pchase_st,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  blocking_dsa_submit(dsa, desc);
+
+  ts1[id] = sampleCoderdtsc();
+
+  fcontext_swap(arg.prev_context, NULL);
+
+  ts2[id] = sampleCoderdtsc();
+
+  LOG_PRINT(LOG_DEBUG, "%d HostAccesses\n" , num_host_accesses);
+  chase_pointers(host_pchase_st, num_host_accesses);
+  LOG_PRINT(LOG_DEBUG, "%d AXAccesses\n" , num_ax_accesses);
+  chase_pointers(ax_pchase_st, num_ax_accesses);
 
   ts3[id] = sampleCoderdtsc();
 
