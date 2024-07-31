@@ -269,6 +269,15 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
+    run_yielding_multiple_filler_request_brkdown(
+      yielding_traverse_and_offload_stamped,
+      lltraverse_interleaved,
+      alloc_offload_traverse_and_offload_args,
+      free_offload_traverse_and_offload_args,
+      itr,
+      total_requests
+    );
+
     run_yielding_interleaved_request_brkdown(
       yielding_traverse_and_offload_stamped,
       antagonist_interleaved,
