@@ -22,8 +22,11 @@ extern "C" {
 #include "filler_hash.h"
 #include "posting_list.h"
 #include "wait.h"
+#include "payload_gen.h"
 
 int input_size = 16384;
+int host_buf_bytes_acc = input_size;
+int ax_buf_bytes_acc = 0;
 
 node *glb_ll_head = NULL; /* in case filler needs to restart */
 node *glb_node_ptr = NULL;
@@ -156,6 +159,47 @@ void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
 
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
+}
+
+void alloc_offload_serialized_access_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args,
+  ax_comp *comps,
+  uint64_t *ts0,
+  uint64_t *ts1,
+  uint64_t *ts2,
+  uint64_t *ts3
+){
+
+  timed_offload_request_args **off_args =
+    (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+
+  int num_nodes = input_size / sizeof(node);
+
+  /* allocate a global shared linked list once */
+  if(glb_ll_head == NULL){
+    glb_ll_head = build_host_ll(num_nodes);
+  }
+
+  for(int i = 0; i < total_requests; i++){
+    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
+    off_args[i]->src_payload = (char *)create_random_chain(input_size); /* host buf to chase, does not get copied */
+    off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
+    off_args[i]->aux_payload =
+      (char *)create_random_chain_starting_at(input_size,
+        (void **) &(off_args[i]->dst_payload)); /* ax buf buf to chase after copy */
+    off_args[i]->src_size =  host_buf_bytes_acc; /* parameter describing number of bytes to access from host buf */
+    off_args[i]->dst_size = ax_buf_bytes_acc; /* parameter describing number of bytes to access from ax buf*/
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+    off_args[i]->comp = &comps[i];
+    off_args[i]->ts0 = ts0;
+    off_args[i]->ts1 = ts1;
+    off_args[i]->ts2 = ts2;
+    off_args[i]->ts3 = ts3;
+    off_args[i]->id = i;
+  }
+
+  *p_off_args = off_args;
 }
 
 void blocking_traverse_and_offload_stamped(fcontext_transfer_t arg){
