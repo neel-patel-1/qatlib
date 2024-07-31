@@ -203,6 +203,37 @@ void alloc_offload_serialized_access_args(
   *p_off_args = off_args;
 }
 
+void alloc_offload_linear_access_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args,
+  ax_comp *comps,
+  uint64_t *ts0,
+  uint64_t *ts1,
+  uint64_t *ts2,
+  uint64_t *ts3
+){
+
+  timed_offload_request_args **off_args =
+    (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
+
+  for(int i = 0; i < total_requests; i++){
+    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
+    off_args[i]->src_payload = (char *)malloc(input_size); /* host buf to chase, does not get copied */
+    off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
+    off_args[i]->src_size =  host_buf_bytes_acc; /* parameter describing number of bytes to access from host buf */
+    off_args[i]->dst_size = ax_buf_bytes_acc; /* parameter describing number of bytes to access from ax buf*/
+    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
+    off_args[i]->comp = &comps[i];
+    off_args[i]->ts0 = ts0;
+    off_args[i]->ts1 = ts1;
+    off_args[i]->ts2 = ts2;
+    off_args[i]->ts3 = ts3;
+    off_args[i]->id = i;
+  }
+
+  *p_off_args = off_args;
+}
+
 void free_offload_serialized_access_args(
   int total_requests,
   timed_offload_request_args*** p_off_args
@@ -260,7 +291,59 @@ void blocking_offload_and_access_stamped(fcontext_transfer_t arg){
 
 }
 
-void yielding_offload_and_access_stamped(fcontext_transfer_t arg){
+void yielding_offload_and_linear_access_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+ char *pre_buf = (char *)args->src_payload;
+ char *ax_dst_buf = (char *)args->dst_payload;
+ int pre_buf_size = input_size ;
+ int ax_bytes_accessed = args->dst_size;
+ int host_bytes_accessed = args->src_size;
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+
+ /*access the whole host buf to start*/
+  ts0[id] = sampleCoderdtsc();
+
+  for(int i=0; i < pre_buf_size; i+=64){
+    pre_buf[i] = i;
+  }
+
+  prepare_dsa_memcpy_desc_with_preallocated_comp(
+    desc, (uint64_t)pre_buf, (uint64_t)ax_dst_buf,
+    (uint64_t)args->comp, (uint64_t)input_size
+  );
+  blocking_dsa_submit(dsa, desc);
+
+  ts1[id] = sampleCoderdtsc();
+
+  fcontext_swap(arg.prev_context, NULL);
+
+  ts2[id] = sampleCoderdtsc();
+
+  LOG_PRINT(LOG_DEBUG, "%d HostBytesAccesses\n" , host_bytes_accessed);
+  for(int i=0; i < pre_buf_size; i+=64){
+    pre_buf[i] = i;
+  }
+  LOG_PRINT(LOG_DEBUG, "%d AXBytesAccesses\n" , ax_bytes_accessed);
+  for(int i=0; i < ax_bytes_accessed; i+=64){
+    ax_dst_buf[i] = i;
+  }
+
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+
+}
+
+void yielding_offload_and_serial_access_stamped(fcontext_transfer_t arg){
   timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
  void **host_pchase_st = (void **)args->src_payload;
  void **memcpy_src = (void **)args->aux_payload;
@@ -416,7 +499,7 @@ int main(int argc, char **argv){
       total_requests
     );
     run_yielding_interleaved_request_brkdown(
-      yielding_offload_and_access_stamped,
+      yielding_offload_and_serial_access_stamped,
       hash_interleaved, /* upper bound on yield perf */
       alloc_offload_serialized_access_args,
       free_offload_serialized_access_args,
@@ -424,7 +507,7 @@ int main(int argc, char **argv){
       total_requests
     );
     run_yielding_interleaved_request_brkdown(
-      yielding_offload_and_access_stamped,
+      yielding_offload_and_serial_access_stamped,
       antagonist_interleaved,
       alloc_offload_serialized_access_args,
       free_offload_serialized_access_args,
