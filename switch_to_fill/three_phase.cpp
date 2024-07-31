@@ -415,7 +415,22 @@ int main(int argc, char **argv){
       itr,
       total_requests
     );
-
+    run_yielding_interleaved_request_brkdown(
+      yielding_offload_and_access_stamped,
+      hash_interleaved, /* upper bound on yield perf */
+      alloc_offload_serialized_access_args,
+      free_offload_serialized_access_args,
+      itr,
+      total_requests
+    );
+    run_yielding_interleaved_request_brkdown(
+      yielding_offload_and_access_stamped,
+      antagonist_interleaved,
+      alloc_offload_serialized_access_args,
+      free_offload_serialized_access_args,
+      itr,
+      total_requests
+    );
 
 
     return 0;
