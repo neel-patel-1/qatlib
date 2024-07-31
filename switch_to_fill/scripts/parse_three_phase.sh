@@ -2,20 +2,33 @@
 
 source configs/phys_core.sh
 
-QUERY_SIZES=( 64    256  1024 4096 16384 $((42 * 1024)) 65536 262144 1048576 )
 [ -z "$CORE" ] && echo "CORE is not set" && exit 1
+pre_bytes=$(( 42 * 1024 ))
+host_bytes=$(( 42 * 1024 ))
+ax_bytes=$(( 0 ))
+grep -v main three_phase_logs/core_${CORE}_querysize_${pre_bytes}_prebytes_${host_bytes}_axbytes_${ax_bytes}.log \
+  | grep -v info \
+  | grep -v RPS \
+  | awk "\
+    /Offload Mean/{printf(\"%s \", \$5 );} \
+    /Wait Mean/{printf(\"%s \", \$5);  } \
+    /Post Mean/{printf(\"%s <-BlockingOffload HostBytes ${host_bytes} AxBytes ${ax_bytes} \n\", \$5);} \
+    /OffloadSwitchToFill/{printf(\"%s \", \$5);} \
+    /YieldToResume/{printf(\"%s \", \$5);} \
+    /PostProcessingSwitchToFill/{printf(\"%s <-SwitchToFill HostBytes ${host_bytes} AxBytes ${ax_bytes} \n\", \$5);} \
+    "
+echo
+host_bytes=$(( 0 ))
+ax_bytes=$(( 42 * 1024 ))
 
-for q in ${QUERY_SIZES[@]}; do
-  grep -v main three_phase_logs/core_${CORE}_querysize_${q}.log \
-    | grep -v info \
-    | grep -v RPS \
-    | awk "BEGIN{printf(\"${q} \");}\
-      /Offload Mean/{printf(\"BlockingOffload %s \", \$5 );} \
-      /Wait Mean/{printf(\"%s \", \$5);  } \
-      /Post Mean/{printf(\"%s\n\", \$5);} \
-      /OffloadSwitchToFill/{printf(\" SwitchToFill %s \", \$5);} \
-      /YieldToResume/{printf(\"%s \", \$5);} \
-      /PostProcessingSwitchToFill/{printf(\"%s\n\", \$5);} \
-      "
-    echo
-done
+grep -v main three_phase_logs/core_${CORE}_querysize_${pre_bytes}_prebytes_${host_bytes}_axbytes_${ax_bytes}.log \
+  | grep -v info \
+  | grep -v RPS \
+  | awk "\
+    /Offload Mean/{printf(\"%s \", \$5 );} \
+    /Wait Mean/{printf(\"%s \", \$5);  } \
+    /Post Mean/{printf(\"%s <-BlockingOffload HostBytes ${host_bytes} AxBytes ${ax_bytes} \n\", \$5);} \
+    /OffloadSwitchToFill/{printf(\"%s \", \$5);} \
+    /YieldToResume/{printf(\"%s \", \$5);} \
+    /PostProcessingSwitchToFill/{printf(\"%s <-SwitchToFill HostBytes ${host_bytes} AxBytes ${ax_bytes} \n\", \$5);} \
+    "
