@@ -16,18 +16,18 @@ REQUESTS=(    100 )
 [ -z "$DEVID" ] && echo "DEVID is not set" && exit 1
 NUM_ACCESSES=10
 
-# Initialize three_phase_logs
-mkdir -p three_phase_logs
+# Initialize traverse_logs
+mkdir -p traverse_logs
 for q in "${QUERY_SIZES[@]}"; do
-    echo -n > three_phase_logs/core_${CORE}_querysize_${q}.log
+    echo -n > traverse_logs/core_${CORE}_querysize_${q}.log
 done
 
 qidx=0
 for q in "${QUERY_SIZES[@]}"; do
-    taskset -c $CORE sudo ./three_phase \
+    taskset -c $CORE sudo ./traverse \
         -d $DSA_DEV_ID \
         -q $q \
         -t ${REQUESTS[$qidx]} \
-        -i ${ITERATIONS[$qidx]} >> three_phase_logs/core_${CORE}_querysize_${q}.log
+        -i ${ITERATIONS[$qidx]} >> traverse_logs/core_${CORE}_querysize_${q}.log
     qidx=$((qidx+1))
 done

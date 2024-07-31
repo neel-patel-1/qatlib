@@ -6,7 +6,7 @@ QUERY_SIZES=( 64    256  1024 4096 16384 $((42 * 1024)) 65536 262144 1048576 )
 [ -z "$CORE" ] && echo "CORE is not set" && exit 1
 
 for q in ${QUERY_SIZES[@]}; do
-  grep -v main three_phase_logs/core_${CORE}_querysize_${q}.log \
+  grep -v main traverse_logs/core_${CORE}_querysize_${q}.log \
     | grep -v info \
     | grep -v RPS \
     | awk "BEGIN{printf(\"${q} \");}\
