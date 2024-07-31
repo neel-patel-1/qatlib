@@ -33,6 +33,21 @@ taskset -c $CORE sudo ./three_phase \
     -t 100 \
     -i 100 >> three_phase_logs/core_${CORE}_querysize_${pre_bytes}_prebytes_${host_bytes}_axbytes_${ax_bytes}.log
 
+pre_bytes=$(( 42 * 1024 ))
+host_bytes=$(( 24 * 1024 ))
+ax_bytes=$(( 24 * 1024 ))
+
+# 50/50 Only
+echo -n "" > three_phase_logs/core_${CORE}_querysize_${pre_bytes}_prebytes_${host_bytes}_axbytes_${ax_bytes}.log
+taskset -c $CORE sudo ./three_phase \
+    -d $DSA_DEV_ID \
+    -q ${pre_bytes} \
+    -s ${ax_bytes} \
+    -j ${host_bytes} \
+    -t 100 \
+    -i 100 >> three_phase_logs/core_${CORE}_querysize_${pre_bytes}_prebytes_${host_bytes}_axbytes_${ax_bytes}.log
+
+# Accelerator Only
 ax_bytes=$(( 42 * 1024 ))
 host_bytes=$(( 0 ))
 

@@ -30,138 +30,6 @@ int host_buf_bytes_acc = input_size;
 int ax_buf_bytes_acc = 0;
 int stride = 0;
 
-node *glb_ll_head = NULL; /* in case filler needs to restart */
-node *glb_node_ptr = NULL;
-
-void lltraverse_interleaved(fcontext_transfer_t arg){
-  node *cur = glb_node_ptr;
-  bool traversal_in_progress = true;
-
-  init_probe(arg); // init sched ctx and sig
-
-  while (1) {
-    if(is_signal_set(p_sig)){ /*check signal */
-      cur = NULL;
-      traversal_in_progress = false; /* stop the traversal */
-      fcontext_transfer_t parent_resume =
-        fcontext_swap( sched_ctx.prev_context, NULL); /* switch to sched */
-      p_sig = (preempt_signal *)parent_resume.data; /*set the new signal returned from the scheduler */
-    }
-
-    if(cur == NULL){ /* the cur can be null*/
-      if(traversal_in_progress){ // we're either back from a yield or not
-        cur = glb_ll_head; // restart the traversal if we're not
-      } else {
-        cur = glb_node_ptr; // set to node set by main if we are
-      }
-    } else {
-      LOG_PRINT(LOG_DEBUG, "Filler@Node: %d\n", cur->docID);
-      cur = cur->next;
-    }
-  }
-
-}
-
-void alloc_offload_traverse_and_offload_args(
-  int total_requests,
-  timed_offload_request_args*** p_off_args,
-  ax_comp *comps,
-  uint64_t *ts0,
-  uint64_t *ts1,
-  uint64_t *ts2,
-  uint64_t *ts3
-){
-
-  timed_offload_request_args **off_args =
-    (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
-
-  int num_nodes = input_size / sizeof(node);
-
-  /* allocate a global shared linked list once */
-  if(glb_ll_head == NULL){
-    glb_ll_head = build_host_ll(num_nodes);
-  }
-
-  for(int i = 0; i < total_requests; i++){
-    off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
-    off_args[i]->src_payload = (char *)malloc(input_size * sizeof(char));
-    off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
-    off_args[i]->aux_payload = (char *)glb_ll_head;
-    off_args[i]->src_size =  input_size;
-    off_args[i]->dst_size = num_nodes;
-    off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
-    off_args[i]->comp = &comps[i];
-    off_args[i]->ts0 = ts0;
-    off_args[i]->ts1 = ts1;
-    off_args[i]->ts2 = ts2;
-    off_args[i]->ts3 = ts3;
-    off_args[i]->id = i;
-  }
-
-  *p_off_args = off_args;
-}
-
-void free_offload_traverse_and_offload_args(
-  int total_requests,
-  timed_offload_request_args*** p_off_args
-){
-  timed_offload_request_args **off_args = *p_off_args;
-  for(int i = 0; i < total_requests; i++){
-    free(off_args[i]->src_payload);
-    free(off_args[i]->dst_payload);
-    free(off_args[i]);
-  }
-  free(off_args);
-  free_ll(glb_ll_head);
-  glb_ll_head = NULL;
-}
-
-void yielding_traverse_and_offload_stamped(fcontext_transfer_t arg){
-  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
-
-  char *src = args->src_payload;
-  char *dst = args->dst_payload;
-
-  node *ll_head = (node *)args->aux_payload;
-
-  int id = args->id;
-  uint64_t *ts0 = args->ts0;
-  uint64_t *ts1 = args->ts1;
-  uint64_t *ts2 = args->ts2;
-  uint64_t *ts3 = args->ts3;
-  ax_comp *comp = args->comp;
-  struct hw_desc *desc = args->desc;
-
-  ts0[id] = sampleCoderdtsc();// !
-  node *cur = ll_head; /* traverse first half */
-  while(cur != NULL ){
-    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
-    cur = cur->next;
-  }
-
-  glb_node_ptr = ll_head; /* let same filler know where to resume */
-
-  prepare_dsa_memcpy_desc_with_preallocated_comp(
-    desc, (uint64_t)src, (uint64_t)dst,
-    (uint64_t)args->comp, (uint64_t)input_size
-  );
-  blocking_dsa_submit(dsa, desc);
-
-  ts1[id] = sampleCoderdtsc();
-  fcontext_swap(arg.prev_context, NULL);
-
-  ts2[id] = sampleCoderdtsc();
-  cur = ll_head; /* traverse first half */
-  while(cur != NULL ){
-    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
-    cur = cur->next;
-  }
-
-  ts3[id] = sampleCoderdtsc();
-
-  requests_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
-}
 
 void alloc_offload_serialized_access_args(
   int total_requests,
@@ -177,11 +45,6 @@ void alloc_offload_serialized_access_args(
     (timed_offload_request_args **)malloc(total_requests * sizeof(timed_offload_request_args *));
 
   int num_nodes = input_size / sizeof(node);
-
-  /* allocate a global shared linked list once */
-  if(glb_ll_head == NULL){
-    glb_ll_head = build_host_ll(num_nodes);
-  }
 
   for(int i = 0; i < total_requests; i++){
     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
@@ -219,10 +82,11 @@ void alloc_offload_linear_access_args(
 
   for(int i = 0; i < total_requests; i++){
     off_args[i] = (timed_offload_request_args *)malloc(sizeof(timed_offload_request_args));
-    off_args[i]->src_payload = (char *)malloc(input_size); /* host buf to chase, does not get copied */
+    off_args[i]->src_payload = (char *)malloc(input_size);
     off_args[i]->dst_payload = (char *)malloc(input_size * sizeof(char));
     off_args[i]->src_size =  host_buf_bytes_acc; /* parameter describing number of bytes to access from host buf */
     off_args[i]->dst_size = ax_buf_bytes_acc; /* parameter describing number of bytes to access from ax buf*/
+    off_args[i]->aux_size = stride; /* parameter notify the request of the stride*/
     off_args[i]->desc = (struct hw_desc *)malloc(sizeof(struct hw_desc));
     off_args[i]->comp = &comps[i];
     off_args[i]->ts0 = ts0;
@@ -261,7 +125,7 @@ void free_offload_serialized_access_args(
   free(off_args);
 }
 
-void blocking_offload_and_access_stamped(fcontext_transfer_t arg){
+void blocking_offload_and_serial_access_stamped(fcontext_transfer_t arg){
   timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
  void **host_pchase_st = (void **)args->src_payload;
  void **memcpy_src = (void **)args->aux_payload;
@@ -342,11 +206,11 @@ void yielding_offload_and_linear_access_stamped(fcontext_transfer_t arg){
   ts2[id] = sampleCoderdtsc();
 
   LOG_PRINT(LOG_DEBUG, "%d HostBytesAccesses\n" , host_bytes_accessed);
-  for(int i=0; i < host_bytes_accessed; i+=1){
+  for(int i=0; i < host_bytes_accessed; i+=stride){
     pre_buf[i] = i;
   }
   LOG_PRINT(LOG_DEBUG, "%d AXBytesAccesses\n" , ax_bytes_accessed);
-  for(int i=0; i < ax_bytes_accessed; i+=1){
+  for(int i=0; i < ax_bytes_accessed; i+=stride){
     ax_dst_buf[i] = i;
   }
 
@@ -364,6 +228,7 @@ void blocking_offload_and_linear_access_stamped(fcontext_transfer_t arg){
  int pre_buf_size = input_size ;
  int ax_bytes_accessed = args->dst_size;
  int host_bytes_accessed = args->src_size;
+ int stride = args->aux_size;
 
   int id = args->id;
   uint64_t *ts0 = args->ts0;
@@ -394,11 +259,11 @@ void blocking_offload_and_linear_access_stamped(fcontext_transfer_t arg){
   ts2[id] = sampleCoderdtsc();
 
   LOG_PRINT(LOG_DEBUG, "%d HostBytesAccesses\n" , host_bytes_accessed);
-  for(int i=0; i < host_bytes_accessed; i+=1){
+  for(int i=0; i < host_bytes_accessed; i+=stride){
     pre_buf[i] = i;
   }
   LOG_PRINT(LOG_DEBUG, "%d AXBytesAccesses\n" , ax_bytes_accessed);
-  for(int i=0; i < ax_bytes_accessed; i+=1){
+  for(int i=0; i < ax_bytes_accessed; i+=stride){
     ax_dst_buf[i] = i;
   }
 
@@ -454,54 +319,6 @@ void yielding_offload_and_serial_access_stamped(fcontext_transfer_t arg){
   requests_completed ++;
   fcontext_swap(arg.prev_context, NULL);
 
-}
-
-void blocking_traverse_and_offload_stamped(fcontext_transfer_t arg){
-  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
-
-  char *src = args->src_payload;
-  char *dst = args->dst_payload;
-
-  node *ll_head = (node *)args->aux_payload;
-
-  int id = args->id;
-  uint64_t *ts0 = args->ts0;
-  uint64_t *ts1 = args->ts1;
-  uint64_t *ts2 = args->ts2;
-  uint64_t *ts3 = args->ts3;
-  ax_comp *comp = args->comp;
-  struct hw_desc *desc = args->desc;
-
-  ts0[id] = sampleCoderdtsc();// !
-  node *cur = ll_head; /* traverse first half */
-  while(cur != NULL ){
-    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
-    cur = cur->next;
-  }
-
-  glb_node_ptr = ll_head; /* let same filler know where to resume */
-
-  prepare_dsa_memcpy_desc_with_preallocated_comp(
-    desc, (uint64_t)src, (uint64_t)dst,
-    (uint64_t)args->comp, (uint64_t)input_size
-  );
-  blocking_dsa_submit(dsa, desc);
-
-  ts1[id] = sampleCoderdtsc();
-  spin_on(comp);
-
-
-  ts2[id] = sampleCoderdtsc();
-  cur = ll_head; /* traverse first half */
-  while(cur != NULL ){
-    LOG_PRINT(LOG_DEBUG, "Main@Node: %d\n", cur->docID);
-    cur = cur->next;
-  }
-
-  ts3[id] = sampleCoderdtsc();
-
-  requests_completed ++;
-  fcontext_swap(arg.prev_context, NULL);
 }
 
 
@@ -561,6 +378,31 @@ int main(int argc, char **argv){
 
   LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
   if(!no_latency){
+    run_blocking_offload_request_brkdown(
+      blocking_offload_and_serial_access_stamped,
+      alloc_offload_serialized_access_args,
+      free_offload_serialized_access_args,
+      itr,
+      total_requests
+    );
+    run_yielding_interleaved_request_brkdown(
+      yielding_offload_and_serial_access_stamped,
+      hash_interleaved, /* upper bound on yield perf */
+      alloc_offload_serialized_access_args,
+      free_offload_serialized_access_args,
+      itr,
+      total_requests
+    );
+    run_yielding_interleaved_request_brkdown(
+      yielding_offload_and_serial_access_stamped,
+      antagonist_interleaved,
+      alloc_offload_serialized_access_args,
+      free_offload_serialized_access_args,
+      itr,
+      total_requests
+    );
+
+    stride = 64;
 
     run_blocking_offload_request_brkdown(
       blocking_offload_and_linear_access_stamped,
@@ -588,76 +430,33 @@ int main(int argc, char **argv){
       total_requests
     );
 
-    return 0;
+    stride = 1;
+
     run_blocking_offload_request_brkdown(
-      blocking_offload_and_access_stamped,
-      alloc_offload_serialized_access_args,
-      free_offload_serialized_access_args,
+      blocking_offload_and_linear_access_stamped,
+      alloc_offload_linear_access_args,
+      free_offload_linear_access_args,
       itr,
       total_requests
     );
+
     run_yielding_interleaved_request_brkdown(
-      yielding_offload_and_serial_access_stamped,
+      yielding_offload_and_linear_access_stamped,
       hash_interleaved, /* upper bound on yield perf */
-      alloc_offload_serialized_access_args,
-      free_offload_serialized_access_args,
-      itr,
-      total_requests
-    );
-    run_yielding_interleaved_request_brkdown(
-      yielding_offload_and_serial_access_stamped,
-      antagonist_interleaved,
-      alloc_offload_serialized_access_args,
-      free_offload_serialized_access_args,
-      itr,
-      total_requests
-    );
-
-
-    return 0;
-    run_blocking_offload_request_brkdown(
-      blocking_traverse_and_offload_stamped,
-      alloc_offload_traverse_and_offload_args,
-      free_offload_traverse_and_offload_args,
+      alloc_offload_linear_access_args,
+      free_offload_linear_access_args,
       itr,
       total_requests
     );
 
     run_yielding_interleaved_request_brkdown(
-      yielding_traverse_and_offload_stamped,
-      lltraverse_interleaved,
-      alloc_offload_traverse_and_offload_args,
-      free_offload_traverse_and_offload_args,
+      yielding_offload_and_linear_access_stamped,
+      antagonist_interleaved, /* upper bound on yield perf */
+      alloc_offload_linear_access_args,
+      free_offload_linear_access_args,
       itr,
       total_requests
     );
-    run_yielding_multiple_filler_request_brkdown(
-      yielding_traverse_and_offload_stamped,
-      lltraverse_interleaved,
-      alloc_offload_traverse_and_offload_args,
-      free_offload_traverse_and_offload_args,
-      itr,
-      total_requests
-    );
-
-    run_yielding_interleaved_request_brkdown(
-      yielding_traverse_and_offload_stamped,
-      antagonist_interleaved,
-      alloc_offload_traverse_and_offload_args,
-      free_offload_traverse_and_offload_args,
-      itr,
-      total_requests
-    );
-
-    run_yielding_multiple_filler_request_brkdown(
-      yielding_traverse_and_offload_stamped,
-      antagonist_interleaved,
-      alloc_offload_traverse_and_offload_args,
-      free_offload_traverse_and_offload_args,
-      itr,
-      total_requests
-    );
-
   }
 
   free_dsa_wq();

@@ -10,6 +10,7 @@ typedef struct _offload_request_args{
   char *src_payload;
   uint64_t src_size;
   uint64_t dst_size;
+  int aux_size; /*users three_phase.cpp */
   char *dst_payload;
   char *aux_payload; /* users - decomp_and_scatter, memfill_and_gather */
   int id;
@@ -23,6 +24,7 @@ typedef struct _timed_offload_request_args{
   uint64_t dst_size;
   char *dst_payload;
   char *aux_payload; /* users - decomp_and_scatter, memfill_and_gather */
+  int aux_size; /*users three_phase.cpp */
   int id;
   uint64_t *ts0;
   uint64_t *ts1;
