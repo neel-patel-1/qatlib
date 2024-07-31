@@ -23,6 +23,7 @@ extern "C" {
 #include "posting_list.h"
 #include "wait.h"
 #include "payload_gen.h"
+#include "pointer_chase.h"
 
 int input_size = 16384;
 int host_buf_bytes_acc = input_size;
@@ -202,6 +203,49 @@ void alloc_offload_serialized_access_args(
   *p_off_args = off_args;
 }
 
+void free_offload_serialized_access_args(
+  int total_requests,
+  timed_offload_request_args*** p_off_args
+){
+  timed_offload_request_args **off_args = *p_off_args;
+  for(int i = 0; i < total_requests; i++){
+    free(off_args[i]->src_payload);
+    free(off_args[i]->dst_payload);
+    free(off_args[i]);
+  }
+  free(off_args);
+}
+
+void blocking_offload_and_access_stamped(fcontext_transfer_t arg){
+  timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
+ void **host_pchase_st = (void **)args->src_payload;
+ void **memcpy_src = (void **)args->aux_payload;
+ void **ax_pchase_st = (void **)args->dst_payload;
+ int num_pre_accesses = args->src_size / sizeof(void *);
+
+  int id = args->id;
+  uint64_t *ts0 = args->ts0;
+  uint64_t *ts1 = args->ts1;
+  uint64_t *ts2 = args->ts2;
+  uint64_t *ts3 = args->ts3;
+  ax_comp *comp = args->comp;
+  struct hw_desc *desc = args->desc;
+
+
+ /*access the whole host buf to start*/
+  ts0[id] = sampleCoderdtsc();
+  chase_pointers(host_pchase_st, num_pre_accesses);
+  ts1[id] = sampleCoderdtsc();
+
+  ts2[id] = sampleCoderdtsc();
+
+  ts3[id] = sampleCoderdtsc();
+
+  requests_completed ++;
+  fcontext_swap(arg.prev_context, NULL);
+
+}
+
 void blocking_traverse_and_offload_stamped(fcontext_transfer_t arg){
   timed_offload_request_args *args = (timed_offload_request_args *)arg.data;
 
@@ -266,7 +310,7 @@ int main(int argc, char **argv){
   bool no_latency = false;
   bool no_thrpt = false;
 
-  while((opt = getopt(argc, argv, "t:i:r:s:q:d:hf")) != -1){
+  while((opt = getopt(argc, argv, "s:j:t:i:r:s:q:d:hf")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -288,6 +332,13 @@ int main(int argc, char **argv){
         break;
       case 'f':
         gLogLevel = LOG_DEBUG;
+        break;
+      case 'j':
+        host_buf_bytes_acc = atoi(optarg);
+        break;
+      case 's':
+        ax_buf_bytes_acc = atoi(optarg);
+        break;
       default:
         break;
     }
@@ -297,6 +348,17 @@ int main(int argc, char **argv){
 
   LOG_PRINT(LOG_PERF, "Input size: %d\n", input_size);
   if(!no_latency){
+    run_blocking_offload_request_brkdown(
+      blocking_offload_and_access_stamped,
+      alloc_offload_serialized_access_args,
+      free_offload_serialized_access_args,
+      itr,
+      total_requests
+    );
+
+
+
+    return 0;
     run_blocking_offload_request_brkdown(
       blocking_traverse_and_offload_stamped,
       alloc_offload_traverse_and_offload_args,

@@ -4,6 +4,7 @@ volatile void *chase_pointers_global;
 void chase_pointers(void **memory, int count){
   void ** p = (void **)memory;
   while (count -- > 0) {
+    LOG_PRINT( LOG_DEBUG, "  %p -> %p\n", p, *p);
     p = (void **) *p;
   }
   chase_pointers_global = *p;
