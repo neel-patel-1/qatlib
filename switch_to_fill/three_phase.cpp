@@ -28,6 +28,7 @@ extern "C" {
 int input_size = 16384;
 int host_buf_bytes_acc = input_size;
 int ax_buf_bytes_acc = 0;
+int stride = 0;
 
 node *glb_ll_head = NULL; /* in case filler needs to restart */
 node *glb_node_ptr = NULL;
@@ -341,11 +342,11 @@ void yielding_offload_and_linear_access_stamped(fcontext_transfer_t arg){
   ts2[id] = sampleCoderdtsc();
 
   LOG_PRINT(LOG_DEBUG, "%d HostBytesAccesses\n" , host_bytes_accessed);
-  for(int i=0; i < host_bytes_accessed; i+=64){
+  for(int i=0; i < host_bytes_accessed; i+=1){
     pre_buf[i] = i;
   }
   LOG_PRINT(LOG_DEBUG, "%d AXBytesAccesses\n" , ax_bytes_accessed);
-  for(int i=0; i < ax_bytes_accessed; i+=64){
+  for(int i=0; i < ax_bytes_accessed; i+=1){
     ax_dst_buf[i] = i;
   }
 
@@ -393,11 +394,11 @@ void blocking_offload_and_linear_access_stamped(fcontext_transfer_t arg){
   ts2[id] = sampleCoderdtsc();
 
   LOG_PRINT(LOG_DEBUG, "%d HostBytesAccesses\n" , host_bytes_accessed);
-  for(int i=0; i < host_bytes_accessed; i+=64){
+  for(int i=0; i < host_bytes_accessed; i+=1){
     pre_buf[i] = i;
   }
   LOG_PRINT(LOG_DEBUG, "%d AXBytesAccesses\n" , ax_bytes_accessed);
-  for(int i=0; i < ax_bytes_accessed; i+=64){
+  for(int i=0; i < ax_bytes_accessed; i+=1){
     ax_dst_buf[i] = i;
   }
 
@@ -519,7 +520,7 @@ int main(int argc, char **argv){
   bool no_latency = false;
   bool no_thrpt = false;
 
-  while((opt = getopt(argc, argv, "s:j:t:i:r:s:q:d:hf")) != -1){
+  while((opt = getopt(argc, argv, "y:s:j:t:i:r:s:q:d:hf")) != -1){
     switch(opt){
       case 't':
         total_requests = atoi(optarg);
@@ -547,6 +548,9 @@ int main(int argc, char **argv){
         break;
       case 's':
         ax_buf_bytes_acc = atoi(optarg);
+        break;
+      case 'y':
+        stride = atoi(optarg);
         break;
       default:
         break;
