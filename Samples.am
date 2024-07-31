@@ -282,34 +282,6 @@ uarch_contention_LDADD = $(COMMON_SAMPLE_LDFLAGS) -lm -laccel-config libcpa_samp
 /home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a \
 -lnuma
 
-noinst_PROGRAMS += ax_access_overhead
-
-ax_access_overhead_SOURCES = \
-	$(srcdir)/ax_access_overhead_measurement/main.c \
-	$(srcdir)/src/thread_utils.c \
-	$(srcdir)/src/context_fast.S \
-	$(srcdir)/fcontext/src/asm/jump_x86_64_sysv_elf_gas.S \
-	$(srcdir)/fcontext/src/asm/make_x86_64_sysv_elf_gas.S \
-	$(srcdir)/fcontext/src/asm/ontop_x86_64_sysv_elf_gas.S \
-	quickassist/lookaside/access_layer/src/sample_code/functional/common/cpa_sample_utils.c
-
-ax_access_overhead_CFLAGS = \
-	-I$(srcdir)/quickassist/lookaside/access_layer/src/sample_code/functional/include \
-	-I$(srcdir)/include \
-	-I$(srcdir)/idxd/test \
-	-I$(srdir)/idxd \
-	-I$(srcdir)/accfg \
-	-I$(srcdir)/fcontext/inc \
-	$(COMMON_SAMPLE_INCLUDES) \
-	$(COMMON_SAMPLE_CFLAGS) \
-	$(COMMON_FLAGS) \
-	-O0 \
-	#-fsanitize=thread,undefined -g3
-
-ax_access_overhead_LDADD = $(COMMON_SAMPLE_LDFLAGS) -lm -laccel-config libcpa_sample_code_s.la -lz \
-/home/n869p538/spr-accel-profiling/interrupt_qat_dc/DML/install/lib/libdml.a \
--lnuma
-
 noinst_PROGRAMS += preempt_timing
 
 preempt_timing_SOURCES = \
