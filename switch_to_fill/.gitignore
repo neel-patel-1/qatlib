@@ -7,3 +7,12 @@ mlp
 switch_to_fill
 walker
 *.code-workspace
+.depend
+decomp_and_hash
+decomp_and_hash_multi_threaded
+decomp_and_scatter
+memfill_and_gather
+scan_and_gather
+tests/iaa_compress_and_decompress_verify
+traverse
+
